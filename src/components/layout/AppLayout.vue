@@ -1,5 +1,17 @@
 <template>
   <div :class="['app-layout', { 'sidebar-collapsed': sidebarCollapsed }]">
+    <div v-if="showLibraryLoading" class="global-loading-overlay">
+      <div class="global-loading-card">
+        <div class="global-loading-head">
+          <strong>{{ loadingTitle }}</strong>
+          <span>{{ $t('common.loading') }}</span>
+        </div>
+        <p class="global-loading-text">{{ loadingDescription }}</p>
+        <div class="global-loading-progress">
+          <div class="global-loading-progress-bar" />
+        </div>
+      </div>
+    </div>
     <AppSidebar :collapsed="sidebarCollapsed" @update:collapsed="onSidebarToggle" />
     <div class="main-area">
       <main class="main-content">
@@ -26,18 +38,21 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, nextTick } from 'vue'
+import { computed, onMounted, ref, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 import { useLocalLibraryStore } from '@/stores/localLibrary'
 import { storeToRefs } from 'pinia'
 import { toastRef } from '@/composables/useNotification'
+import { useI18n } from 'vue-i18n'
 import AppSidebar from './AppSidebar.vue'
 import Toast from '@/components/common/Toast.vue'
 
 const appStore = useAppStore()
 const localLibraryStore = useLocalLibraryStore()
 const { sidebarCollapsed } = storeToRefs(appStore)
+const { state: localLibraryState, loading: localLibraryLoading } = storeToRefs(localLibraryStore)
+const { t } = useI18n()
 
 const toastEl = ref<InstanceType<typeof Toast> | null>(null)
 
@@ -47,6 +62,20 @@ const scrollPositions = ref(new Map<string, {
   localScrollable?: number
   hubScrollable?: number
 }>())
+
+const showLibraryLoading = computed(() => localLibraryLoading.value)
+
+const loadingTitle = computed(() => {
+  if (localLibraryState.value === 'indexing') return t('common.updatingData')
+  if (localLibraryState.value === 'scanning') return t('common.syncingData')
+  return t('common.fetchingData')
+})
+
+const loadingDescription = computed(() => {
+  if (localLibraryState.value === 'indexing') return t('common.updatingDataDesc')
+  if (localLibraryState.value === 'scanning') return t('common.syncingDataDesc')
+  return t('common.fetchingDataDesc')
+})
 
 function saveScrollPosition(path: string) {
   const mainContent = document.querySelector('.main-content')
@@ -156,6 +185,79 @@ function onSidebarToggle(collapsed: boolean) {
   height: 100vh;
   background: var(--bg-base);
   overflow: hidden;
+}
+
+.global-loading-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 650;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6);
+  background: rgba(9, 10, 18, 0.48);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.global-loading-card {
+  width: min(420px, 100%);
+  padding: var(--space-5);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-xl);
+  background: rgba(19, 21, 34, 0.88);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+}
+
+.global-loading-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+}
+
+.global-loading-head strong {
+  color: var(--text-primary);
+  font-size: var(--text-md);
+}
+
+.global-loading-head span,
+.global-loading-text {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+.global-loading-text {
+  margin-bottom: var(--space-4);
+  line-height: 1.6;
+}
+
+.global-loading-progress {
+  position: relative;
+  overflow: hidden;
+  height: 8px;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.global-loading-progress-bar {
+  position: absolute;
+  inset: 0 auto 0 -35%;
+  width: 35%;
+  border-radius: inherit;
+  background: var(--accent-gradient);
+  animation: global-progress-slide 1.15s ease-in-out infinite;
+}
+
+@keyframes global-progress-slide {
+  0% {
+    transform: translateX(0);
+  }
+
+  100% {
+    transform: translateX(420%);
+  }
 }
 
 .main-area {

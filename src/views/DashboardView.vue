@@ -69,181 +69,191 @@
       </div>
     </section>
 
-    <!-- Action Bar -->
-    <div class="action-bar">
-      <button class="scan-button" :disabled="isScanning || !vamRootPath" @click="handleScan">
-        <span>{{ isScanning ? $t('toolbar.scanning') : $t('dashboard.scanVamDirectory') }}</span>
-      </button>
-      <button v-if="!vamRootPath" class="setup-button" @click="goToSettings">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-          <path d="M3 7V5a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-          <rect x="3" y="7" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.5" />
-        </svg>
-        <span>{{ $t('dashboard.selectVamDirectory') }}</span>
-      </button>
-    </div>
+    <GlassPanel :title="$t('dashboard.quickOpen')">
+      <div class="quick-open-grid">
+        <button
+          class="quick-open-card"
+          :disabled="!vamRootPath"
+          @click="openQuickPath(vamRootPath)"
+        >
+          <span class="quick-open-label">{{ $t('dashboard.gameRoot') }}</span>
+          <span class="quick-open-path text-tertiary">{{ vamRootPath || $t('settings.notConfigured') }}</span>
+        </button>
+        <button
+          class="quick-open-card"
+          :disabled="!screenshotPath"
+          @click="openQuickPath(screenshotPath)"
+        >
+          <span class="quick-open-label">{{ $t('dashboard.screenshotDirectory') }}</span>
+          <span class="quick-open-path text-tertiary">{{ screenshotPath || $t('settings.notConfigured') }}</span>
+        </button>
+      </div>
+    </GlassPanel>
 
     <!-- Content Grid -->
     <div class="content-grid">
       <!-- Recent Packages -->
-      <GlassPanel :title="$t('dashboard.recentPackages')">
-        <div v-if="recentPackages.length > 0" class="recent-list">
-          <div
-            v-for="pkg in recentPackages"
-            :key="pkg.id"
-            class="recent-item"
-          >
-            <div class="recent-item-thumb">
-              <img v-if="thumbnails[pkg.id]" :src="thumbnails[pkg.id]" :alt="pkg.creator + '.' + pkg.name" class="recent-thumb-img" />
-              <div v-else class="recent-thumb-placeholder">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                  <path d="M12 2L3 7V17L12 22L21 17V7L12 2Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
-                  <path d="M12 12L21 7" stroke="currentColor" stroke-width="1.5"/>
-                  <path d="M12 12V22" stroke="currentColor" stroke-width="1.5"/>
-                </svg>
+      <div class="dashboard-panel recent-panel">
+        <GlassPanel :title="$t('dashboard.recentPackages')">
+          <div v-if="recentPreviewPackages.length > 0" class="recent-grid">
+            <div
+              v-for="pkg in recentPreviewPackages"
+              :key="pkg.id"
+              class="recent-card"
+              :title="`${pkg.creator}.${pkg.name}`"
+            >
+              <img
+                v-if="thumbnails[pkg.id]"
+                :src="thumbnails[pkg.id]"
+                :alt="pkg.creator + '.' + pkg.name"
+                class="recent-card-image"
+              />
+              <div v-else class="recent-card-placeholder">
+                <div class="recent-card-placeholder-text">{{ $t('packages.noThumbnail') }}</div>
+              </div>
+              <div class="recent-card-overlay">
+                <div class="recent-card-name">
+                  {{ pkg.creator }}.{{ pkg.name }}
+                </div>
               </div>
             </div>
-            <div class="recent-item-info">
-              <span class="recent-item-name">{{ pkg.creator }}.{{ pkg.name }}</span>
-              <span class="recent-item-meta text-tertiary">{{ pkg.resource_types.length ? pkg.resource_types.map(t => resourceTypeLabel(t)).join(', ') : $t('resourceType.mixed') }}</span>
-            </div>
-            <span class="recent-item-size text-tertiary">{{ formatSize(pkg.size_bytes) }}</span>
           </div>
-        </div>
-        <EmptyState
-          v-else
-          :icon="icons.recentPackages"
-          :title="$t('dashboard.noRecentPackages')"
-          :description="$t('dashboard.noRecentPackagesDesc')"
-        />
-      </GlassPanel>
+          <EmptyState
+            v-else
+            :icon="icons.recentPackages"
+            :title="$t('dashboard.noRecentPackages')"
+            :description="$t('dashboard.noRecentPackagesDesc')"
+          />
+        </GlassPanel>
+      </div>
 
       <!-- Health Report -->
-      <GlassPanel :title="$t('dashboard.healthReport')">
-        <div v-if="totalIssues > 0" class="health-list">
-          <!-- Missing Dependencies Group -->
-          <div v-if="stats.missing_dependencies > 0" class="health-group">
-            <div
-              class="health-item health-warning clickable"
-              @click="showMissingList = !showMissingList"
-            >
-              <div class="health-item-left">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                  <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10Z" stroke="currentColor" stroke-width="1.5"/>
-                  <path d="M12 8v4M12 16h.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-                </svg>
-                <span>{{ $t('dashboard.missingDependency', { count: stats.missing_dependencies }) }}</span>
-              </div>
-              <svg
-                class="chevron-icon"
-                :class="{ rotated: showMissingList }"
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
+      <div class="dashboard-panel health-panel">
+        <GlassPanel :title="$t('dashboard.healthReport')">
+          <div v-if="totalIssues > 0" class="health-list">
+            <!-- Missing Dependencies Group -->
+            <div v-if="stats.missing_dependencies > 0" class="health-group">
+              <div
+                class="health-item health-warning clickable"
+                @click="showMissingList = !showMissingList"
               >
-                <path d="M9 5l7 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </div>
+                <div class="health-item-left">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                    <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10Z" stroke="currentColor" stroke-width="1.5"/>
+                    <path d="M12 8v4M12 16h.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                  </svg>
+                  <span>{{ $t('dashboard.missingDependency', { count: stats.missing_dependencies }) }}</span>
+                </div>
+                <svg
+                  class="chevron-icon"
+                  :class="{ rotated: showMissingList }"
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                >
+                  <path d="M9 5l7 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </div>
 
-            <transition name="expand">
-              <div v-if="showMissingList && missingDependenciesList.length > 0" class="missing-deps-details glass-panel">
-                <div class="missing-deps-list">
-                  <div
-                    v-for="(dep, idx) in missingDependenciesList"
-                    :key="idx"
-                    class="missing-dep-row"
-                  >
-                    <div class="missing-dep-info">
-                      <span class="missing-dep-name" :title="dep.depends_on_id">{{ dep.depends_on_id }}</span>
-                      <span class="missing-dep-ref text-tertiary">
-                        {{ $t('dashboard.referencedBy', { name: dep.package_id }) }}
-                      </span>
-                    </div>
-                    <button
-                      class="copy-btn"
-                      :title="$t('dashboard.copyId')"
-                      @click.stop="copyToClipboard(dep.depends_on_id)"
+              <transition name="expand">
+                <div v-if="showMissingList && missingDependenciesList.length > 0" class="missing-deps-details glass-panel">
+                  <div class="missing-deps-list">
+                    <div
+                      v-for="(dep, idx) in missingDependenciesList"
+                      :key="idx"
+                      class="missing-dep-row"
                     >
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-                        <rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" stroke-width="1.5"/>
-                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" stroke="currentColor" stroke-width="1.5"/>
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </transition>
-          </div>
-
-          <!-- Corrupted Packages Group -->
-          <div v-if="stats.corrupted_packages > 0" class="health-group">
-            <div
-              class="health-item health-warning clickable"
-              @click="showCorruptedList = !showCorruptedList"
-            >
-              <div class="health-item-left">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                  <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10Z" stroke="currentColor" stroke-width="1.5"/>
-                  <path d="M12 8v4M12 16h.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-                </svg>
-                <span>{{ $t('dashboard.corruptedPackageCount', { count: stats.corrupted_packages }) }}</span>
-              </div>
-              <svg
-                class="chevron-icon"
-                :class="{ rotated: showCorruptedList }"
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-              >
-                <path d="M9 5l7 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </div>
-
-            <transition name="expand">
-              <div v-if="showCorruptedList && corruptedPackagesList.length > 0" class="missing-deps-details glass-panel">
-                <div class="missing-deps-list">
-                  <div
-                    v-for="(pkg, idx) in corruptedPackagesList"
-                    :key="idx"
-                    class="missing-dep-row"
-                  >
-                    <div class="missing-dep-info">
-                      <span class="missing-dep-name" :title="pkg.package_id">{{ pkg.package_id }}</span>
-                      <span class="missing-dep-ref text-tertiary" :title="pkg.error">
-                        {{ pkg.error }}
-                      </span>
+                      <div class="missing-dep-info">
+                        <span class="missing-dep-name" :title="dep.depends_on_id">{{ dep.depends_on_id }}</span>
+                        <span class="missing-dep-ref text-tertiary">
+                          {{ $t('dashboard.referencedBy', { name: dep.package_id }) }}
+                        </span>
+                      </div>
+                      <button
+                        class="copy-btn"
+                        :title="$t('dashboard.copyId')"
+                        @click.stop="copyToClipboard(dep.depends_on_id)"
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+                          <rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" stroke-width="1.5"/>
+                          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" stroke="currentColor" stroke-width="1.5"/>
+                        </svg>
+                      </button>
                     </div>
                   </div>
                 </div>
-              </div>
-            </transition>
-          </div>
+              </transition>
+            </div>
 
-          <!-- Duplicate Resources Group -->
-          <div v-if="stats.duplicate_resources > 0" class="health-item health-warning">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-              <rect x="3" y="3" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/>
-              <path d="M9 9H21V21H9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            <span>{{ $t('dashboard.duplicateResource', { count: stats.duplicate_resources }) }}</span>
+            <!-- Corrupted Packages Group -->
+            <div v-if="stats.corrupted_packages > 0" class="health-group">
+              <div
+                class="health-item health-warning clickable"
+                @click="showCorruptedList = !showCorruptedList"
+              >
+                <div class="health-item-left">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                    <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10Z" stroke="currentColor" stroke-width="1.5"/>
+                    <path d="M12 8v4M12 16h.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                  </svg>
+                  <span>{{ $t('dashboard.corruptedPackageCount', { count: stats.corrupted_packages }) }}</span>
+                </div>
+                <svg
+                  class="chevron-icon"
+                  :class="{ rotated: showCorruptedList }"
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                >
+                  <path d="M9 5l7 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </div>
+
+              <transition name="expand">
+                <div v-if="showCorruptedList && corruptedPackagesList.length > 0" class="missing-deps-details glass-panel">
+                  <div class="missing-deps-list">
+                    <div
+                      v-for="(pkg, idx) in corruptedPackagesList"
+                      :key="idx"
+                      class="missing-dep-row"
+                    >
+                      <div class="missing-dep-info">
+                        <span class="missing-dep-name" :title="pkg.package_id">{{ pkg.package_id }}</span>
+                        <span class="missing-dep-ref text-tertiary" :title="pkg.error">
+                          {{ pkg.error }}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </transition>
+            </div>
+
+            <!-- Duplicate Resources Group -->
+            <div v-if="stats.duplicate_resources > 0" class="health-item health-warning">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                <rect x="3" y="3" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/>
+                <path d="M9 9H21V21H9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <span>{{ $t('dashboard.duplicateResource', { count: stats.duplicate_resources }) }}</span>
+            </div>
           </div>
-        </div>
-        <EmptyState
-          v-else
-          :icon="icons.health"
-          :title="$t('dashboard.noHealthData')"
-          :description="$t('dashboard.noHealthDataDesc')"
-        />
-      </GlassPanel>
+          <EmptyState
+            v-else
+            :icon="icons.health"
+            :title="$t('dashboard.noHealthData')"
+            :description="$t('dashboard.noHealthDataDesc')"
+          />
+        </GlassPanel>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
 import { invoke } from '@tauri-apps/api/core'
 import { storeToRefs } from 'pinia'
 import { useAppStore } from '@/stores/app'
@@ -255,7 +265,6 @@ import GlassPanel from '@/components/common/GlassPanel.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import SkeletonLoader from '@/components/common/SkeletonLoader.vue'
 
-const router = useRouter()
 const appStore = useAppStore()
 const localLibraryStore = useLocalLibraryStore()
 const { t } = useI18n()
@@ -278,6 +287,12 @@ const totalIssues = computed(() =>
   stats.value.duplicate_resources +
   stats.value.corrupted_packages
 )
+
+const recentPreviewPackages = computed(() => recentPackages.value.slice(0, 4))
+
+const screenshotPath = computed(() => (
+  vamRootPath.value ? `${vamRootPath.value}\\Saves\\scene` : null
+))
 
 const issuesSubtitle = computed(() => {
   if (totalIssues.value === 0) return t('dashboard.noIssuesFound')
@@ -318,24 +333,13 @@ async function copyToClipboard(text: string) {
   }
 }
 
-async function handleScan() {
-  if (!vamRootPath.value || isScanning.value) return
+async function openQuickPath(path: string | null) {
+  if (!path) return
   try {
-    await appStore.startScan(vamRootPath.value)
-    notify.success(t('dashboard.scanCompleted'))
+    await invoke('open_path_in_explorer', { path })
   } catch (e) {
-    notify.error(String(e), t('dashboard.scanFailed'))
+    notify.error(String(e), t('common.error'))
   }
-}
-
-function goToSettings() {
-  router.push('/settings')
-}
-
-function resourceTypeLabel(type: string): string {
-  const key = `resourceType.${type}`
-  const translated = t(key)
-  return translated !== key ? translated : type
 }
 
 function formatSize(bytes: number): string {
@@ -477,51 +481,50 @@ const icons = {
   }
 }
 
-/* ── Action Bar ───────────────────────────────────────────── */
-.action-bar {
+.quick-open-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+.quick-open-card {
   display: flex;
-  gap: var(--space-3);
-}
-
-.scan-button,
-.setup-button {
-  display: inline-flex;
-  align-items: center;
+  flex-direction: column;
   gap: var(--space-2);
-  padding: var(--space-2) var(--space-5);
-  height: 36px;
-  font-size: var(--text-sm);
-  font-weight: var(--font-semibold);
-  border-radius: var(--radius-md);
+  align-items: flex-start;
+  padding: var(--space-4);
+  text-align: left;
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-subtle);
   transition:
-    opacity var(--duration-fast) var(--ease),
-    transform var(--duration-fast) var(--ease);
+    transform var(--transition-fast),
+    border-color var(--transition-fast),
+    background-color var(--transition-fast);
 }
 
-.scan-button {
-  background: var(--accent-gradient);
-  color: white;
+.quick-open-card:not(:disabled):hover {
+  transform: translateY(-1px);
+  border-color: var(--accent-primary);
+  background: rgba(124, 92, 252, 0.08);
 }
 
-.scan-button:disabled {
+.quick-open-card:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
-.scan-button:not(:disabled):hover {
-  opacity: 0.9;
-  transform: translateY(-1px);
-}
-
-.setup-button {
-  background: var(--bg-elevated);
+.quick-open-label {
   color: var(--text-primary);
-  border: 1px solid var(--border-subtle);
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
 }
 
-.setup-button:hover {
-  background: var(--bg-hover);
-  border-color: var(--border-default);
+.quick-open-path {
+  width: 100%;
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  word-break: break-all;
 }
 
 /* ── Content Grid ─────────────────────────────────────────── */
@@ -529,83 +532,128 @@ const icons = {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: var(--space-5);
+  align-items: stretch;
+}
+
+.dashboard-panel {
+  height: 520px;
+}
+
+.dashboard-panel :deep(.glass-panel-component) {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.dashboard-panel :deep(.panel-content) {
+  flex: 1;
+  min-height: 0;
+}
+
+.recent-panel :deep(.panel-content) {
+  display: flex;
+  flex-direction: column;
+}
+
+.health-panel :deep(.panel-content) {
+  overflow-y: auto;
 }
 
 @media (max-width: 1000px) {
   .content-grid {
     grid-template-columns: 1fr;
   }
+
+  .dashboard-panel {
+    height: auto;
+  }
+
+  .health-panel :deep(.panel-content) {
+    overflow-y: visible;
+  }
 }
 
-/* ── Recent List ──────────────────────────────────────────── */
-.recent-list {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
+@media (max-width: 800px) {
+  .quick-open-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
-.recent-item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-3) 0;
+/* ── Recent Grid ──────────────────────────────────────────── */
+.recent-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
 }
 
-.recent-item + .recent-item {
-  border-top: 1px solid var(--border-subtle);
-}
-
-.recent-item-thumb {
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-md);
+.recent-card {
+  position: relative;
   overflow: hidden;
-  background: var(--bg-base);
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  min-height: 188px;
+  border-radius: var(--radius-lg);
   border: 1px solid var(--border-subtle);
+  background: linear-gradient(180deg, rgba(35, 35, 60, 0.72), rgba(18, 18, 30, 0.96));
 }
 
-.recent-thumb-img {
+.recent-card-image,
+.recent-card-placeholder {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  min-height: 188px;
 }
 
-.recent-thumb-placeholder {
-  color: var(--accent-primary);
-  opacity: 0.6;
+.recent-card-image {
+  object-fit: cover;
+  display: block;
+  transition: transform var(--transition-normal);
+}
+
+.recent-card:hover .recent-card-image {
+  transform: scale(1.03);
+}
+
+.recent-card-placeholder {
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: var(--space-4);
+  color: var(--text-secondary);
+  background:
+    radial-gradient(circle at top, rgba(124, 92, 252, 0.16), transparent 58%),
+    linear-gradient(180deg, rgba(35, 35, 60, 0.82), rgba(16, 16, 26, 0.98));
 }
 
-.recent-item-info {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.recent-item-name {
+.recent-card-placeholder-text {
+  padding: var(--space-2) var(--space-3);
   font-size: var(--text-sm);
-  color: var(--text-primary);
+  border-radius: var(--radius-full);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.recent-card-overlay {
+  position: absolute;
+  inset: auto 0 0 0;
+  padding: var(--space-5) var(--space-4) var(--space-4);
+  background: linear-gradient(180deg, rgba(8, 8, 14, 0), rgba(8, 8, 14, 0.88) 62%);
+}
+
+.recent-card-name {
+  color: white;
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  line-height: 1.4;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.45);
+  display: -webkit-box;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
-.recent-item-meta {
-  font-size: var(--text-xs);
-}
-
-.recent-item-size {
-  font-size: var(--text-xs);
-  flex-shrink: 0;
-  font-variant-numeric: tabular-nums;
+@media (max-width: 700px) {
+  .recent-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* ── Health List ──────────────────────────────────────────── */

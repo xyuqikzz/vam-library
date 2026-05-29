@@ -53,7 +53,7 @@ fn parse_package_id(package_id: &str) -> (String, String, i32) {
     if parts.len() < 2 {
         return (String::new(), trimmed.to_lowercase(), 0);
     }
-    
+
     let last = parts.last().copied().unwrap_or_default();
     if let Ok(version) = last.parse::<i32>() {
         let creator = parts[0].to_lowercase();
@@ -70,37 +70,39 @@ fn parse_package_id(package_id: &str) -> (String, String, i32) {
     }
 }
 
-fn load_exclude_list(path_str: &str) -> Result<std::collections::HashMap<(String, String), i32>, String> {
+fn load_exclude_list(
+    path_str: &str,
+) -> Result<std::collections::HashMap<(String, String), i32>, String> {
     let path = Path::new(path_str);
     if !path.exists() {
         return Err(format!("排除列表文件不存在: {}", path_str));
     }
-    
+
     let mut file = File::open(path).map_err(|e| format!("打开排除列表文件失败: {}", e))?;
     let mut contents = String::new();
     file.read_to_string(&mut contents)
         .map_err(|e| format!("读取排除列表文件失败: {}", e))?;
-        
+
     let mut exclude_map = std::collections::HashMap::new();
-    
+
     for line in contents.lines() {
         let trimmed = line.trim();
         if trimmed.is_empty() {
             continue;
         }
-        
+
         let (creator, name, version) = parse_package_id(trimmed);
         if creator.is_empty() && name.is_empty() {
             continue;
         }
-        
+
         let key = (creator, name);
         let entry = exclude_map.entry(key).or_insert(version);
         if version > *entry {
             *entry = version;
         }
     }
-    
+
     Ok(exclude_map)
 }
 
@@ -112,15 +114,13 @@ pub async fn export_installed_packages(
 ) -> Result<(), String> {
     db.with_conn(|conn| {
         let installed = load_installed_packages(conn).map_err(|e| e.to_string())?;
-        
-        let mut file = File::create(&target_path)
-            .map_err(|e| format!("创建文件失败: {}", e))?;
-            
+
+        let mut file = File::create(&target_path).map_err(|e| format!("创建文件失败: {}", e))?;
+
         for pkg in installed {
-            writeln!(file, "{}", pkg.id)
-                .map_err(|e| format!("写入文件失败: {}", e))?;
+            writeln!(file, "{}", pkg.id).map_err(|e| format!("写入文件失败: {}", e))?;
         }
-        
+
         Ok(())
     })
     .map_err(|e| e.to_string())

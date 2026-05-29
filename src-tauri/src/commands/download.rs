@@ -245,7 +245,10 @@ fn get_cancelled_resolutions() -> &'static Mutex<HashSet<String>> {
 
 #[tauri::command]
 pub fn cancel_hub_dependency_resolution(package_name: String) {
-    get_cancelled_resolutions().lock().unwrap().insert(package_name);
+    get_cancelled_resolutions()
+        .lock()
+        .unwrap()
+        .insert(package_name);
 }
 
 /// Recursively resolves VAM Hub dependencies and performs local & queue version comparisons.
@@ -256,7 +259,10 @@ pub async fn resolve_hub_dependencies(
     package_name: String,
 ) -> Result<DependencyResolutionResult, String> {
     // Clear any previous cancellation flag for this package
-    get_cancelled_resolutions().lock().unwrap().remove(&package_name);
+    get_cancelled_resolutions()
+        .lock()
+        .unwrap()
+        .remove(&package_name);
 
     let _ = app_handle.emit(
         "resolve-dependencies-progress",
@@ -276,8 +282,15 @@ pub async fn resolve_hub_dependencies(
 
     // 1. Parallel Recursive API fetch BFS loop
     while !current_layer.is_empty() && depth < max_depth {
-        if get_cancelled_resolutions().lock().unwrap().contains(&package_name) {
-            get_cancelled_resolutions().lock().unwrap().remove(&package_name);
+        if get_cancelled_resolutions()
+            .lock()
+            .unwrap()
+            .contains(&package_name)
+        {
+            get_cancelled_resolutions()
+                .lock()
+                .unwrap()
+                .remove(&package_name);
             return Err("CANCELLED".to_string());
         }
         depth += 1;
@@ -297,8 +310,15 @@ pub async fn resolve_hub_dependencies(
         let should_enrich_dependencies = depth == 1;
         let mut results = Vec::new();
         for chunk in to_fetch.chunks(15) {
-            if get_cancelled_resolutions().lock().unwrap().contains(&package_name) {
-                get_cancelled_resolutions().lock().unwrap().remove(&package_name);
+            if get_cancelled_resolutions()
+                .lock()
+                .unwrap()
+                .contains(&package_name)
+            {
+                get_cancelled_resolutions()
+                    .lock()
+                    .unwrap()
+                    .remove(&package_name);
                 return Err("CANCELLED".to_string());
             }
             let fetch_futures = chunk.iter().map(|pkg| {

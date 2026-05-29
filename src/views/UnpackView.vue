@@ -225,6 +225,7 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
+import { getCurrentWindow } from '@tauri-apps/api/window'
 import { useNotification } from '@/composables/useNotification'
 import { useAppStore } from '@/stores/app'
 
@@ -253,6 +254,9 @@ interface UnpackProgress {
 
 const unpackProgress = ref<UnpackProgress | null>(null)
 let unlistenUnpackProgress: (() => void) | null = null
+let unlistenWindowDrop: (() => void) | null = null
+let lastHandledDropKey = ''
+let lastHandledDropAt = 0
 
 // Resolve the destination path to be the same directory as the ZIP file
 const destinationDir = computed(() => {
@@ -268,12 +272,37 @@ onMounted(async () => {
   unlistenUnpackProgress = await listen<UnpackProgress>('unpack-progress', (event) => {
     unpackProgress.value = event.payload
   })
+
+  unlistenWindowDrop = await getCurrentWindow().onDragDropEvent((event) => {
+    if (event.payload.type === 'enter' || event.payload.type === 'over') {
+      isDragOver.value = true
+      return
+    }
+
+    if (event.payload.type === 'leave') {
+      isDragOver.value = false
+      return
+    }
+
+    if (event.payload.type === 'drop') {
+      isDragOver.value = false
+      const path = event.payload.paths[0]
+      if (path) {
+        void handleIncomingFile(path)
+      }
+    }
+  })
 })
 
 onUnmounted(() => {
   if (unlistenUnpackProgress) {
     unlistenUnpackProgress()
     unlistenUnpackProgress = null
+  }
+
+  if (unlistenWindowDrop) {
+    unlistenWindowDrop()
+    unlistenWindowDrop = null
   }
 })
 
@@ -288,17 +317,9 @@ function onDragLeave() {
 
 async function onDrop(e: DragEvent) {
   isDragOver.value = false
-  const files = e.dataTransfer?.files
-  if (!files || files.length === 0) return
-
-  const file = files[0]
-  // In tauri standard desktop, file.path is the absolute path to the dropped file
-  const path = (file as any).path || ''
-  
-  if (path && path.toLowerCase().endsWith('.zip')) {
-    await processFile(path)
-  } else {
-    notify.error('仅支持 .zip 格式的压缩文件')
+  const path = resolveDroppedFilePath(e)
+  if (path) {
+    await handleIncomingFile(path)
   }
 }
 
@@ -309,19 +330,55 @@ async function selectFile() {
     const selected = await open({
       multiple: false,
       directory: false,
-      title: t('unpack.title'),
-      filters: [{
-        name: 'Zip Archive',
-        extensions: ['zip']
-      }]
+      title: t('unpack.title')
     })
 
     if (selected && typeof selected === 'string') {
-      await processFile(selected)
+      await handleIncomingFile(selected)
     }
   } catch (err) {
     console.error('File open error:', err)
   }
+}
+
+function resolveDroppedFilePath(event: DragEvent): string {
+  const file = event.dataTransfer?.files?.[0]
+  const directPath = (file as File & { path?: string })?.path
+  if (directPath) {
+    return directPath
+  }
+
+  const item = event.dataTransfer?.items?.[0]
+  const itemFile = item?.getAsFile?.()
+  const itemPath = (itemFile as File & { path?: string })?.path
+  if (itemPath) {
+    return itemPath
+  }
+
+  const uri = event.dataTransfer?.getData('text/uri-list') || event.dataTransfer?.getData('text/plain')
+  if (uri?.startsWith('file://')) {
+    try {
+      return decodeURIComponent(uri.replace('file:///', '').replace(/\//g, '\\'))
+    } catch {
+      return uri.replace('file:///', '').replace(/\//g, '\\')
+    }
+  }
+
+  return ''
+}
+
+async function handleIncomingFile(filePath: string) {
+  if (!filePath) return
+  if (stage.value === 'analyzing' || stage.value === 'processing') return
+
+  const now = Date.now()
+  if (lastHandledDropKey === filePath && now - lastHandledDropAt < 1000) {
+    return
+  }
+
+  lastHandledDropKey = filePath
+  lastHandledDropAt = now
+  await processFile(filePath)
 }
 
 // File Analysis Handler
@@ -389,14 +446,7 @@ function toggleFileList() {
 async function openDestFolder() {
   if (!unpackResult.value) return
   try {
-    // If the success action extracted a direct single .var file, we select it, otherwise open the folder
-    let target = unpackResult.value.destinationPath
-    if (analysis.value?.recommendedAction === 'rename_to_var' && unpackResult.value.extractedFiles.length > 0) {
-      // Append the filename to make explorer select it
-      const sep = target.includes('/') ? '/' : '\\'
-      target = `${target}${sep}${unpackResult.value.extractedFiles[0]}`
-    }
-    await invoke('open_package_in_explorer', { filePath: target })
+    await invoke('open_package_in_explorer', { filePath: unpackResult.value.destinationPath })
   } catch (err) {
     notify.error(`打不开目录: ${err}`)
   }

@@ -1468,6 +1468,38 @@ pub async fn open_package_in_explorer(file_path: String) -> Result<(), String> {
     }
 }
 
+#[tauri::command]
+pub async fn open_path_in_explorer(path: String) -> Result<(), String> {
+    let target = std::path::Path::new(&path);
+    if !target.exists() {
+        return Err("路径不存在".to_string());
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        use std::process::Command;
+        let windows_path = path.replace('/', "\\");
+        let result = Command::new("explorer.exe").arg(windows_path).spawn();
+        match result {
+            Ok(_) => Ok(()),
+            Err(e) => Err(format!("无法打开文件管理器: {}", e)),
+        }
+    }
+    #[cfg(target_os = "macos")]
+    {
+        use std::process::Command;
+        let result = Command::new("open").arg(target).spawn();
+        match result {
+            Ok(_) => Ok(()),
+            Err(e) => Err(format!("无法打开访达: {}", e)),
+        }
+    }
+    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+    {
+        Err("当前系统暂不支持直接打开该路径".to_string())
+    }
+}
+
 /// 从 zip entry 中提取图片数据，存到缓存，返回 base64 data URL
 fn extract_and_cache(
     entry: &mut zip::read::ZipFile<'_>,

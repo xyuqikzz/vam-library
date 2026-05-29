@@ -8,8 +8,8 @@ use tokio::io::AsyncWriteExt;
 
 use crate::services::downloader::{index_downloaded_package, validate_var_file};
 use crate::services::install_context::resolve_install_context;
-use tauri::Manager;
 use std::sync::{Mutex, OnceLock};
+use tauri::Manager;
 
 const VAM_HUB_CONSENT_COOKIE: &str = "vamhubconsent=yes";
 
@@ -705,7 +705,8 @@ async fn fetch_hub_package_info_inner(
                 .build()
                 .map_err(|e| format!("Failed to build HTTP client: {}", e))?;
 
-            let is_numeric = !package_name.is_empty() && package_name.chars().all(|c| c.is_ascii_digit());
+            let is_numeric =
+                !package_name.is_empty() && package_name.chars().all(|c| c.is_ascii_digit());
 
             let payload = if is_numeric {
                 serde_json::json!({
@@ -776,7 +777,7 @@ async fn fetch_hub_package_info_inner(
 
             let deserialized: HubApiResponse = serde_json::from_value(parsed)
                 .map_err(|e| format!("Failed to deserialize VAM Hub response: {}", e))?;
-            
+
             deserialized
         }
     };
@@ -812,7 +813,10 @@ async fn fetch_hub_package_info_inner(
             };
 
             if should_save {
-                let previously_enriched = cache.get(&key).map(|e| e.is_fully_enriched).unwrap_or(false);
+                let previously_enriched = cache
+                    .get(&key)
+                    .map(|e| e.is_fully_enriched)
+                    .unwrap_or(false);
                 cache.insert(
                     key,
                     CacheEntry {

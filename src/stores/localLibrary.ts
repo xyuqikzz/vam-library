@@ -282,6 +282,18 @@ export const useLocalLibraryStore = defineStore('localLibrary', () => {
     error.value = null
   }
 
+  function resetState(nextState: LocalLibraryState = 'idle') {
+    packages.value = []
+    dashboardStats.value = emptyDashboardStats()
+    dependencyGraph.value = emptyDependencyGraph()
+    missingDependencies.value = []
+    corruptedPackages.value = []
+    packageFolders.value = []
+    allTags.value = []
+    error.value = null
+    state.value = nextState
+  }
+
   function updatePackageTags(packageId: string, tags: string[]) {
     packages.value = packages.value.map(pkg => (
       pkg.id === packageId ? { ...pkg, tags } : pkg
@@ -316,6 +328,7 @@ export const useLocalLibraryStore = defineStore('localLibrary', () => {
     stopListeners,
     ensureLoaded,
     refreshAll,
+    resetState,
     updatePackageTags,
     isPackageInstalled,
   }

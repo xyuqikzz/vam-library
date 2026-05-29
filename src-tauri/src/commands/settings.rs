@@ -1,9 +1,11 @@
 use serde::{Deserialize, Serialize};
+use tauri::State;
 
 use crate::services::install_context::{
     resolve_install_context, settings_file_path, DownloadAfterAction, DownloadTargetPolicy,
     InstallContext,
 };
+use crate::{db::Database, errors::AppError};
 
 const MIN_CONCURRENT_DOWNLOADS: usize = 1;
 const MAX_CONCURRENT_DOWNLOADS: usize = 5;
@@ -183,6 +185,41 @@ pub async fn save_hub_auth_cookie(
 #[tauri::command]
 pub async fn get_install_context(app_handle: tauri::AppHandle) -> Result<InstallContext, String> {
     resolve_install_context(&app_handle)
+}
+
+#[tauri::command]
+pub async fn clear_local_database(db: State<'_, Database>) -> Result<(), String> {
+    db.with_conn(|conn| {
+        conn.execute_batch(
+            "
+            BEGIN IMMEDIATE;
+            DELETE FROM cleanup_trash;
+            DELETE FROM resource_migration_log;
+            DELETE FROM on_demand_state;
+            DELETE FROM on_demand_plans;
+            DELETE FROM physical_packages;
+            DELETE FROM scene_references;
+            DELETE FROM dependencies;
+            DELETE FROM contents;
+            DELETE FROM package_tags;
+            DELETE FROM packages;
+            DELETE FROM sqlite_sequence
+            WHERE name IN (
+                'contents',
+                'dependencies',
+                'scene_references',
+                'resource_migration_log',
+                'cleanup_trash'
+            );
+            COMMIT;
+            ",
+        )
+        .map_err(|e| AppError::Database(format!("清空本地数据库失败: {}", e)))?;
+        Ok(())
+    })
+    .map_err(|e| e.to_string())?;
+
+    Ok(())
 }
 
 pub fn mark_managed_enabled(

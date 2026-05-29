@@ -15,8 +15,6 @@ struct InstalledPackage {
     version: i32,
 }
 
-
-
 /// A missing dependency entry
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MissingDependency {
@@ -27,8 +25,6 @@ pub struct MissingDependency {
     pub status: String,
     pub installed_version: Option<i32>,
 }
-
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PackageDependencyRelation {
@@ -152,8 +148,6 @@ pub async fn get_dependency_graph(db: State<'_, Database>) -> Result<DependencyG
     })
     .map_err(|e| e.to_string())
 }
-
-
 
 #[tauri::command]
 pub async fn get_package_dependency_relations(
@@ -309,8 +303,6 @@ pub async fn find_missing_dependencies(
     .map_err(|e| e.to_string())
 }
 
-
-
 fn load_installed_packages(conn: &Connection) -> rusqlite::Result<Vec<InstalledPackage>> {
     let mut stmt = conn.prepare("SELECT id, creator, name, version FROM packages")?;
     let packages = stmt
@@ -325,8 +317,6 @@ fn load_installed_packages(conn: &Connection) -> rusqlite::Result<Vec<InstalledP
         .collect::<Result<Vec<_>, _>>()?;
     Ok(packages)
 }
-
-
 
 fn physical_dependency_node(package_id: String, size_bytes: u64) -> DependencyNode {
     let (creator, name, version) = package_identity_from_id(&package_id);

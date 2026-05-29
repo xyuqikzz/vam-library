@@ -85,79 +85,88 @@
     </div>
 
     <!-- Main Content Area -->
-    <div class="hub-content-scroll" ref="scrollContainer">
-      <!-- Loading Overlay -->
-      <div v-if="loading && filteredAndSortedResources.length === 0" class="hub-loading-state">
-        <div class="loading-spinner"></div>
-        <p class="text-secondary text-sm">正在加载在线资源...</p>
-      </div>
+    <div :class="['hub-content-scroll', { 'is-loading': loading && filteredAndSortedResources.length > 0 }]" ref="scrollContainer">
+      <div class="hub-results-section">
+        <!-- Loading Overlay -->
+        <div v-if="loading && filteredAndSortedResources.length === 0" class="hub-loading-state">
+          <div class="loading-spinner"></div>
+          <p class="text-secondary text-sm">正在加载在线资源...</p>
+        </div>
 
-      <!-- Resources Grid -->
-      <div v-else-if="filteredAndSortedResources.length > 0" class="resources-grid">
-        <div
-          v-for="item in filteredAndSortedResources"
-          :key="item.resource_id"
-          class="resource-grid-card glass-card"
-          @click="openPackageDetail(item)"
-        >
-          <!-- Thumbnail Area -->
-          <div class="card-thumb-area">
-            <img v-if="item.image_url" :src="item.image_url" class="card-img" alt="cover" loading="lazy" />
-            <img v-else-if="item.icon_url" :src="item.icon_url" class="card-icon-img" alt="icon" loading="lazy" />
-            <div v-else class="card-placeholder">
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
-                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-              </svg>
-            </div>
-            <!-- Resource Type Badge (top-left) -->
-            <span class="card-type-badge" v-if="item.type" :class="getTypeBadgeClass(item.type)">{{ translateType(item.type) }}</span>
-            <!-- Pricing Badge (top-right) -->
-            <span class="card-pricing-badge" v-if="item.category" :class="item.category === 'Free' ? 'pricing-free' : 'pricing-paid'">{{ item.category === 'Free' ? '免费' : '付费' }}</span>
+        <div v-if="loading && filteredAndSortedResources.length > 0" class="hub-inline-loading-overlay">
+          <div class="hub-inline-loading-card">
+            <div class="loading-spinner"></div>
+            <p class="text-secondary text-sm">正在加载本页资源...</p>
           </div>
+        </div>
 
-          <!-- Card Details -->
-          <div class="card-info-area">
-            <h3 class="card-title" :title="item.title">{{ item.title || '未命名资源' }}</h3>
-            <div class="card-creator text-xs text-secondary">
-              作者: <span class="creator-name">{{ item.username || '匿名' }}</span>
+        <!-- Resources Grid -->
+        <div v-else-if="filteredAndSortedResources.length > 0" class="resources-grid">
+          <div
+            v-for="item in filteredAndSortedResources"
+            :key="item.resource_id"
+            class="resource-grid-card glass-card"
+            @click="openPackageDetail(item)"
+          >
+            <!-- Thumbnail Area -->
+            <div class="card-thumb-area">
+              <img v-if="item.image_url" :src="item.image_url" class="card-img" alt="cover" loading="lazy" />
+              <img v-else-if="item.icon_url" :src="item.icon_url" class="card-icon-img" alt="icon" loading="lazy" />
+              <div v-else class="card-placeholder">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
+                  <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </div>
+              <!-- Resource Type Badge (top-left) -->
+              <span class="card-type-badge" v-if="item.type" :class="getTypeBadgeClass(item.type)">{{ translateType(item.type) }}</span>
+              <!-- Pricing Badge (top-right) -->
+              <span class="card-pricing-badge" v-if="item.category" :class="item.category === 'Free' ? 'pricing-free' : 'pricing-paid'">{{ item.category === 'Free' ? '免费' : '付费' }}</span>
             </div>
-            
-            <p class="card-tagline text-xs text-secondary" v-if="item.tag_line" :title="item.tag_line">
-              {{ item.tag_line }}
-            </p>
 
-            <div class="card-stats">
-              <div class="card-stat" :title="'下载次数: ' + item.download_count">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-                  <path d="M4 16v1a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-                </svg>
-                <span>{{ formatCompactNumber(item.download_count) }}</span>
+            <!-- Card Details -->
+            <div class="card-info-area">
+              <h3 class="card-title" :title="item.title">{{ item.title || '未命名资源' }}</h3>
+              <div class="card-creator text-xs text-secondary">
+                作者: <span class="creator-name">{{ item.username || '匿名' }}</span>
               </div>
-              <div class="card-stat" :title="'浏览量: ' + item.view_count">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-                  <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-                </svg>
-                <span>{{ formatCompactNumber(item.view_count) }}</span>
-              </div>
-              <div class="card-stat rating" v-if="item.rating_avg" :title="'平均评分: ' + item.rating_avg">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-                  <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" fill="currentColor" />
-                </svg>
-                <span>{{ parseFloat(item.rating_avg).toFixed(1) }}</span>
+              
+              <p class="card-tagline text-xs text-secondary" v-if="item.tag_line" :title="item.tag_line">
+                {{ item.tag_line }}
+              </p>
+
+              <div class="card-stats">
+                <div class="card-stat" :title="'下载次数: ' + item.download_count">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+                    <path d="M4 16v1a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                  <span>{{ formatCompactNumber(item.download_count) }}</span>
+                </div>
+                <div class="card-stat" :title="'浏览量: ' + item.view_count">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                    <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                  </svg>
+                  <span>{{ formatCompactNumber(item.view_count) }}</span>
+                </div>
+                <div class="card-stat rating" v-if="item.rating_avg" :title="'平均评分: ' + item.rating_avg">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" fill="currentColor" />
+                  </svg>
+                  <span>{{ parseFloat(item.rating_avg).toFixed(1) }}</span>
+                </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
 
-      <!-- Empty State -->
-      <div v-else-if="!loading" class="hub-empty-state animate-fadeIn">
-        <svg width="48" height="48" viewBox="0 0 24 24" fill="none">
-          <path d="M21 21l-6-6m2-5a7 7 0 1 1-14 0 7 7 0 0 1 14 0z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-        <h3>未找到任何在线包</h3>
-        <p class="text-secondary text-sm">尝试在上方搜索其他关键字，或更改分类选项。</p>
+        <!-- Empty State -->
+        <div v-else-if="!loading" class="hub-empty-state animate-fadeIn">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none">
+            <path d="M21 21l-6-6m2-5a7 7 0 1 1-14 0 7 7 0 0 1 14 0z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          <h3>未找到任何在线包</h3>
+          <p class="text-secondary text-sm">尝试在上方搜索其他关键字，或更改分类选项。</p>
+        </div>
       </div>
 
       <!-- Pagination Bar -->
@@ -1728,12 +1737,50 @@ function translateType(type: string): string {
 
 /* ── Main Content Scroll Area ── */
 .hub-content-scroll {
+  position: relative;
   flex: 1;
   overflow-y: auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
   padding-right: 4px;
+}
+
+.hub-results-section {
+  position: relative;
+  flex: 1;
+  min-height: 320px;
+  display: flex;
+  flex-direction: column;
+}
+
+.hub-content-scroll.is-loading .hub-results-section > :not(.hub-inline-loading-overlay) {
+  filter: blur(1.5px);
+}
+
+.hub-inline-loading-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6);
+  background: rgba(13, 16, 28, 0.28);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+
+.hub-inline-loading-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-5) var(--space-6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-lg);
+  background: rgba(22, 24, 40, 0.88);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
 }
 
 .hub-content-scroll::-webkit-scrollbar {

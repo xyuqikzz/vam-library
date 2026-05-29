@@ -367,11 +367,13 @@ pub async fn execute_cleanup(
 pub fn purge_expired_trash_internal(conn: &rusqlite::Connection) -> Result<usize, AppError> {
     let mut stmt = conn.prepare(
         "SELECT id, trash_path FROM cleanup_trash
-         WHERE restored_at IS NULL AND created_at < datetime('now', '-1 day')"
+         WHERE restored_at IS NULL AND created_at < datetime('now', '-1 day')",
     )?;
-    let expired_items = stmt.query_map([], |row| {
-        Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
-    })?.collect::<Result<Vec<_>, _>>()?;
+    let expired_items = stmt
+        .query_map([], |row| {
+            Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
 
     let mut purged_count = 0;
     for (id, trash_path) in expired_items {
@@ -388,9 +390,7 @@ pub fn purge_expired_trash_internal(conn: &rusqlite::Connection) -> Result<usize
 #[tauri::command]
 pub async fn list_cleanup_trash(db: State<'_, Database>) -> Result<Vec<CleanupTrashEntry>, String> {
     // Proactively purge expired trash first!
-    let _ = db.with_conn(|conn| {
-        purge_expired_trash_internal(conn)
-    });
+    let _ = db.with_conn(|conn| purge_expired_trash_internal(conn));
 
     db.with_conn(|conn| {
         let mut stmt = conn
@@ -427,17 +427,18 @@ pub async fn delete_cleanup_trash_item(
     trash_id: i64,
 ) -> Result<(), String> {
     db.with_conn(|conn| {
-        let trash_path: String = conn.query_row(
-            "SELECT trash_path FROM cleanup_trash WHERE id = ?1",
-            [trash_id],
-            |row| row.get(0),
-        ).map_err(|e| AppError::Database(format!("未找到回收站项: {}", e)))?;
+        let trash_path: String = conn
+            .query_row(
+                "SELECT trash_path FROM cleanup_trash WHERE id = ?1",
+                [trash_id],
+                |row| row.get(0),
+            )
+            .map_err(|e| AppError::Database(format!("未找到回收站项: {}", e)))?;
 
         let path = Path::new(&trash_path);
         if path.exists() {
-            std::fs::remove_file(path).map_err(|e| {
-                AppError::Io(format!("永久删除物理文件失败: {}", e))
-            })?;
+            std::fs::remove_file(path)
+                .map_err(|e| AppError::Io(format!("永久删除物理文件失败: {}", e)))?;
         }
 
         conn.execute("DELETE FROM cleanup_trash WHERE id = ?1", [trash_id])
@@ -451,16 +452,17 @@ pub async fn delete_cleanup_trash_item(
 #[tauri::command]
 pub async fn empty_cleanup_trash(db: State<'_, Database>) -> Result<usize, String> {
     db.with_conn(|conn| {
-        let mut stmt = conn.prepare(
-            "SELECT id, trash_path FROM cleanup_trash WHERE restored_at IS NULL"
-        ).map_err(|e| AppError::Database(e.to_string()))?;
+        let mut stmt = conn
+            .prepare("SELECT id, trash_path FROM cleanup_trash WHERE restored_at IS NULL")
+            .map_err(|e| AppError::Database(e.to_string()))?;
 
-        let items = stmt.query_map([], |row| {
-            Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
-        })
-        .map_err(|e| AppError::Database(e.to_string()))?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| AppError::Database(e.to_string()))?;
+        let items = stmt
+            .query_map([], |row| {
+                Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+            })
+            .map_err(|e| AppError::Database(e.to_string()))?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| AppError::Database(e.to_string()))?;
 
         let mut deleted_count = 0;
         for (id, trash_path) in items {

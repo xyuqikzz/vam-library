@@ -260,6 +260,20 @@
           </button>
         </div>
       </div>
+
+      <div class="setting-divider" />
+
+      <div class="setting-row">
+        <div class="setting-info">
+          <h4 class="setting-label">{{ $t('settings.clearLocalData') }}</h4>
+          <p class="setting-description">{{ $t('settings.clearLocalDataDesc') }}</p>
+        </div>
+        <div class="setting-control">
+          <button class="danger-btn" :disabled="isClearingLocalData" @click="confirmClearLocalData = true">
+            {{ isClearingLocalData ? $t('common.loading') : $t('settings.clearBtn') }}
+          </button>
+        </div>
+      </div>
     </GlassPanel>
     
     <!-- Backup & Export -->
@@ -294,6 +308,25 @@
         </div>
       </div>
     </GlassPanel>
+
+    <div v-if="confirmClearLocalData" class="modal-overlay" @click.self="closeClearLocalDataDialog">
+      <div class="confirm-dialog">
+        <div class="confirm-dialog-header">
+          <h3>{{ $t('settings.clearLocalDataConfirmTitle') }}</h3>
+        </div>
+        <div class="confirm-dialog-body">
+          <p>{{ $t('settings.clearLocalDataConfirmDesc') }}</p>
+        </div>
+        <div class="confirm-dialog-actions">
+          <button class="browse-btn" :disabled="isClearingLocalData" @click="closeClearLocalDataDialog">
+            {{ $t('common.cancel') }}
+          </button>
+          <button class="danger-btn" :disabled="isClearingLocalData" @click="handleClearLocalData">
+            {{ isClearingLocalData ? $t('common.loading') : $t('common.confirm') }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -302,12 +335,14 @@ import { useI18n } from 'vue-i18n'
 import { computed, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useAppStore } from '@/stores/app'
+import { useLocalLibraryStore } from '@/stores/localLibrary'
 import { useNotification } from '@/composables/useNotification'
 import { invoke } from '@tauri-apps/api/core'
 import GlassPanel from '@/components/common/GlassPanel.vue'
 
 const { t } = useI18n()
 const appStore = useAppStore()
+const localLibraryStore = useLocalLibraryStore()
 const {
   vamRootPath,
   locale,
@@ -325,6 +360,8 @@ const {
 
 const notify = useNotification()
 const isClearingThumbnails = ref(false)
+const isClearingLocalData = ref(false)
+const confirmClearLocalData = ref(false)
 
 async function handleClearThumbnails() {
   if (isClearingThumbnails.value) return
@@ -336,6 +373,27 @@ async function handleClearThumbnails() {
     notify.error(t('settings.clearThumbnailsFailed') + ': ' + String(e))
   } finally {
     isClearingThumbnails.value = false
+  }
+}
+
+function closeClearLocalDataDialog() {
+  if (isClearingLocalData.value) return
+  confirmClearLocalData.value = false
+}
+
+async function handleClearLocalData() {
+  if (isClearingLocalData.value) return
+  isClearingLocalData.value = true
+  try {
+    await invoke('clear_local_database')
+    localLibraryStore.resetState('loading')
+    await localLibraryStore.refreshAll('loading')
+    notify.success(t('settings.clearLocalDataSuccess'))
+    confirmClearLocalData.value = false
+  } catch (e) {
+    notify.error(t('settings.clearLocalDataFailed') + ': ' + String(e))
+  } finally {
+    isClearingLocalData.value = false
   }
 }
 
@@ -826,6 +884,17 @@ async function handleExportPackages() {
   font-weight: var(--font-medium);
 }
 
+.danger-btn {
+  padding: var(--space-2) var(--space-4);
+  height: 34px;
+  border: 1px solid rgba(248, 113, 113, 0.2);
+  border-radius: var(--radius-sm);
+  background: rgba(248, 113, 113, 0.1);
+  color: var(--color-error);
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+}
+
 .setting-select {
   min-width: 180px;
   height: 30px;
@@ -863,5 +932,60 @@ async function handleExportPackages() {
 .browse-btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+.danger-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 720;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6);
+  background: rgba(6, 8, 16, 0.56);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.confirm-dialog {
+  width: min(460px, 100%);
+  border: 1px solid rgba(248, 113, 113, 0.18);
+  border-radius: var(--radius-lg);
+  background: rgba(20, 21, 35, 0.96);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.35);
+}
+
+.confirm-dialog-header,
+.confirm-dialog-body,
+.confirm-dialog-actions {
+  padding: var(--space-5);
+}
+
+.confirm-dialog-header {
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.confirm-dialog-header h3 {
+  color: var(--text-primary);
+  font-size: var(--text-lg);
+  font-weight: var(--font-semibold);
+}
+
+.confirm-dialog-body {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.7;
+}
+
+.confirm-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  border-top: 1px solid var(--border-subtle);
 }
 </style>
