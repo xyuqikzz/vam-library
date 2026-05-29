@@ -1179,6 +1179,28 @@ fn find_vam_launcher(root: &Path) -> Option<PathBuf> {
     None
 }
 
+fn find_vam_exe(root: &Path) -> Option<PathBuf> {
+    for candidate in ["VaM.exe", "VAM.exe"] {
+        let path = root.join(candidate);
+        if path.exists() {
+            return Some(path);
+        }
+    }
+
+    let entries = fs::read_dir(root).ok()?;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let Some(file_name) = path.file_name().and_then(|name| name.to_str()) else {
+            continue;
+        };
+        if file_name.eq_ignore_ascii_case("vam.exe") {
+            return Some(path);
+        }
+    }
+
+    None
+}
+
 #[cfg(windows)]
 fn launch_process(root: &Path, launcher: &Path) -> Result<(), String> {
     let extension = launcher
@@ -1201,6 +1223,15 @@ fn launch_process(root: &Path, launcher: &Path) -> Result<(), String> {
             .map_err(|e| format!("启动游戏失败 {}: {}", launcher.display(), e))?;
     }
 
+    Ok(())
+}
+
+fn launch_process_with_args(root: &Path, launcher: &Path, args: &[&str]) -> Result<(), String> {
+    Command::new(launcher)
+        .current_dir(root)
+        .args(args)
+        .spawn()
+        .map_err(|e| format!("启动游戏失败 {}: {}", launcher.display(), e))?;
     Ok(())
 }
 
@@ -1250,5 +1281,18 @@ fn create_symlink_file(source: &Path, target: &Path) -> std::io::Result<()> {
 pub async fn launch_vam_direct(vam_root: String) -> Result<String, String> {
     let root = PathBuf::from(vam_root);
     let launcher = launch_vam_game(&root)?;
+    Ok(launcher.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+pub async fn launch_vam_config(vam_root: String) -> Result<String, String> {
+    let root = PathBuf::from(vam_root);
+    let launcher = find_vam_exe(&root).ok_or_else(|| {
+        format!(
+            "未找到 VAM 配置启动器，请确认目录中存在 VaM.exe: {}",
+            root.display()
+        )
+    })?;
+    launch_process_with_args(&root, &launcher, &["-show-screen-selector"])?;
     Ok(launcher.to_string_lossy().to_string())
 }

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::path::Path;
-use std::time::SystemTime;
+use std::time::{Duration, Instant, SystemTime};
 
 use walkdir::WalkDir;
 
@@ -47,6 +47,13 @@ pub struct ScanCacheEntry {
     pub scan_status: String,
 }
 
+struct ScannedVarFile {
+    path: std::path::PathBuf,
+    file_path: String,
+    size_bytes: u64,
+    modified_time: String,
+}
+
 /// Scan the AddonPackages directory under the given VAM root for .var files.
 ///
 /// Recursively walks the directory, parses each .var file, collects results,
@@ -81,7 +88,7 @@ pub fn scan_addon_packages_with_cache(
         source_dirs.push(on_demand_library_dir);
     }
 
-    // First pass: collect all .var file paths
+    // 第一阶段只遍历目录并读取文件状态，后续增量判断直接复用这里的数据。
     let mut var_files = Vec::new();
     for source_dir in source_dirs {
         var_files.extend(
@@ -97,15 +104,27 @@ pub fn scan_addon_packages_with_cache(
                             .map(|ext| ext.eq_ignore_ascii_case("var"))
                             .unwrap_or(false)
                 })
-                .map(|entry| entry.into_path()),
+                .filter_map(|entry| {
+                    let path = entry.into_path();
+                    let metadata = std::fs::metadata(&path).ok()?;
+                    Some(ScannedVarFile {
+                        file_path: path.to_string_lossy().to_string(),
+                        size_bytes: metadata.len(),
+                        modified_time: metadata
+                            .modified()
+                            .map(system_time_to_rfc3339)
+                            .unwrap_or_default(),
+                        path,
+                    })
+                }),
         );
     }
-    var_files.sort_by(|a, b| a.to_string_lossy().cmp(&b.to_string_lossy()));
+    var_files.sort_by(|a, b| a.file_path.cmp(&b.file_path));
 
     let total_files = var_files.len();
     let current_file_paths = var_files
         .iter()
-        .map(|path| path.to_string_lossy().to_string())
+        .map(|file| file.file_path.clone())
         .collect::<Vec<_>>();
 
     // Report scanning phase
@@ -122,46 +141,52 @@ pub fn scan_addon_packages_with_cache(
     let mut errors = Vec::new();
     let mut failures = Vec::new();
     let mut skipped_files = 0usize;
+    let mut last_progress_at = Instant::now()
+        .checked_sub(Duration::from_millis(250))
+        .unwrap_or_else(Instant::now);
+    let mut last_progress_idx = 0usize;
 
     // Second pass: parse each .var file
-    for (idx, var_path) in var_files.iter().enumerate() {
-        let filename = var_path
+    for (idx, var_file) in var_files.iter().enumerate() {
+        let filename = var_file
+            .path
             .file_name()
             .and_then(|f| f.to_str())
             .unwrap_or("unknown")
             .to_string();
 
-        // Report parsing progress
-        if let Some(ref mut cb) = on_progress {
-            cb(ScanProgress {
-                total_files,
-                processed_files: idx,
-                current_file: filename.clone(),
-                phase: "parsing".to_string(),
-            });
+        let should_report = idx == 0
+            || idx + 1 == total_files
+            || idx.saturating_sub(last_progress_idx) >= 25
+            || last_progress_at.elapsed() >= Duration::from_millis(250);
+        if should_report {
+            if let Some(ref mut cb) = on_progress {
+                cb(ScanProgress {
+                    total_files,
+                    processed_files: idx,
+                    current_file: filename.clone(),
+                    phase: "parsing".to_string(),
+                });
+            }
+            last_progress_at = Instant::now();
+            last_progress_idx = idx;
         }
 
-        let file_path = var_path.to_string_lossy().to_string();
-        let (size_bytes, modified_time) = match std::fs::metadata(var_path) {
-            Ok(metadata) => (
-                metadata.len(),
-                metadata
-                    .modified()
-                    .map(system_time_to_rfc3339)
-                    .unwrap_or_default(),
-            ),
-            Err(e) => {
-                let error_msg = format!("{}: {}", var_path.display(), e);
-                errors.push(error_msg.clone());
-                failures.push(ScanFailure {
-                    file_path,
-                    size_bytes: 0,
-                    modified_time: String::new(),
-                    error: error_msg,
-                });
-                continue;
-            }
-        };
+        let file_path = var_file.file_path.clone();
+        let size_bytes = var_file.size_bytes;
+        let modified_time = var_file.modified_time.clone();
+
+        if modified_time.is_empty() {
+            let error_msg = format!("{}: failed to read modified time", var_file.path.display());
+            errors.push(error_msg.clone());
+            failures.push(ScanFailure {
+                file_path,
+                size_bytes,
+                modified_time,
+                error: error_msg,
+            });
+            continue;
+        }
 
         if let Some(cache_entry) = cache.get(&file_path) {
             if cache_entry.scan_status == "ok"
@@ -173,12 +198,12 @@ pub fn scan_addon_packages_with_cache(
             }
         }
 
-        match var_parser::parse_var_file(var_path) {
+        match var_parser::parse_var_file(&var_file.path) {
             Ok(package) => {
                 packages.push(package);
             }
             Err(e) => {
-                let error_msg = format!("{}: {}", var_path.display(), e);
+                let error_msg = format!("{}: {}", var_file.path.display(), e);
                 log::warn!("Failed to parse .var file: {}", error_msg);
                 errors.push(error_msg.clone());
                 failures.push(ScanFailure {

@@ -134,7 +134,65 @@ export const useLocalLibraryStore = defineStore('localLibrary', () => {
 
   async function ensureLoaded() {
     if (state.value === 'idle' || state.value === 'error') {
-      await refreshAll('loading')
+      await refreshStartup('loading')
+    }
+  }
+
+  async function refreshStartup(nextState: LocalLibraryState = 'loading') {
+    const token = ++refreshToken
+    const appStore = useAppStore()
+    state.value = nextState
+    error.value = null
+
+    try {
+      const [
+        packageList,
+        tags,
+        folders,
+      ] = await Promise.all([
+        invoke<PackageDisplayItem[]>('list_packages'),
+        invoke<string[]>('list_all_tags').catch(() => []),
+        loadPackageFolders(appStore.vamRootPath),
+      ])
+
+      if (token !== refreshToken) return
+      packages.value = packageList || []
+      allTags.value = tags || []
+      packageFolders.value = folders
+      markReady()
+
+      void refreshSecondaryStartupData(token)
+    } catch (err) {
+      if (token !== refreshToken) return
+      packages.value = []
+      allTags.value = []
+      packageFolders.value = []
+      error.value = String(err)
+      state.value = 'error'
+    }
+  }
+
+  async function refreshSecondaryStartupData(token: number) {
+    try {
+      const [
+        stats,
+        graph,
+        missing,
+        corrupted,
+      ] = await Promise.all([
+        invoke<DashboardStats>('get_dashboard_stats').catch(() => emptyDashboardStats()),
+        invoke<DependencyGraphData>('get_dependency_graph').catch(() => emptyDependencyGraph()),
+        invoke<MissingDependency[]>('find_missing_dependencies').catch(() => []),
+        invoke<CorruptedPackage[]>('find_corrupted_packages').catch(() => []),
+      ])
+
+      if (token !== refreshToken) return
+      dashboardStats.value = stats || emptyDashboardStats()
+      dependencyGraph.value = graph || emptyDependencyGraph()
+      missingDependencies.value = missing || []
+      corruptedPackages.value = corrupted || []
+    } catch {
+      // 首屏已可用，后台统计失败时保持空数据。
     }
   }
 
@@ -327,6 +385,7 @@ export const useLocalLibraryStore = defineStore('localLibrary', () => {
     startListeners,
     stopListeners,
     ensureLoaded,
+    refreshStartup,
     refreshAll,
     resetState,
     updatePackageTags,

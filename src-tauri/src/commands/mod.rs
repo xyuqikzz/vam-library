@@ -10,3 +10,4 @@ pub mod scan;
 pub mod settings;
 pub mod share;
 pub mod unpack;
+pub mod vam_prefs;

@@ -21,6 +21,27 @@
       </svg>
       <span>{{ $t('dashboard.screenshotDirectory') }}</span>
     </button>
+    <button
+      class="quick-btn"
+      :disabled="!appearancePresetPath"
+      @click="appearancePresetPath && $emit('open', appearancePresetPath)"
+    >
+      <span>{{ $t('dashboard.appearancePresetDirectory') }}</span>
+    </button>
+    <button
+      class="quick-btn"
+      :disabled="!clothingPresetPath"
+      @click="clothingPresetPath && $emit('open', clothingPresetPath)"
+    >
+      <span>{{ $t('dashboard.clothingPresetDirectory') }}</span>
+    </button>
+    <button
+      v-if="vamRoot"
+      class="quick-btn"
+      @click="$emit('gameConfig')"
+    >
+      <span>{{ $t('dashboard.gameConfig') }}</span>
+    </button>
   </div>
 </template>
 
@@ -30,10 +51,13 @@ import { useI18n } from 'vue-i18n'
 defineProps<{
   vamRoot: string | null
   screenshotPath: string | null
+  appearancePresetPath: string | null
+  clothingPresetPath: string | null
 }>()
 
 defineEmits<{
   open: [path: string]
+  gameConfig: []
 }>()
 
 useI18n()
@@ -42,6 +66,7 @@ useI18n()
 <style scoped>
 .quick-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-2);
 }
 

@@ -174,13 +174,21 @@ async function bootstrapApp() {
   await appStore.setupScanListener()
   await localLibraryStore.startListeners()
   await appStore.loadSettings()
-  await localLibraryStore.ensureLoaded()
 
-  if (appStore.autoScan && appStore.vamRootPath && !appStore.isScanning) {
-    appStore.startScan(appStore.vamRootPath).catch((err) => {
-      console.error('Failed auto-scan on startup:', err)
+  window.requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
+      void localLibraryStore.ensureLoaded().then(() => {
+        if (appStore.autoScan && appStore.vamRootPath && !appStore.isScanning) {
+          appStore.startScan(appStore.vamRootPath).catch((err) => {
+            console.error('Failed auto-scan on startup:', err)
+          })
+        }
+      }).catch((err) => {
+        console.error('Failed to load local library:', err)
+        startupError.value = String(err)
+      })
     })
-  }
+  })
 }
 
 async function retryStartup() {

@@ -26,6 +26,8 @@ pub struct VarPackage {
     pub contents: Vec<(String, u64)>,
     /// ISO 时间戳 - 包文件在磁盘上的创建时间
     pub created_time: String,
+    /// ISO 时间戳 - 包文件在磁盘上的修改时间
+    pub modified_time: String,
     /// ISO timestamp of when the package was scanned
     pub scan_time: String,
 }

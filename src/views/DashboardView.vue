@@ -36,7 +36,10 @@
         <QuickActions
           :vam-root="vamRootPath"
           :screenshot-path="screenshotPath"
+          :appearance-preset-path="appearancePresetPath"
+          :clothing-preset-path="clothingPresetPath"
           @open="openPath"
+          @game-config="openGameConfig"
         />
       </GlassPanel>
     </section>
@@ -100,6 +103,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { storeToRefs } from 'pinia'
+import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { useLocalLibraryStore } from '@/stores/localLibrary'
 import { useNotification } from '@/composables/useNotification'
@@ -114,6 +118,7 @@ import SkeletonLoader from '@/components/common/SkeletonLoader.vue'
 const appStore = useAppStore()
 const localLibraryStore = useLocalLibraryStore()
 const notify = useNotification()
+const { t } = useI18n()
 
 const { vamRootPath, isScanning, scanProgress } = storeToRefs(appStore)
 const {
@@ -132,9 +137,20 @@ const screenshotPath = computed(() => (
   vamRootPath.value ? `${vamRootPath.value}\\Saves\\scene` : null
 ))
 
-onMounted(async () => {
-  await localLibraryStore.ensureLoaded()
-  await loadRecentThumbnails()
+const appearancePresetPath = computed(() => (
+  vamRootPath.value ? `${vamRootPath.value}\\Custom\\Atom\\Person\\Appearance` : null
+))
+
+const clothingPresetPath = computed(() => (
+  vamRootPath.value ? `${vamRootPath.value}\\Custom\\Atom\\Person\\Clothing` : null
+))
+
+onMounted(() => {
+  window.requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
+      void localLibraryStore.ensureLoaded().then(() => loadRecentThumbnails())
+    })
+  })
 })
 
 watch(recentPackages, () => {
@@ -158,6 +174,16 @@ async function loadRecentThumbnails() {
 async function openPath(path: string) {
   try {
     await invoke('open_path_in_explorer', { path })
+  } catch (e) {
+    notify.error(String(e))
+  }
+}
+
+async function openGameConfig() {
+  if (!vamRootPath.value) return
+  try {
+    await invoke('launch_vam_config', { vamRoot: vamRootPath.value })
+    notify.success(t('dashboard.gameConfigLaunched'))
   } catch (e) {
     notify.error(String(e))
   }

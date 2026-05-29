@@ -124,6 +124,10 @@ pub fn parse_var_file(path: &Path) -> Result<VarPackage, AppError> {
     let resource_types = normalize_resource_types(resource_type_set);
 
     let scan_time = chrono::Utc::now().to_rfc3339();
+    let modified_time = file_metadata
+        .modified()
+        .map(system_time_to_rfc3339)
+        .unwrap_or_else(|_| scan_time.clone());
     let created_time = file_metadata
         .created()
         .or_else(|_| file_metadata.modified())
@@ -141,6 +145,7 @@ pub fn parse_var_file(path: &Path) -> Result<VarPackage, AppError> {
         resource_types,
         contents,
         created_time,
+        modified_time,
         scan_time,
     })
 }

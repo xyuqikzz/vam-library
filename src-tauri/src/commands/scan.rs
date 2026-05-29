@@ -1,6 +1,5 @@
 use std::path::Path;
 use std::sync::Mutex;
-use std::time::SystemTime;
 
 use tauri::State;
 use tauri::{AppHandle, Emitter};
@@ -90,29 +89,10 @@ pub async fn scan_vam_directory(
 
         remove_missing_physical_packages(&tx, &scan_result.current_file_paths)?;
 
-        for pkg in &packages {
-            let resource_types_json =
-                serde_json::to_string(&pkg.resource_types).unwrap_or_else(|_| "[]".to_string());
-
-            let meta_json = pkg
-                .meta
-                .as_ref()
-                .and_then(|m| serde_json::to_string(m).ok());
-
-            let description = pkg.meta.as_ref().and_then(|m| m.description.clone());
-            let credits = pkg.meta.as_ref().and_then(|m| m.credits.clone());
-            let instructions = pkg.meta.as_ref().and_then(|m| m.instructions.clone());
-            let promotional_link = pkg.meta.as_ref().and_then(|m| m.promotional_link.clone());
-            let license_type = pkg
-                .meta
-                .as_ref()
-                .map(|m| m.license_type.clone())
-                .unwrap_or_default();
-
-            let modified_time = file_modified_time(Path::new(&pkg.file_path));
-
-            tx.execute(
-                "INSERT INTO packages (
+        {
+            let mut upsert_package = tx
+                .prepare_cached(
+                    "INSERT INTO packages (
                     id, creator, name, version, file_path, size_bytes,
                     license_type, description, credits, instructions,
                     promotional_link, meta_json, resource_types, file_created_time, scan_time
@@ -132,131 +112,169 @@ pub async fn scan_vam_directory(
                     resource_types = excluded.resource_types,
                     file_created_time = excluded.file_created_time,
                     updated_at = datetime('now')",
-                rusqlite::params![
-                    pkg.id,
-                    pkg.creator,
-                    pkg.name,
-                    pkg.version,
-                    pkg.file_path,
-                    pkg.size_bytes,
-                    license_type,
-                    description,
-                    credits,
-                    instructions,
-                    promotional_link,
-                    meta_json,
-                    resource_types_json,
-                    pkg.created_time,
-                    pkg.scan_time,
-                ],
-            )
-            .map_err(|e| {
-                crate::errors::AppError::Database(format!(
-                    "Failed to insert package '{}': {}",
-                    pkg.id, e
-                ))
-            })?;
-
-            tx.execute(
-                "INSERT OR REPLACE INTO physical_packages (
+                )
+                .map_err(|e| crate::errors::AppError::Database(e.to_string()))?;
+            let mut upsert_physical = tx
+                .prepare_cached(
+                    "INSERT OR REPLACE INTO physical_packages (
                     file_path, package_id, size_bytes, modified_time, scan_time, scan_status, last_error
                  ) VALUES (?1, ?2, ?3, ?4, ?5, 'ok', NULL)",
-                rusqlite::params![
-                    pkg.file_path,
-                    pkg.id,
-                    pkg.size_bytes as i64,
-                    modified_time,
-                    pkg.scan_time,
-                ],
-            )
-            .map_err(|e| {
-                crate::errors::AppError::Database(format!(
-                    "Failed to insert physical package path: {}",
-                    e
-                ))
-            })?;
+                )
+                .map_err(|e| crate::errors::AppError::Database(e.to_string()))?;
+            let mut clear_contents = tx
+                .prepare_cached("DELETE FROM contents WHERE package_id = ?1")
+                .map_err(|e| crate::errors::AppError::Database(e.to_string()))?;
+            let mut clear_dependencies = tx
+                .prepare_cached("DELETE FROM dependencies WHERE package_id = ?1")
+                .map_err(|e| crate::errors::AppError::Database(e.to_string()))?;
+            let mut insert_content = tx
+                .prepare_cached(
+                    "INSERT OR IGNORE INTO contents (package_id, file_path, resource_type, size_bytes)
+                     VALUES (?1, ?2, ?3, ?4)",
+                )
+                .map_err(|e| crate::errors::AppError::Database(e.to_string()))?;
+            let mut insert_dependency = tx
+                .prepare_cached(
+                    "INSERT OR IGNORE INTO dependencies (package_id, depends_on_id, required_version)
+                         VALUES (?1, ?2, ?3)",
+                )
+                .map_err(|e| crate::errors::AppError::Database(e.to_string()))?;
+            let mut upsert_failure = tx
+                .prepare_cached(
+                    "INSERT OR REPLACE INTO physical_packages (
+                    file_path, package_id, size_bytes, modified_time, scan_time, scan_status, last_error
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, 'failed', ?6)",
+                )
+                .map_err(|e| crate::errors::AppError::Database(e.to_string()))?;
 
-            tx.execute("DELETE FROM contents WHERE package_id = ?1", [&pkg.id])
-                .map_err(|e| {
+            for pkg in &packages {
+                let resource_types_json =
+                    serde_json::to_string(&pkg.resource_types).unwrap_or_else(|_| "[]".to_string());
+
+                let meta_json = pkg
+                    .meta
+                    .as_ref()
+                    .and_then(|m| serde_json::to_string(m).ok());
+
+                let description = pkg.meta.as_ref().and_then(|m| m.description.clone());
+                let credits = pkg.meta.as_ref().and_then(|m| m.credits.clone());
+                let instructions = pkg.meta.as_ref().and_then(|m| m.instructions.clone());
+                let promotional_link = pkg.meta.as_ref().and_then(|m| m.promotional_link.clone());
+                let license_type = pkg
+                    .meta
+                    .as_ref()
+                    .map(|m| m.license_type.clone())
+                    .unwrap_or_default();
+
+                upsert_package
+                    .execute(rusqlite::params![
+                        pkg.id,
+                        pkg.creator,
+                        pkg.name,
+                        pkg.version,
+                        pkg.file_path,
+                        pkg.size_bytes,
+                        license_type,
+                        description,
+                        credits,
+                        instructions,
+                        promotional_link,
+                        meta_json,
+                        resource_types_json,
+                        pkg.created_time,
+                        pkg.scan_time,
+                    ])
+                    .map_err(|e| {
+                        crate::errors::AppError::Database(format!(
+                            "Failed to insert package '{}': {}",
+                            pkg.id, e
+                        ))
+                    })?;
+
+                upsert_physical
+                    .execute(rusqlite::params![
+                        pkg.file_path,
+                        pkg.id,
+                        pkg.size_bytes as i64,
+                        pkg.modified_time,
+                        pkg.scan_time,
+                    ])
+                    .map_err(|e| {
+                        crate::errors::AppError::Database(format!(
+                            "Failed to insert physical package path: {}",
+                            e
+                        ))
+                    })?;
+
+                clear_contents.execute([&pkg.id]).map_err(|e| {
                     crate::errors::AppError::Database(format!(
                         "Failed to clear content entries for '{}': {}",
                         pkg.id, e
                     ))
                 })?;
 
-            tx.execute("DELETE FROM dependencies WHERE package_id = ?1", [&pkg.id])
-                .map_err(|e| {
+                clear_dependencies.execute([&pkg.id]).map_err(|e| {
                     crate::errors::AppError::Database(format!(
                         "Failed to clear dependency entries for '{}': {}",
                         pkg.id, e
                     ))
                 })?;
 
-            // 重新扫描同一个包时先清空旧明细，避免文件数重复累加。
-            for (content_path, size) in &pkg.contents {
-                let rt = crate::models::resource::ResourceType::from_path(content_path);
-                tx.execute(
-                    "INSERT OR IGNORE INTO contents (package_id, file_path, resource_type, size_bytes)
-                     VALUES (?1, ?2, ?3, ?4)",
-                    rusqlite::params![pkg.id, content_path, rt.as_str(), size],
-                )
-                .map_err(|e| {
-                    crate::errors::AppError::Database(format!(
-                        "Failed to insert content entry: {}",
-                        e
-                    ))
-                })?;
-            }
-            if let Some(meta) = &pkg.meta {
-                // Insert dependency entries
-                for (dep_id, _dep_val) in &meta.dependencies {
-                    let parts: Vec<&str> = dep_id.splitn(3, '.').collect();
-                    let required_version = if parts.len() == 3 {
-                        parts[2].to_string()
-                    } else {
-                        "latest".to_string()
-                    };
+                // 重新扫描同一个包时先清空旧明细，避免文件数重复累加。
+                for (content_path, size) in &pkg.contents {
+                    let rt = crate::models::resource::ResourceType::from_path(content_path);
+                    insert_content
+                        .execute(rusqlite::params![pkg.id, content_path, rt.as_str(), size])
+                        .map_err(|e| {
+                            crate::errors::AppError::Database(format!(
+                                "Failed to insert content entry: {}",
+                                e
+                            ))
+                        })?;
+                }
+                if let Some(meta) = &pkg.meta {
+                    for (dep_id, _dep_val) in &meta.dependencies {
+                        let parts: Vec<&str> = dep_id.splitn(3, '.').collect();
+                        let required_version = if parts.len() == 3 {
+                            parts[2].to_string()
+                        } else {
+                            "latest".to_string()
+                        };
 
-                    tx.execute(
-                        "INSERT OR IGNORE INTO dependencies (package_id, depends_on_id, required_version)
-                         VALUES (?1, ?2, ?3)",
-                        rusqlite::params![pkg.id, dep_id, required_version],
-                    )
+                        insert_dependency
+                            .execute(rusqlite::params![pkg.id, dep_id, required_version])
+                            .map_err(|e| {
+                                crate::errors::AppError::Database(format!(
+                                    "Failed to insert dependency: {}",
+                                    e
+                                ))
+                            })?;
+                    }
+                }
+            }
+
+            for failure in &scan_result.failures {
+                let package_id = Path::new(&failure.file_path)
+                    .file_stem()
+                    .and_then(|name| name.to_str())
+                    .unwrap_or(&failure.file_path)
+                    .to_string();
+                upsert_failure
+                    .execute(rusqlite::params![
+                        failure.file_path,
+                        package_id,
+                        failure.size_bytes as i64,
+                        failure.modified_time,
+                        chrono::Utc::now().to_rfc3339(),
+                        failure.error,
+                    ])
                     .map_err(|e| {
                         crate::errors::AppError::Database(format!(
-                            "Failed to insert dependency: {}",
+                            "Failed to record failed package scan: {}",
                             e
                         ))
                     })?;
-                }
             }
-        }
-
-        for failure in &scan_result.failures {
-            let package_id = Path::new(&failure.file_path)
-                .file_stem()
-                .and_then(|name| name.to_str())
-                .unwrap_or(&failure.file_path)
-                .to_string();
-            tx.execute(
-                "INSERT OR REPLACE INTO physical_packages (
-                    file_path, package_id, size_bytes, modified_time, scan_time, scan_status, last_error
-                 ) VALUES (?1, ?2, ?3, ?4, ?5, 'failed', ?6)",
-                rusqlite::params![
-                    failure.file_path,
-                    package_id,
-                    failure.size_bytes as i64,
-                    failure.modified_time,
-                    chrono::Utc::now().to_rfc3339(),
-                    failure.error,
-                ],
-            )
-            .map_err(|e| {
-                crate::errors::AppError::Database(format!(
-                    "Failed to record failed package scan: {}",
-                    e
-                ))
-            })?;
         }
 
         tx.execute(
@@ -361,18 +379,6 @@ fn remove_missing_physical_packages(
     tx.execute(&sql, params)
         .map_err(|e| crate::errors::AppError::Database(e.to_string()))?;
     Ok(())
-}
-
-fn file_modified_time(path: &Path) -> String {
-    std::fs::metadata(path)
-        .and_then(|metadata| metadata.modified())
-        .map(system_time_to_rfc3339)
-        .unwrap_or_default()
-}
-
-fn system_time_to_rfc3339(time: SystemTime) -> String {
-    let datetime: chrono::DateTime<chrono::Utc> = time.into();
-    datetime.to_rfc3339()
 }
 
 /// Validate whether a path looks like a valid VAM installation.

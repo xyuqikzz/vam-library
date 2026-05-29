@@ -12,6 +12,7 @@ use std::sync::{Mutex, OnceLock};
 use tauri::Manager;
 
 const VAM_HUB_CONSENT_COOKIE: &str = "vamhubconsent=yes";
+const HUB_DETAIL_TIMEOUT_SECS: u64 = 45;
 
 #[derive(Clone)]
 pub struct CacheEntry {
@@ -663,6 +664,7 @@ pub async fn fetch_hub_package_info(package_name: String) -> Result<HubApiRespon
     fetch_hub_package_info_inner(package_name, true).await
 }
 
+#[tauri::command]
 pub async fn fetch_hub_package_info_basic(package_name: String) -> Result<HubApiResponse, String> {
     fetch_hub_package_info_inner(package_name, false).await
 }
@@ -700,8 +702,8 @@ async fn fetch_hub_package_info_inner(
         } else {
             // Fetch from network
             let client = reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(12))
-                .connect_timeout(std::time::Duration::from_secs(6))
+                .timeout(std::time::Duration::from_secs(HUB_DETAIL_TIMEOUT_SECS))
+                .connect_timeout(std::time::Duration::from_secs(8))
                 .build()
                 .map_err(|e| format!("Failed to build HTTP client: {}", e))?;
 

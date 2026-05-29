@@ -77,6 +77,12 @@ const router = createRouter({
           meta: { title: 'Smart Unpack' },
         },
         {
+          path: 'vam-prefs',
+          name: 'vam-prefs',
+          component: () => import('@/views/VamPrefsView.vue'),
+          meta: { title: 'VAM Preferences' },
+        },
+        {
           path: 'trash',
           name: 'trash',
           component: () => import('@/views/TrashView.vue'),

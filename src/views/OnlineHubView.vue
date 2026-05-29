@@ -923,7 +923,12 @@ function changePage(page: number) {
 async function openPackageDetail(item: any) {
   detailPanelOpen.value = true
   // Merge item into detailPackage so that basic info is visible immediately!
-  detailPackage.value = { ...item, description: '', hubFiles: [], dependencies: {} }
+  detailPackage.value = {
+    ...item,
+    description: '',
+    hubFiles: item.hubFiles || [],
+    dependencies: item.dependencies || {}
+  }
   detailLoading.value = false // Instant panel open, no giant loading blocker
   descLoading.value = true
   dependenciesLoading.value = true
