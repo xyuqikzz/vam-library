@@ -1164,18 +1164,19 @@ function resourceTypeLabel(type: string): string {
 <style scoped>
 .resource-display {
   display: flex; flex-direction: column; gap: var(--space-5);
-  height: 100%; position: relative; overflow: hidden;
+  height: 100%; min-width: 0; min-height: 0; position: relative; overflow: hidden;
 }
 
 /* ── View Controls ────────────────────────────────────────── */
 .view-controls {
   position: relative;
   z-index: calc(var(--z-dropdown) + 1);
-  display: flex; align-items: center; justify-content: space-between;
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-3);
   padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); flex-shrink: 0;
   overflow: visible;
 }
-.controls-left, .controls-right { display: flex; align-items: center; gap: var(--space-3); }
+.controls-left, .controls-right { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
+.controls-right { justify-content: flex-end; flex-wrap: wrap; }
 .view-toggle { display: flex; background: var(--bg-base); border-radius: var(--radius-sm); padding: 2px; gap: 2px; }
 .toggle-btn {
   display: flex; align-items: center; justify-content: center;
@@ -1193,7 +1194,7 @@ function resourceTypeLabel(type: string): string {
   z-index: var(--z-base);
   flex: 1; display: flex; flex-direction: column; min-height: 0; gap: var(--space-3);
 }
-.resource-content-scrollable { flex: 1; overflow-y: auto; min-height: 0; }
+.resource-content-scrollable { flex: 1; overflow-y: auto; overflow-x: hidden; min-height: 0; min-width: 0; }
 
 /* ── Large Card Grid ──────────────────────────────────────── */
 .large-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--space-4); }
@@ -1215,7 +1216,7 @@ function resourceTypeLabel(type: string): string {
 .large-card-type-badge {
   position: absolute; top: var(--space-2); right: var(--space-2);
   font-size: 10px; font-weight: var(--font-semibold); text-transform: uppercase; letter-spacing: 0.06em;
-  padding: 2px 8px; border-radius: var(--radius-full); background: var(--glass-bg); backdrop-filter: blur(8px);
+  padding: 2px 8px; border-radius: var(--radius-full); background: var(--glass-bg); /* backdrop-filter removed */
 }
 .large-card-type-badge.type-scene { color: var(--color-scene); }
 .large-card-type-badge.type-appearance { color: var(--color-appearance); }
@@ -1323,7 +1324,7 @@ function resourceTypeLabel(type: string): string {
 .detail-panel {
   position: absolute; top: 0; right: 0; width: min(520px, 88vw); height: 100%; z-index: calc(var(--z-overlay) + 10);
   border-radius: 0; border-left: 1px solid var(--border-subtle);
-  background: rgba(22, 22, 42, 0.92); backdrop-filter: blur(32px);
+  background: rgba(28, 28, 30, 0.92); /* backdrop-filter removed */
   display: flex; flex-direction: column;
   box-shadow: -24px 0 60px rgba(0, 0, 0, 0.35);
 }
@@ -1555,13 +1556,13 @@ function resourceTypeLabel(type: string): string {
   border-radius: var(--radius-sm);
   border: none;
   cursor: pointer;
-  box-shadow: 0 4px 12px rgba(124, 92, 252, 0.25);
+  box-shadow: 0 4px 12px rgba(110, 107, 240, 0.25);
   transition: all var(--transition-fast) var(--ease);
 }
 
 .share-btn-primary:hover {
   transform: translateY(-1px);
-  box-shadow: 0 6px 16px rgba(124, 92, 252, 0.35);
+  box-shadow: 0 6px 16px rgba(110, 107, 240, 0.35);
 }
 
 .share-btn-primary:active {
@@ -1615,7 +1616,7 @@ function resourceTypeLabel(type: string): string {
   justify-content: center;
   padding: var(--space-6);
   background: rgba(0, 0, 0, 0.72);
-  backdrop-filter: blur(10px);
+  /* backdrop-filter removed */
 }
 
 .image-preview-dialog {
@@ -1672,7 +1673,7 @@ function resourceTypeLabel(type: string): string {
   justify-content: center;
   padding: var(--space-5);
   background: rgba(0, 0, 0, 0.68);
-  backdrop-filter: blur(10px);
+  /* backdrop-filter removed */
 }
 
 .delete-confirm-dialog {
@@ -1808,15 +1809,15 @@ function resourceTypeLabel(type: string): string {
 }
 
 .action-bar-btn.share {
-  background: rgba(124, 92, 252, 0.1);
+  background: rgba(110, 107, 240, 0.1);
   color: var(--accent-primary);
-  border-color: rgba(124, 92, 252, 0.22);
+  border-color: rgba(110, 107, 240, 0.22);
 }
 
 .action-bar-btn.share:hover {
-  background: rgba(124, 92, 252, 0.18);
+  background: rgba(110, 107, 240, 0.18);
   color: #a78bfa;
-  border-color: rgba(124, 92, 252, 0.4);
+  border-color: rgba(110, 107, 240, 0.4);
 }
 
 .action-bar-btn.delete {

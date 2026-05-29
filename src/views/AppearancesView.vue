@@ -137,7 +137,7 @@ function goToSettings() {
 }
 
 .scan-btn-inline:hover:not(:disabled) {
-  background: rgba(124, 92, 252, 0.1);
+  background: rgba(110, 107, 240, 0.1);
 }
 
 .scan-btn-inline:disabled { opacity: 0.5; cursor: not-allowed; }

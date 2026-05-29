@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/png" href="/logo-square.png" />
@@ -7,8 +7,15 @@
     <title>VAM Library</title>
   </head>
 
-  <body>
-    <div id="app"></div>
+  <body style="margin:0;background:#161618;">
+    <div id="app">
+      <div style="display:flex;align-items:center;justify-content:center;width:100vw;height:100vh;padding:24px;box-sizing:border-box;background:#161618;color:#f5f5f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+        <div style="width:min(420px,100%);padding:20px;border:1px solid rgba(255,255,255,.08);border-radius:12px;background:#1c1c1e;box-shadow:0 8px 24px rgba(0,0,0,.35);">
+          <strong style="display:block;margin-bottom:8px;font-size:16px;">VAM Library 正在启动</strong>
+          <p style="margin:0;color:#a1a1a6;font-size:13px;line-height:1.6;">如果此提示长时间没有消失，请检查 Microsoft Edge WebView2 Runtime 是否已安装或已损坏。</p>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

@@ -13,10 +13,10 @@
     "windows": [
       {
         "title": "VAM Library",
-        "width": 1600,
-        "height": 880,
-        "minWidth": 1600,
-        "minHeight": 880,
+        "width": 1280,
+        "height": 800,
+        "minWidth": 1024,
+        "minHeight": 700,
         "decorations": true,
         "transparent": false,
         "center": true
@@ -29,6 +29,12 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "windows": {
+      "webviewInstallMode": {
+        "type": "embedBootstrapper",
+        "silent": true
+      }
+    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

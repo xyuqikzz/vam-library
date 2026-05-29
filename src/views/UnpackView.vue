@@ -1,15 +1,15 @@
 <template>
   <div class="unpack-view">
-    <!-- Header -->
+    <!-- 页头 -->
     <div class="view-header">
       <h1 class="view-title">{{ $t('unpack.title') }}</h1>
       <p class="view-subtitle">{{ $t('unpack.subtitle') }}</p>
     </div>
 
-    <!-- main content container -->
+    <!-- 主内容容器 -->
     <div class="glass-panel main-container">
       
-      <!-- Stage 1: Drop Zone / File Picker (Idle State) -->
+      <!-- 阶段 1：拖拽或选择文件 -->
       <div 
         v-if="stage === 'idle'"
         :class="['drop-zone', { 'is-dragover': isDragOver }]"
@@ -33,7 +33,7 @@
         <p class="drop-hint">{{ $t('unpack.dropZoneHint') }}</p>
       </div>
 
-      <!-- Stage 2: Deep Analyzing -->
+      <!-- 阶段 2：解析压缩包 -->
       <div v-else-if="stage === 'analyzing'" class="analyzing-zone">
         <div class="spinner-wrapper">
           <div class="spinner"></div>
@@ -42,7 +42,7 @@
         <p class="status-filename truncate">{{ selectedFilePath }}</p>
       </div>
 
-      <!-- Stage 3: Archive Analysis & Action Recommendation -->
+      <!-- 阶段 3：确认解压方案 -->
       <div v-else-if="stage === 'reviewed' && analysis" class="review-zone">
         <div class="review-header-info">
           <div class="archive-main-info">
@@ -57,26 +57,13 @@
         </div>
 
         <div class="review-grid">
-          <!-- Left Panel: Detected Components -->
           <div class="detected-panel">
-            <h4 class="section-title">检测到的资源结构</h4>
+            <h4 class="section-title">检测到的压缩包结构</h4>
             
             <div class="stat-list">
               <div class="stat-item">
                 <span class="stat-label">{{ $t('unpack.fileCount') }}</span>
                 <span class="stat-value">{{ analysis.fileCount }} 个文件</span>
-              </div>
-
-              <div class="stat-item">
-                <span class="stat-label">{{ $t('unpack.containsMeta') }}</span>
-                <span :class="['stat-indicator', { 'has': analysis.containsMetaJson }]">
-                  {{ analysis.containsMetaJson ? '✅ 包含' : '❌ 无' }}
-                </span>
-              </div>
-
-              <div class="stat-item" v-if="analysis.containsVarFiles">
-                <span class="stat-label">{{ $t('unpack.containsVars') }}</span>
-                <span class="stat-indicator has">✅ {{ analysis.varFiles.length }} 个包</span>
               </div>
 
               <div class="stat-item">
@@ -86,20 +73,21 @@
                 </span>
               </div>
 
-              <div class="stat-item" v-if="analysis.suspectedVarId">
-                <span class="stat-label">{{ $t('unpack.suspectedId') }}</span>
-                <span class="stat-value code-font truncate" :title="analysis.suspectedVarId">{{ analysis.suspectedVarId }}</span>
+              <div class="stat-item">
+                <span class="stat-label">{{ $t('unpack.containsNested') }}</span>
+                <span :class="['stat-indicator', { 'has': analysis.nestedArchives?.length }]">
+                  {{ analysis.nestedArchives?.length ? `✅ ${analysis.nestedArchives.length} 个线索` : '❌ 无' }}
+                </span>
               </div>
 
-              <div class="stat-item" v-if="analysis.basePathInArchive">
-                <span class="stat-label">{{ $t('unpack.detectedWrapper') }}</span>
-                <span class="stat-value code-font truncate" :title="analysis.basePathInArchive">
-                  {{ analysis.basePathInArchive }}
+              <div class="stat-item" v-if="analysis.disguisedArchiveFiles?.length">
+                <span class="stat-label">{{ $t('unpack.disguisedArchives') }}</span>
+                <span class="stat-value code-font truncate" :title="analysis.disguisedArchiveFiles.join(', ')">
+                  {{ analysis.disguisedArchiveFiles.length }} 个
                 </span>
               </div>
             </div>
 
-            <!-- Sample entries -->
             <div class="sample-panel">
               <h5 class="sample-title">文件结构预览：</h5>
               <div class="sample-list scrollbar-subtle">
@@ -113,7 +101,6 @@
             </div>
           </div>
 
-          <!-- Right Panel: Recommendation & Action -->
           <div class="action-panel">
             <div class="recommendation-card">
               <div class="rec-icon">
@@ -142,7 +129,7 @@
         </div>
       </div>
 
-      <!-- Stage 4: Processing Unpack -->
+      <!-- 阶段 4：执行解压 -->
       <div v-else-if="stage === 'processing'" class="processing-zone">
         <div class="processing-graphics">
           <div class="pulse-ring"></div>
@@ -169,7 +156,7 @@
         </div>
       </div>
 
-      <!-- Stage 5: Success Results -->
+      <!-- 阶段 5：完成结果 -->
       <div v-else-if="stage === 'success' && unpackResult" class="success-zone">
         <div class="success-header">
           <div class="success-badge-anim">
@@ -211,7 +198,7 @@
 
         <div class="success-actions">
           <button class="btn btn-secondary" @click="resetUnpack">{{ $t('unpack.startNew') }}</button>
-          <button class="btn btn-primary" @click="goToPackages">{{ $t('sidebar.packages') }}</button>
+          <button class="btn btn-primary" @click="openDestFolder">{{ $t('unpack.openFolder') }}</button>
         </div>
       </div>
 
@@ -221,21 +208,16 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { useNotification } from '@/composables/useNotification'
-import { useAppStore } from '@/stores/app'
 
 const { t } = useI18n()
-const router = useRouter()
 const notify = useNotification()
-const appStore = useAppStore()
 
-// State Machine
-// Stage options: 'idle' | 'analyzing' | 'reviewed' | 'processing' | 'success' | 'error'
+// 页面状态机
 const stage = ref<'idle' | 'analyzing' | 'reviewed' | 'processing' | 'success' | 'error'>('idle')
 const isDragOver = ref(false)
 
@@ -258,7 +240,7 @@ let unlistenWindowDrop: (() => void) | null = null
 let lastHandledDropKey = ''
 let lastHandledDropAt = 0
 
-// Resolve the destination path to be the same directory as the ZIP file
+// 目标目录默认与压缩包同级
 const destinationDir = computed(() => {
   if (!analysis.value) return ''
   const path = analysis.value.filePath
@@ -268,7 +250,6 @@ const destinationDir = computed(() => {
 })
 
 onMounted(async () => {
-  await appStore.refreshInstallContext()
   unlistenUnpackProgress = await listen<UnpackProgress>('unpack-progress', (event) => {
     unpackProgress.value = event.payload
   })
@@ -306,7 +287,7 @@ onUnmounted(() => {
   }
 })
 
-// File Drag & Drop Event Handlers
+// 文件拖拽处理
 function onDragOver() {
   isDragOver.value = true
 }
@@ -323,7 +304,7 @@ async function onDrop(e: DragEvent) {
   }
 }
 
-// Click Drop Zone File Picker Handler
+// 点击选择文件
 async function selectFile() {
   try {
     const { open } = await import('@tauri-apps/plugin-dialog')
@@ -381,7 +362,7 @@ async function handleIncomingFile(filePath: string) {
   await processFile(filePath)
 }
 
-// File Analysis Handler
+// 文件解析
 async function processFile(filePath: string) {
   selectedFilePath.value = filePath
   selectedFileName.value = filePath.split(/[\\/]/).pop() || 'unknown.zip'
@@ -392,11 +373,11 @@ async function processFile(filePath: string) {
     stage.value = 'reviewed'
   } catch (err) {
     stage.value = 'idle'
-    notify.error(`压缩包分析失败: ${err}`)
+    notify.error(`压缩包解析失败: ${err}`)
   }
 }
 
-// Unpacking execution trigger
+// 执行解压
 async function startUnpack() {
   if (!analysis.value) return
   stage.value = 'processing'
@@ -410,18 +391,14 @@ async function startUnpack() {
     
     stage.value = 'success'
     showFileList.value = false
-    notify.success('资源解压提取成功！')
-    
-    // Automatically trigger packages refresh or watcher handles it
-    appStore.refreshInstallContext()
+    notify.success('解压完成！')
 
-    // Automatically locate and select the extracted folder/file in explorer!
     setTimeout(() => {
       openDestFolder()
     }, 500)
   } catch (err) {
     stage.value = 'reviewed'
-    notify.error(`资源整理失败: ${err}`)
+    notify.error(`解压失败: ${err}`)
   }
 }
 
@@ -442,21 +419,17 @@ function toggleFileList() {
   showFileList.value = !showFileList.value
 }
 
-// Open output folder directly in system explorer
+// 在系统资源管理器中打开输出位置
 async function openDestFolder() {
   if (!unpackResult.value) return
   try {
     await invoke('open_package_in_explorer', { filePath: unpackResult.value.destinationPath })
   } catch (err) {
-    notify.error(`打不开目录: ${err}`)
+    notify.error(`无法打开目录: ${err}`)
   }
 }
 
-function goToPackages() {
-  router.push('/packages')
-}
-
-// Helper to format bytes
+// 格式化文件大小
 function formatBytes(bytes: number, decimals = 2) {
   if (!+bytes) return '0 Bytes'
   const k = 1024
@@ -507,7 +480,7 @@ function formatBytes(bytes: number, decimals = 2) {
   transition: all 300ms var(--ease);
 }
 
-/* ── Stage 1: Drop Zone ── */
+/* ── 阶段 1：拖拽区 ── */
 .drop-zone {
   flex: 1;
   display: flex;
@@ -524,8 +497,8 @@ function formatBytes(bytes: number, decimals = 2) {
 
 .drop-zone:hover, .drop-zone.is-dragover {
   border-color: var(--accent-primary);
-  background: rgba(124, 92, 252, 0.05);
-  box-shadow: 0 0 30px rgba(124, 92, 252, 0.08);
+  background: rgba(110, 107, 240, 0.05);
+  box-shadow: 0 0 30px rgba(110, 107, 240, 0.08);
 }
 
 .drop-icon-wrapper {
@@ -546,7 +519,7 @@ function formatBytes(bytes: number, decimals = 2) {
   color: var(--text-primary);
   background: var(--accent-gradient);
   border-color: transparent;
-  box-shadow: 0 8px 24px rgba(124, 92, 252, 0.3);
+  box-shadow: 0 8px 24px rgba(110, 107, 240, 0.3);
   transform: translateY(-4px) scale(1.05);
 }
 
@@ -577,7 +550,7 @@ function formatBytes(bytes: number, decimals = 2) {
   text-align: center;
 }
 
-/* ── Stage 2 & 4: Statuses ── */
+/* ── 阶段 2 和 4：状态展示 ── */
 .analyzing-zone, .processing-zone {
   flex: 1;
   display: flex;
@@ -599,7 +572,7 @@ function formatBytes(bytes: number, decimals = 2) {
 .spinner {
   width: 44px;
   height: 44px;
-  border: 3.5px solid rgba(124, 92, 252, 0.1);
+  border: 3.5px solid rgba(110, 107, 240, 0.1);
   border-top-color: var(--accent-primary);
   border-radius: 50%;
   animation: spin-anim 1s linear infinite;
@@ -660,7 +633,7 @@ function formatBytes(bytes: number, decimals = 2) {
   background: var(--accent-gradient);
   border-radius: var(--radius-full);
   transition: width 0.15s ease-out;
-  box-shadow: 0 0 10px rgba(124, 92, 252, 0.3);
+  box-shadow: 0 0 10px rgba(110, 107, 240, 0.3);
 }
 
 .progress-file {
@@ -680,7 +653,7 @@ function formatBytes(bytes: number, decimals = 2) {
   justify-content: center;
   border-radius: 50%;
   color: var(--accent-primary);
-  background: rgba(124, 92, 252, 0.1);
+  background: rgba(110, 107, 240, 0.1);
   margin-bottom: var(--space-5);
 }
 
@@ -707,7 +680,7 @@ function formatBytes(bytes: number, decimals = 2) {
   50% { transform: translateY(4px); }
 }
 
-/* ── Stage 3: Review Zone ── */
+/* ── 阶段 3：确认区 ── */
 .review-zone {
   display: flex;
   flex-direction: column;
@@ -755,28 +728,16 @@ function formatBytes(bytes: number, decimals = 2) {
   border: 1px solid transparent;
 }
 
-.type-badge.misnamed_var {
+.type-badge.recursive_archive {
   background: rgba(167, 139, 250, 0.08);
   border-color: rgba(167, 139, 250, 0.2);
   color: #a78bfa;
 }
 
-.type-badge.var_container {
+.type-badge.plain_archive {
   background: rgba(96, 165, 250, 0.08);
   border-color: rgba(96, 165, 250, 0.2);
   color: #60a5fa;
-}
-
-.type-badge.vam_content {
-  background: rgba(244, 114, 182, 0.08);
-  border-color: rgba(244, 114, 182, 0.2);
-  color: #f472b6;
-}
-
-.type-badge.flat_content {
-  background: rgba(52, 211, 153, 0.08);
-  border-color: rgba(52, 211, 153, 0.2);
-  color: #34d399;
 }
 
 .review-grid {
@@ -883,7 +844,7 @@ function formatBytes(bytes: number, decimals = 2) {
   font-style: italic;
 }
 
-/* Right Action Panel */
+/* 右侧操作面板 */
 .action-panel {
   display: flex;
   flex-direction: column;
@@ -895,8 +856,8 @@ function formatBytes(bytes: number, decimals = 2) {
   display: flex;
   gap: var(--space-3);
   padding: var(--space-4);
-  background: rgba(124, 92, 252, 0.08);
-  border: 1px solid rgba(124, 92, 252, 0.15);
+  background: rgba(110, 107, 240, 0.08);
+  border: 1px solid rgba(110, 107, 240, 0.15);
   border-radius: var(--radius-md);
   color: var(--text-primary);
 }
@@ -969,11 +930,11 @@ function formatBytes(bytes: number, decimals = 2) {
   background: var(--accent-gradient);
   color: white;
   border: none;
-  box-shadow: 0 4px 12px rgba(124, 92, 252, 0.2);
+  box-shadow: 0 4px 12px rgba(110, 107, 240, 0.2);
 }
 
 .btn-primary:hover {
-  box-shadow: 0 6px 16px rgba(124, 92, 252, 0.35);
+  box-shadow: 0 6px 16px rgba(110, 107, 240, 0.35);
   transform: translateY(-1px);
 }
 
@@ -989,7 +950,7 @@ function formatBytes(bytes: number, decimals = 2) {
   border-color: var(--border-default);
 }
 
-/* ── Stage 5: Success ── */
+/* ── 阶段 5：成功结果 ── */
 .success-zone {
   display: flex;
   flex-direction: column;
@@ -1116,7 +1077,7 @@ function formatBytes(bytes: number, decimals = 2) {
   flex: 1;
 }
 
-/* Scrollbar Styles */
+/* 滚动条样式 */
 .scrollbar-subtle::-webkit-scrollbar {
   width: 6px;
 }

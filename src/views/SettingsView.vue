@@ -304,7 +304,9 @@
         </div>
         <div class="about-row">
           <span class="about-label">{{ $t('settings.repository') }}</span>
-          <a class="about-link" href="#">github.com/vam-library</a>
+          <button class="about-link" type="button" @click="openRepository">
+            github.com/xyuqikzz/vam-library
+          </button>
         </div>
       </div>
     </GlassPanel>
@@ -362,6 +364,7 @@ const notify = useNotification()
 const isClearingThumbnails = ref(false)
 const isClearingLocalData = ref(false)
 const confirmClearLocalData = ref(false)
+const repositoryUrl = 'https://github.com/xyuqikzz/vam-library'
 
 async function handleClearThumbnails() {
   if (isClearingThumbnails.value) return
@@ -488,6 +491,14 @@ async function clearHubCookie() {
   await appStore.saveHubCookie(null)
 }
 
+async function openRepository() {
+  try {
+    const { openUrl } = await import('@tauri-apps/plugin-opener')
+    await openUrl(repositoryUrl)
+  } catch (e) {
+    notify.error(String(e))
+  }
+}
 
 function setLocale(localeKey: string) {
   appStore.setLocale(localeKey)
@@ -706,6 +717,8 @@ async function handleExportPackages() {
 .about-link {
   font-size: var(--text-sm);
   color: var(--accent-secondary);
+  font-weight: var(--font-medium);
+  cursor: pointer;
 }
 
 .about-link:hover {
@@ -809,7 +822,7 @@ async function handleExportPackages() {
 
 .instance-row.active {
   border-color: var(--accent-primary);
-  background: rgba(124, 92, 252, 0.12);
+  background: rgba(110, 107, 240, 0.12);
 }
 
 .instance-name {
@@ -947,9 +960,9 @@ async function handleExportPackages() {
   align-items: center;
   justify-content: center;
   padding: var(--space-6);
-  background: rgba(6, 8, 16, 0.56);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  background: rgba(22, 22, 24, 0.56);
+  /* backdrop-filter removed */
+
 }
 
 .confirm-dialog {

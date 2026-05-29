@@ -15,7 +15,7 @@
         subtitle="按 creator + package 去重"
         icon="M4 7h16M4 12h10M4 17h7"
         trend="neutral"
-        color="#7c5cfc"
+        color="#6e6bf0"
       />
       <StatCard
         title="受影响资源包"
@@ -1007,8 +1007,8 @@ function chunkArray<T>(list: T[], size: number) {
   position: fixed;
   inset: 0;
   z-index: calc(var(--z-overlay) + 5);
-  background: rgba(13, 13, 20, 0.6);
-  backdrop-filter: blur(8px);
+  background: rgba(22, 22, 24, 0.6);
+  /* backdrop-filter removed */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1081,9 +1081,9 @@ function chunkArray<T>(list: T[], size: number) {
 }
 
 .mode-btn.active {
-  background: rgba(124, 92, 252, 0.16);
+  background: rgba(110, 107, 240, 0.16);
   color: var(--accent-primary);
-  border-color: rgba(124, 92, 252, 0.3);
+  border-color: rgba(110, 107, 240, 0.3);
 }
 
 .mode-hint {

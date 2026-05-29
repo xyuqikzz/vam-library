@@ -42,12 +42,10 @@ withDefaults(defineProps<Props>(), {
 
 <style scoped>
 .stat-card {
-  background: var(--glass-bg);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
+  background: var(--bg-surface);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-lg);
-  box-shadow: var(--glass-shadow);
+  box-shadow: var(--shadow-sm);
   padding: var(--space-5);
   transition:
     transform var(--duration-base) var(--ease),
@@ -56,8 +54,8 @@ withDefaults(defineProps<Props>(), {
 }
 
 .stat-card:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--glass-shadow-lg);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
   border-color: var(--border-strong);
 }
 

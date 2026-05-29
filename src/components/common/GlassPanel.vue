@@ -60,12 +60,10 @@ function toggleCollapse() {
 
 <style scoped>
 .glass-panel-component {
-  background: rgba(26, 26, 46, 0.45);
-  backdrop-filter: var(--glass-blur-light);
-  -webkit-backdrop-filter: var(--glass-blur-light);
+  background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--shadow-sm);
   overflow: hidden;
 }
 

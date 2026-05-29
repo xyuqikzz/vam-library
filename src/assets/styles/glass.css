@@ -1,34 +1,29 @@
 /* ============================================================
-   VAM Library Design System — Glass Effects
+   VAM Library Design System — Surface Effects v3
+   风格：实色面板 + 微妙边框 · 无 backdrop-filter
    ============================================================ */
 
-/* ── Base Glass ──────────────────────────────────────────────── */
+/* ── Base Glass → Solid Surface ─────────────────────────────── */
 .glass {
   background: var(--glass-bg);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
   border: var(--glass-border);
   box-shadow: var(--glass-shadow);
 }
 
-/* ── Glass Panel ─────────────────────────────────────────────── */
+/* ── Glass Panel → Surface Panel ────────────────────────────── */
 .glass-panel {
   background: var(--glass-panel-bg);
-  backdrop-filter: var(--glass-blur-light);
-  -webkit-backdrop-filter: var(--glass-blur-light);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--shadow-sm);
 }
 
-/* ── Glass Card ──────────────────────────────────────────────── */
+/* ── Glass Card → Surface Card ──────────────────────────────── */
 .glass-card {
   background: var(--glass-bg);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-lg);
-  box-shadow: var(--glass-shadow);
+  box-shadow: var(--shadow-sm);
   transition:
     transform var(--duration-base) var(--ease),
     box-shadow var(--duration-base) var(--ease),
@@ -36,9 +31,14 @@
 }
 
 .glass-card.hoverable:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--glass-shadow-lg);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
   border-color: var(--border-strong);
+}
+
+.glass-card.hoverable:active {
+  transform: translateY(0) scale(0.99);
+  box-shadow: var(--shadow-sm);
 }
 
 .glass-card.clickable {
@@ -46,24 +46,55 @@
 }
 
 .glass-card.clickable:active {
-  transform: translateY(0);
-  box-shadow: var(--glass-shadow);
+  transform: scale(0.98);
+  box-shadow: var(--shadow-sm);
 }
 
-/* ── Glass Sidebar ───────────────────────────────────────────── */
+/* ── Glass Sidebar → Solid Sidebar ──────────────────────────── */
 .glass-sidebar {
   background: var(--glass-sidebar-bg);
-  backdrop-filter: blur(32px) saturate(1.2);
-  -webkit-backdrop-filter: blur(32px) saturate(1.2);
   border-right: 1px solid var(--border-subtle);
-  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.2);
 }
 
-/* ── Glass Toolbar ───────────────────────────────────────────── */
+/* ── Glass Toolbar → Solid Toolbar ──────────────────────────── */
 .glass-toolbar {
   background: var(--glass-toolbar-bg);
-  backdrop-filter: blur(20px) saturate(1.1);
-  -webkit-backdrop-filter: blur(20px) saturate(1.1);
   border-bottom: 1px solid var(--border-subtle);
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* ── Glass Elevated ─────────────────────────────────────────── */
+.glass-elevated {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+}
+
+/* ── Inner Glow（保留，但更微妙）─────────────────────────── */
+.glass-inner-glow {
+  position: relative;
+}
+
+.glass-inner-glow::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.03) 0%,
+    transparent 50%
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* ── Accent Glow ────────────────────────────────────────────── */
+.glass-accent-glow {
+  border-color: var(--border-accent);
+  box-shadow: var(--shadow-md);
+}
+
+.glass-accent-glow:hover {
+  box-shadow: var(--shadow-lg);
 }

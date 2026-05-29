@@ -1687,7 +1687,7 @@ function translateType(type: string): string {
 
 .hub-search-input:focus {
   border-color: var(--accent-primary);
-  box-shadow: 0 0 0 2px rgba(124, 92, 252, 0.15);
+  box-shadow: 0 0 0 2px rgba(110, 107, 240, 0.15);
   outline: none;
 }
 
@@ -1766,9 +1766,9 @@ function translateType(type: string): string {
   align-items: center;
   justify-content: center;
   padding: var(--space-6);
-  background: rgba(13, 16, 28, 0.28);
-  backdrop-filter: blur(3px);
-  -webkit-backdrop-filter: blur(3px);
+  background: rgba(22, 22, 24, 0.28);
+  /* backdrop-filter removed */
+
 }
 
 .hub-inline-loading-card {
@@ -1886,7 +1886,7 @@ function translateType(type: string): string {
   left: var(--space-2);
   padding: 2px 8px;
   border-radius: var(--radius-sm);
-  backdrop-filter: blur(8px);
+  /* backdrop-filter removed */
   font-size: 10px;
   font-weight: var(--font-bold);
   letter-spacing: 0.3px;
@@ -1949,7 +1949,7 @@ function translateType(type: string): string {
 }
 
 .card-type-badge.type-default {
-  background: rgba(13, 13, 20, 0.7);
+  background: rgba(22, 22, 24, 0.7);
   border: 1px solid rgba(255, 255, 255, 0.08);
   color: var(--text-primary);
 }
@@ -1961,7 +1961,7 @@ function translateType(type: string): string {
   right: var(--space-2);
   padding: 2px 8px;
   border-radius: var(--radius-sm);
-  backdrop-filter: blur(8px);
+  /* backdrop-filter removed */
   font-size: 10px;
   font-weight: var(--font-bold);
   letter-spacing: 0.3px;
@@ -2099,7 +2099,7 @@ function translateType(type: string): string {
   right: 0;
   bottom: 0;
   background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(4px);
+  /* backdrop-filter removed */
   z-index: 100;
 }
 
@@ -2160,9 +2160,9 @@ function translateType(type: string): string {
 .panel-category-tag {
   align-self: flex-start;
   padding: 1px 6px;
-  background: rgba(124, 92, 252, 0.15);
+  background: rgba(110, 107, 240, 0.15);
   color: var(--accent-primary);
-  border: 1px solid rgba(124, 92, 252, 0.25);
+  border: 1px solid rgba(110, 107, 240, 0.25);
   border-radius: var(--radius-sm);
   font-size: 10px;
   font-weight: var(--font-bold);
@@ -2279,7 +2279,7 @@ function translateType(type: string): string {
   font-size: var(--text-xs);
   font-weight: var(--font-bold);
   color: var(--accent-primary);
-  background: rgba(124, 92, 252, 0.12);
+  background: rgba(110, 107, 240, 0.12);
   padding: 2px 8px;
   border-radius: var(--radius-full);
 }
@@ -2439,13 +2439,13 @@ function translateType(type: string): string {
 }
 
 .download-btn-sm.secondary {
-  background: rgba(124, 92, 252, 0.1);
+  background: rgba(110, 107, 240, 0.1);
   color: var(--accent-primary);
-  border: 1px solid rgba(124, 92, 252, 0.3);
+  border: 1px solid rgba(110, 107, 240, 0.3);
 }
 
 .download-btn-sm.secondary:hover {
-  background: rgba(124, 92, 252, 0.2);
+  background: rgba(110, 107, 240, 0.2);
 }
 
 .download-btn-sm.error {
@@ -2579,14 +2579,14 @@ function translateType(type: string): string {
   border-radius: var(--radius-md);
   border: none;
   cursor: pointer;
-  box-shadow: 0 4px 15px rgba(124, 92, 252, 0.25);
+  box-shadow: 0 4px 15px rgba(110, 107, 240, 0.25);
   transition: all var(--transition-normal);
 }
 
 .batch-download-btn:hover:not(:disabled) {
   opacity: 0.95;
   transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(124, 92, 252, 0.35);
+  box-shadow: 0 6px 20px rgba(110, 107, 240, 0.35);
 }
 
 .batch-download-btn:disabled {
@@ -2602,9 +2602,9 @@ function translateType(type: string): string {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(13, 13, 20, 0.65);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: rgba(22, 22, 24, 0.65);
+  /* backdrop-filter removed */
+
   z-index: 200;
   display: flex;
   align-items: center;
@@ -2784,7 +2784,7 @@ function translateType(type: string): string {
 
 .checklist-item-row:hover:not(.text-disabled) {
   background: rgba(255, 255, 255, 0.04);
-  border-color: rgba(124, 92, 252, 0.15);
+  border-color: rgba(110, 107, 240, 0.15);
 }
 
 .checklist-item-row.text-disabled {
@@ -2853,7 +2853,7 @@ function translateType(type: string): string {
   justify-content: space-between;
   padding: var(--space-4) var(--space-5);
   border-top: 1px solid var(--border-subtle);
-  background: rgba(13, 13, 20, 0.25);
+  background: rgba(22, 22, 24, 0.25);
   flex-shrink: 0;
 }
 
@@ -2904,12 +2904,12 @@ function translateType(type: string): string {
   color: white;
   border: none;
   font-weight: var(--font-semibold);
-  box-shadow: 0 2px 8px rgba(124, 92, 252, 0.2);
+  box-shadow: 0 2px 8px rgba(110, 107, 240, 0.2);
 }
 
 .action-btn-confirm:hover:not(:disabled) {
   opacity: 0.95;
-  box-shadow: 0 4px 12px rgba(124, 92, 252, 0.3);
+  box-shadow: 0 4px 12px rgba(110, 107, 240, 0.3);
 }
 
 .action-btn-confirm:disabled {

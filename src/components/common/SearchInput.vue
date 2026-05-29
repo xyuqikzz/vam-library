@@ -16,7 +16,7 @@
       <button
         v-if="modelValue"
         class="clear-button"
-        aria-label="Clear search"
+        :aria-label="clearButtonLabel"
         @click="onClear"
       >
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -28,14 +28,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 interface Props {
   modelValue: string
   placeholder?: string
+  clearAriaLabel?: string
 }
 
-withDefaults(defineProps<Props>(), {
+const props = withDefaults(defineProps<Props>(), {
   placeholder: 'Search...',
 })
 
@@ -43,8 +45,10 @@ const emit = defineEmits<{
   'update:modelValue': [value: string]
 }>()
 
+const { t } = useI18n()
 const inputRef = ref<HTMLInputElement | null>(null)
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
+const clearButtonLabel = computed(() => props.clearAriaLabel || t('common.clear'))
 
 function onInput(event: Event) {
   const value = (event.target as HTMLInputElement).value
@@ -59,6 +63,14 @@ function onClear() {
   if (debounceTimer) clearTimeout(debounceTimer)
   inputRef.value?.focus()
 }
+
+function focus() {
+  inputRef.value?.focus()
+}
+
+defineExpose({
+  focus,
+})
 </script>
 
 <style scoped>
@@ -99,9 +111,9 @@ function onClear() {
 }
 
 .search-input:focus {
-  background: rgba(26, 26, 46, 0.8);
+  background: rgba(28, 28, 30, 0.8);
   border-color: var(--accent-primary);
-  box-shadow: 0 0 0 3px rgba(124, 92, 252, 0.15);
+  box-shadow: 0 0 0 3px rgba(110, 107, 240, 0.15);
 }
 
 .search-input-wrapper:focus-within .search-icon {

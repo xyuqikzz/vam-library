@@ -1132,7 +1132,7 @@ function formatSize(bytes: number): string {
   background: var(--accent-gradient);
   font-size: var(--text-sm);
   font-weight: var(--font-semibold);
-  box-shadow: 0 4px 14px rgba(124, 92, 252, 0.26);
+  box-shadow: 0 4px 14px rgba(110, 107, 240, 0.26);
 }
 
 .launch-hero {
@@ -1154,7 +1154,7 @@ function formatSize(bytes: number): string {
   height: 54px;
   border-radius: var(--radius-md);
   color: var(--accent-primary);
-  background: rgba(124, 92, 252, 0.14);
+  background: rgba(110, 107, 240, 0.14);
 }
 
 .launch-hero h2 {
@@ -1195,7 +1195,7 @@ function formatSize(bytes: number): string {
 
 .overview-action:hover {
   border-color: var(--border-accent);
-  background: rgba(124, 92, 252, 0.12);
+  background: rgba(110, 107, 240, 0.12);
 }
 
 .overview-grid strong {
@@ -1247,7 +1247,7 @@ function formatSize(bytes: number): string {
 
 .selected-preview-card:hover {
   border-color: var(--border-accent);
-  background: rgba(124, 92, 252, 0.1);
+  background: rgba(110, 107, 240, 0.1);
 }
 
 .preview-thumb {
@@ -1339,7 +1339,7 @@ function formatSize(bytes: number): string {
 .plan-card:hover,
 .plan-card.active {
   border-color: var(--border-accent);
-  background: rgba(124, 92, 252, 0.12);
+  background: rgba(110, 107, 240, 0.12);
 }
 
 .plan-name {
@@ -1398,7 +1398,7 @@ function formatSize(bytes: number): string {
   border: 1px solid var(--border-accent);
   border-radius: var(--radius-sm);
   color: var(--accent-primary);
-  background: rgba(124, 92, 252, 0.12);
+  background: rgba(110, 107, 240, 0.12);
   font-size: var(--text-xs);
   font-weight: var(--font-semibold);
 }
@@ -1570,7 +1570,7 @@ function formatSize(bytes: number): string {
 }
 
 .package-row.primary {
-  background: rgba(124, 92, 252, 0.16);
+  background: rgba(110, 107, 240, 0.16);
 }
 
 .package-row.dependency:not(.primary) {
@@ -1594,7 +1594,7 @@ function formatSize(bytes: number): string {
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-xs);
   color: white;
-  background: rgba(124, 92, 252, 0.18);
+  background: rgba(110, 107, 240, 0.18);
 }
 
 .package-text {
@@ -1666,7 +1666,7 @@ function formatSize(bytes: number): string {
 .mini-btn.accent {
   color: var(--text-primary);
   border-color: var(--border-accent);
-  background: rgba(124, 92, 252, 0.16);
+  background: rgba(110, 107, 240, 0.16);
 }
 
 .list-more {
@@ -1755,7 +1755,7 @@ function formatSize(bytes: number): string {
   padding: 0 var(--space-2);
   border-radius: var(--radius-sm);
   color: var(--text-secondary);
-  background: rgba(124, 92, 252, 0.1);
+  background: rgba(110, 107, 240, 0.1);
   font-size: var(--text-xs);
 }
 
@@ -1837,7 +1837,7 @@ function formatSize(bytes: number): string {
   justify-content: center;
   padding: var(--space-5);
   background: rgba(0, 0, 0, 0.54);
-  backdrop-filter: blur(10px);
+  /* backdrop-filter removed */
 }
 
 .picker-modal {
@@ -1908,7 +1908,7 @@ function formatSize(bytes: number): string {
   border: 1px solid var(--border-accent);
   border-radius: var(--radius-md);
   color: var(--accent-primary);
-  background: rgba(124, 92, 252, 0.12);
+  background: rgba(110, 107, 240, 0.12);
   font-size: var(--text-sm);
   font-weight: var(--font-semibold);
 }
@@ -2050,7 +2050,7 @@ function formatSize(bytes: number): string {
 .picker-card.selected,
 .picker-card.focused {
   border-color: var(--border-accent);
-  background: rgba(124, 92, 252, 0.1);
+  background: rgba(110, 107, 240, 0.1);
 }
 
 .picker-card.dependency:not(.selected) {

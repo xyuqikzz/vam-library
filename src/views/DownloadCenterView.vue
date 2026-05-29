@@ -8,7 +8,7 @@
         :subtitle="`Pending: ${downloadStore.pendingDownloads.length}`"
         icon="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"
         trend="neutral"
-        color="#7c5cfc"
+        color="#6e6bf0"
       />
       <StatCard
         :title="$t('download.stats.downloading')"
@@ -356,7 +356,7 @@ function installModeLabel(mode: string | null): string {
 
 .tab-btn.active {
   color: var(--accent-primary);
-  background: rgba(124, 92, 252, 0.12);
+  background: rgba(110, 107, 240, 0.12);
 }
 
 .tab-badge {
@@ -370,7 +370,7 @@ function installModeLabel(mode: string | null): string {
 }
 
 .tab-btn.active .tab-badge {
-  background: rgba(124, 92, 252, 0.2);
+  background: rgba(110, 107, 240, 0.2);
   color: var(--accent-primary);
 }
 
@@ -465,7 +465,7 @@ function installModeLabel(mode: string | null): string {
 }
 
 .task-card-wrapper:hover {
-  border-color: rgba(124, 92, 252, 0.2);
+  border-color: rgba(110, 107, 240, 0.2);
   background: rgba(255, 255, 255, 0.04);
 }
 

@@ -631,8 +631,8 @@ const icons = {
 .dup-action-keep { background: rgba(62, 207, 142, 0.15); color: var(--color-success); }
 .dup-action-keep:hover { background: rgba(62, 207, 142, 0.25); }
 
-.dup-action-clean { background: rgba(124, 92, 252, 0.12); color: var(--accent-primary); }
-.dup-action-clean:hover { background: rgba(124, 92, 252, 0.2); }
+.dup-action-clean { background: rgba(110, 107, 240, 0.12); color: var(--accent-primary); }
+.dup-action-clean:hover { background: rgba(110, 107, 240, 0.2); }
 
 .dup-selected-badge {
   padding: 2px 10px;
@@ -696,7 +696,7 @@ const icons = {
 .dup-rec-badge {
   padding: 2px 8px;
   border-radius: var(--radius-full);
-  background: rgba(124, 92, 252, 0.1);
+  background: rgba(110, 107, 240, 0.1);
   color: var(--accent-primary);
   font-weight: var(--font-semibold);
   white-space: nowrap;
@@ -735,7 +735,7 @@ const icons = {
   max-height: 85vh;
   display: flex;
   flex-direction: column;
-  background: rgba(22, 22, 42, 0.88);
+  background: rgba(28, 28, 30, 0.88);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: var(--radius-lg);
   box-shadow: 0 24px 64px rgba(0, 0, 0, 0.4);
@@ -880,13 +880,13 @@ const icons = {
 .cleanup-confirm-btn {
   background: var(--accent-gradient);
   color: white;
-  box-shadow: 0 4px 12px rgba(124, 92, 252, 0.3);
+  box-shadow: 0 4px 12px rgba(110, 107, 240, 0.3);
   gap: var(--space-2);
 }
 
 .cleanup-confirm-btn:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 6px 16px rgba(124, 92, 252, 0.4);
+  box-shadow: 0 6px 16px rgba(110, 107, 240, 0.4);
 }
 
 .cleanup-confirm-btn:disabled {

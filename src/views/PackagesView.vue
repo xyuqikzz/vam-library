@@ -419,6 +419,7 @@ function comparePackageName(a: PackageDisplayItem, b: PackageDisplayItem): numbe
   grid-template-columns: auto minmax(0, 1fr);
   gap: var(--space-4);
   height: 100%;
+  min-width: 0;
   min-height: 0;
 }
 
@@ -495,7 +496,7 @@ function comparePackageName(a: PackageDisplayItem, b: PackageDisplayItem): numbe
   z-index: 2;
   overflow: hidden;
   background: rgba(30, 30, 55, 0.72);
-  backdrop-filter: blur(24px);
+  /* backdrop-filter removed */
 }
 
 .folder-panel-open:hover {
@@ -545,7 +546,7 @@ function comparePackageName(a: PackageDisplayItem, b: PackageDisplayItem): numbe
 
 .folder-tree-row.active {
   color: var(--accent-primary);
-  background: rgba(124, 92, 252, 0.14);
+  background: rgba(110, 107, 240, 0.14);
 }
 
 .folder-caret {
@@ -585,7 +586,7 @@ function comparePackageName(a: PackageDisplayItem, b: PackageDisplayItem): numbe
   font-variant-numeric: tabular-nums;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1180px) {
   .packages-browser {
     grid-template-columns: 1fr;
   }
@@ -639,7 +640,7 @@ function comparePackageName(a: PackageDisplayItem, b: PackageDisplayItem): numbe
 }
 
 .scan-btn-inline:hover:not(:disabled) {
-  background: rgba(124, 92, 252, 0.1);
+  background: rgba(110, 107, 240, 0.1);
 }
 
 .scan-btn-inline:disabled {
@@ -667,7 +668,7 @@ function comparePackageName(a: PackageDisplayItem, b: PackageDisplayItem): numbe
 
 .filter-btn.active {
   color: var(--text-primary);
-  background: rgba(124, 92, 252, 0.15);
+  background: rgba(110, 107, 240, 0.15);
 }
 
 .filter-dropdown {

@@ -1,65 +1,69 @@
 /* ============================================================
-   VAM Library Design System — Design Tokens
+   VAM Library Design System — Design Tokens v3
+   风格：暖灰深色 · macOS 原生感 · Linear/Raycast 灵感
    ============================================================ */
 
 :root {
-  /* ── Backgrounds ───────────────────────────────────────────── */
-  --bg-base: #0A0A0F;
-  --bg-surface: #18182B;
-  --bg-elevated: #23233C;
-  --bg-hover: #2E2E4E;
-  --bg-active: #39395E;
-  --bg-overlay: rgba(10, 10, 15, 0.8);
-  --bg-input: rgba(255, 255, 255, 0.04);
+  /* ── Backgrounds（暖灰色阶，不是纯黑）───────────────────────── */
+  --bg-base:     #161618;
+  --bg-surface:  #1c1c1e;
+  --bg-elevated: #2c2c2e;
+  --bg-hover:    #2c2c2e;
+  --bg-active:   #3a3a3c;
+  --bg-overlay:  rgba(22, 22, 24, 0.8);
+  --bg-input:    rgba(255, 255, 255, 0.05);
+  --bg-subtle:   rgba(255, 255, 255, 0.04);
 
-  /* ── Text ──────────────────────────────────────────────────── */
-  --text-primary: #F2F2F8;
-  --text-secondary: #B2B2D8;
-  --text-tertiary: #8C8CB2;
-  --text-disabled: #5A5A82;
-  --text-inverse: #0A0A0F;
+  /* ── Text（四级灰度）──────────────────────────────────────── */
+  --text-primary:    #f5f5f7;
+  --text-secondary:  #a1a1a6;
+  --text-tertiary:   #6e6e73;
+  --text-disabled:   #48484a;
+  --text-inverse:    #161618;
 
-  /* ── Accent ────────────────────────────────────────────────── */
-  --accent-primary: #7c5cfc;
-  --accent-primary-hover: #8e72ff;
-  --accent-primary-active: #6a48e6;
-  --accent-secondary: #5b8def;
-  --accent-secondary-hover: #6d9cff;
-  --accent-gradient: linear-gradient(135deg, #7c5cfc 0%, #5b8def 100%);
+  /* ── Accent（低饱和蓝紫）────────────────────────────────── */
+  --accent-primary:       #6e6bf0;
+  --accent-primary-hover: #7d7af5;
+  --accent-primary-active:#5c59d6;
+  --accent-secondary:     #5b8def;
+  --accent-secondary-hover:#6d9df5;
+  --accent-gradient:      linear-gradient(135deg, #6e6bf0 0%, #5b8def 100%);
+  --accent-muted:         rgba(110, 107, 240, 0.15);
+  --accent-subtle:        rgba(110, 107, 240, 0.08);
 
   /* ── Semantic Colors ───────────────────────────────────────── */
-  --color-success: #3ecf8e;
-  --color-success-bg: rgba(62, 207, 142, 0.12);
-  --color-warning: #f5a623;
-  --color-warning-bg: rgba(245, 166, 35, 0.12);
-  --color-error: #ef4444;
-  --color-error-bg: rgba(239, 68, 68, 0.12);
-  --color-info: #5b8def;
-  --color-info-bg: rgba(91, 141, 239, 0.12);
+  --color-success:    #30d158;
+  --color-success-bg: rgba(48, 209, 88, 0.1);
+  --color-warning:    #ffd60a;
+  --color-warning-bg: rgba(255, 214, 10, 0.1);
+  --color-error:      #ff453a;
+  --color-error-bg:   rgba(255, 69, 58, 0.1);
+  --color-info:       #64d2ff;
+  --color-info-bg:    rgba(100, 210, 255, 0.1);
 
-  /* ── Resource Type Colors ──────────────────────────────────── */
-  --color-scene: #f59e0b;
-  --color-scene-bg: rgba(245, 158, 11, 0.12);
-  --color-appearance: #ec4899;
-  --color-appearance-bg: rgba(236, 72, 153, 0.12);
-  --color-morph: #8b5cf6;
-  --color-morph-bg: rgba(139, 92, 246, 0.12);
-  --color-clothing: #06b6d4;
-  --color-clothing-bg: rgba(6, 182, 212, 0.12);
-  --color-plugin: #10b981;
-  --color-plugin-bg: rgba(16, 185, 129, 0.12);
-  --color-texture: #f97316;
-  --color-texture-bg: rgba(249, 115, 22, 0.12);
-  --color-asset: #6366f1;
-  --color-asset-bg: rgba(99, 102, 241, 0.12);
-  --color-hair: #a855f7;
-  --color-hair-bg: rgba(168, 85, 247, 0.12);
+  /* ── Resource Type Colors（保留，已经很好）──────────────────── */
+  --color-scene:       #f59e0b;
+  --color-scene-bg:    rgba(245, 158, 11, 0.1);
+  --color-appearance:  #ec4899;
+  --color-appearance-bg: rgba(236, 72, 153, 0.1);
+  --color-morph:       #8b5cf6;
+  --color-morph-bg:    rgba(139, 92, 246, 0.1);
+  --color-clothing:    #06b6d4;
+  --color-clothing-bg: rgba(6, 182, 212, 0.1);
+  --color-plugin:      #30d158;
+  --color-plugin-bg:   rgba(48, 209, 88, 0.1);
+  --color-texture:     #f97316;
+  --color-texture-bg:  rgba(249, 115, 22, 0.1);
+  --color-asset:       #818cf8;
+  --color-asset-bg:    rgba(129, 140, 248, 0.1);
+  --color-hair:        #c084fc;
+  --color-hair-bg:     rgba(192, 132, 252, 0.1);
 
-  /* ── Borders ───────────────────────────────────────────────── */
-  --border-subtle: rgba(255, 255, 255, 0.08);
-  --border-default: rgba(255, 255, 255, 0.13);
-  --border-strong: rgba(255, 255, 255, 0.2);
-  --border-accent: rgba(124, 92, 252, 0.4);
+  /* ── Borders（简化为两级）─────────────────────────────────── */
+  --border-subtle:  rgba(255, 255, 255, 0.06);
+  --border-default: rgba(255, 255, 255, 0.08);
+  --border-strong:  rgba(255, 255, 255, 0.14);
+  --border-accent:  rgba(110, 107, 240, 0.35);
 
   /* ── Spacing ───────────────────────────────────────────────── */
   --space-1: 4px;
@@ -76,60 +80,71 @@
   /* ── Border Radius ─────────────────────────────────────────── */
   --radius-xs: 4px;
   --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
-  --radius-xl: 20px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
   --radius-full: 9999px;
 
-  /* ── Glass Effects ─────────────────────────────────────────── */
-  --glass-bg: rgba(24, 24, 43, 0.62);
-  --glass-bg-heavy: rgba(24, 24, 43, 0.82);
-  --glass-blur: blur(24px);
-  --glass-blur-light: blur(12px);
-  --glass-border: 1px solid rgba(255, 255, 255, 0.1);
-  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-  --glass-shadow-lg: 0 12px 48px rgba(0, 0, 0, 0.5);
-  --glass-panel-bg: rgba(24, 24, 43, 0.5);
-  --glass-sidebar-bg: rgba(13, 13, 20, 0.88);
-  --glass-toolbar-bg: rgba(13, 13, 20, 0.7);
+  /* ── Shadows（实色，不依赖 blur）──────────────────────────── */
+  --shadow-sm:  0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md:  0 4px 12px rgba(0, 0, 0, 0.25);
+  --shadow-lg:  0 8px 24px rgba(0, 0, 0, 0.35);
+
+  /* ── Glass Effects（保留变量名兼容，但去掉 blur）──────────── */
+  --glass-bg:         #1c1c1e;
+  --glass-bg-heavy:   #232325;
+  --glass-blur:       none;
+  --glass-blur-light: none;
+  --glass-blur-heavy: none;
+  --glass-border:     1px solid rgba(255, 255, 255, 0.08);
+  --glass-shadow:     var(--shadow-md);
+  --glass-shadow-lg:  var(--shadow-lg);
+  --glass-panel-bg:   #1c1c1e;
+  --glass-sidebar-bg: #1c1c1e;
+  --glass-toolbar-bg: #1c1c1e;
 
   /* ── Typography ────────────────────────────────────────────── */
-  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+  --font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', 'Segoe UI', sans-serif;
+  --font-mono: 'SF Mono', 'JetBrains Mono', 'Fira Code', monospace;
 
-  --text-xs: 11px;
-  --text-sm: 12px;
+  --text-xs:   11px;
+  --text-sm:   12px;
   --text-base: 13px;
-  --text-md: 14px;
-  --text-lg: 16px;
-  --text-xl: 18px;
-  --text-2xl: 22px;
-  --text-3xl: 28px;
+  --text-md:   14px;
+  --text-lg:   16px;
+  --text-xl:   20px;
+  --text-2xl:  24px;
+  --text-3xl:  28px;
 
-  --leading-tight: 1.25;
-  --leading-normal: 1.5;
+  --leading-tight:   1.25;
+  --leading-normal:  1.5;
   --leading-relaxed: 1.65;
 
-  --font-normal: 400;
-  --font-medium: 500;
+  --font-normal:   400;
+  --font-medium:   500;
   --font-semibold: 600;
-  --font-bold: 700;
+  --font-bold:     700;
 
   /* ── Transitions ───────────────────────────────────────────── */
-  --ease: cubic-bezier(0.4, 0, 0.2, 1);
-  --ease-out: cubic-bezier(0, 0, 0.2, 1);
-  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease:       cubic-bezier(0.25, 0.1, 0.25, 1);
+  --ease-out:   cubic-bezier(0, 0, 0.15, 1);
+  --ease-in:    cubic-bezier(0.4, 0, 1, 1);
   --ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
 
-  --duration-fast: 150ms;
-  --duration-base: 250ms;
-  --duration-slow: 350ms;
-  --duration-slower: 500ms;
+  --duration-fast:   120ms;
+  --duration-base:   200ms;
+  --duration-slow:   300ms;
+  --duration-slower: 400ms;
+
+  /* ── Transition shorthands（兼容旧代码）─────────────────── */
+  --transition-fast:   var(--duration-fast) var(--ease);
+  --transition-normal: var(--duration-base) var(--ease);
+  --transition-slow:   var(--duration-slow) var(--ease);
 
   /* ── Layout Dimensions ─────────────────────────────────────── */
-  --sidebar-width: 240px;
+  --sidebar-width: 220px;
   --sidebar-collapsed-width: 68px;
-  --toolbar-height: 52px;
+  --toolbar-height: 48px;
   --titlebar-height: 38px;
 
   /* ── Z-Index Scale ─────────────────────────────────────────── */
@@ -145,39 +160,45 @@
 }
 
 /* ============================================================
-   Light Theme Tokens — macOS Premium Aesthetics
+   Light Theme Tokens
    ============================================================ */
 :root.light-theme {
-  /* ── Backgrounds ───────────────────────────────────────────── */
-  --bg-base: #f5f5f7;
-  --bg-surface: #ffffff;
+  --bg-base:     #f5f5f7;
+  --bg-surface:  #ffffff;
   --bg-elevated: #fcfcfd;
-  --bg-hover: #e8e8ed;
-  --bg-active: #d2d2d7;
-  --bg-overlay: rgba(245, 245, 247, 0.75);
-  --bg-input: rgba(0, 0, 0, 0.04);
+  --bg-hover:    #e8e8ed;
+  --bg-active:   #d2d2d7;
+  --bg-overlay:  rgba(245, 245, 247, 0.75);
+  --bg-input:    rgba(0, 0, 0, 0.04);
+  --bg-subtle:   rgba(0, 0, 0, 0.03);
 
-  /* ── Text ──────────────────────────────────────────────────── */
-  --text-primary: #1d1d1f;
+  --text-primary:   #1d1d1f;
   --text-secondary: #86868b;
-  --text-tertiary: #6e6e73;
-  --text-disabled: #a1a1a6;
-  --text-inverse: #ffffff;
+  --text-tertiary:  #6e6e73;
+  --text-disabled:  #a1a1a6;
+  --text-inverse:   #ffffff;
 
-  /* ── Borders ───────────────────────────────────────────────── */
-  --border-subtle: rgba(0, 0, 0, 0.05);
+  --accent-muted:  rgba(110, 107, 240, 0.12);
+  --accent-subtle: rgba(110, 107, 240, 0.06);
+
+  --border-subtle:  rgba(0, 0, 0, 0.05);
   --border-default: rgba(0, 0, 0, 0.08);
-  --border-strong: rgba(0, 0, 0, 0.12);
-  --border-accent: rgba(124, 92, 252, 0.3);
+  --border-strong:  rgba(0, 0, 0, 0.12);
+  --border-accent:  rgba(110, 107, 240, 0.3);
 
-  /* ── Glass Effects ─────────────────────────────────────────── */
-  --glass-bg: rgba(255, 255, 255, 0.65);
-  --glass-bg-heavy: rgba(255, 255, 255, 0.85);
-  --glass-border: 1px solid rgba(0, 0, 0, 0.08);
-  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.06);
-  --glass-shadow-lg: 0 12px 48px rgba(0, 0, 0, 0.10);
-  
-  --glass-panel-bg: rgba(255, 255, 255, 0.45);
-  --glass-sidebar-bg: rgba(245, 245, 247, 0.85);
-  --glass-toolbar-bg: rgba(255, 255, 255, 0.65);
+  --shadow-sm:  0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-md:  0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-lg:  0 8px 24px rgba(0, 0, 0, 0.12);
+
+  --glass-bg:         #ffffff;
+  --glass-bg-heavy:   #fafafa;
+  --glass-blur:       none;
+  --glass-blur-light: none;
+  --glass-blur-heavy: none;
+  --glass-border:     1px solid rgba(0, 0, 0, 0.08);
+  --glass-shadow:     var(--shadow-md);
+  --glass-shadow-lg:  var(--shadow-lg);
+  --glass-panel-bg:   #ffffff;
+  --glass-sidebar-bg: #ffffff;
+  --glass-toolbar-bg: #ffffff;
 }

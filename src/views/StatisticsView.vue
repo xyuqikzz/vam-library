@@ -559,7 +559,7 @@ function formatPercent(value: number): string {
 
 .icon-purple {
   color: var(--accent-primary);
-  background: rgba(124, 92, 252, 0.16);
+  background: rgba(110, 107, 240, 0.16);
 }
 
 .summary-label {

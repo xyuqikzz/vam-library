@@ -1,5 +1,15 @@
 <template>
-  <div :class="['app-layout', { 'sidebar-collapsed': sidebarCollapsed }]">
+  <div class="app-layout">
+    <div v-if="visibleStartupError" class="startup-error-overlay">
+      <div class="startup-error-card">
+        <strong>启动遇到问题</strong>
+        <p>{{ visibleStartupError }}</p>
+        <div class="startup-error-actions">
+          <button class="startup-error-btn primary" @click="retryStartup">重试</button>
+          <button class="startup-error-btn" @click="openSettings">打开设置</button>
+        </div>
+      </div>
+    </div>
     <div v-if="showLibraryLoading" class="global-loading-overlay">
       <div class="global-loading-card">
         <div class="global-loading-head">
@@ -12,8 +22,9 @@
         </div>
       </div>
     </div>
-    <AppSidebar :collapsed="sidebarCollapsed" @update:collapsed="onSidebarToggle" />
+    <AppSidebar />
     <div class="main-area">
+      <AppToolbar />
       <main class="main-content">
         <router-view v-slot="{ Component, route }">
           <Transition
@@ -46,15 +57,16 @@ import { storeToRefs } from 'pinia'
 import { toastRef } from '@/composables/useNotification'
 import { useI18n } from 'vue-i18n'
 import AppSidebar from './AppSidebar.vue'
+import AppToolbar from './AppToolbar.vue'
 import Toast from '@/components/common/Toast.vue'
 
 const appStore = useAppStore()
 const localLibraryStore = useLocalLibraryStore()
-const { sidebarCollapsed } = storeToRefs(appStore)
-const { state: localLibraryState, loading: localLibraryLoading } = storeToRefs(localLibraryStore)
+const { state: localLibraryState, loading: localLibraryLoading, error: localLibraryError } = storeToRefs(localLibraryStore)
 const { t } = useI18n()
 
 const toastEl = ref<InstanceType<typeof Toast> | null>(null)
+const startupError = ref<string | null>(null)
 
 const router = useRouter()
 const scrollPositions = ref(new Map<string, {
@@ -64,6 +76,7 @@ const scrollPositions = ref(new Map<string, {
 }>())
 
 const showLibraryLoading = computed(() => localLibraryLoading.value)
+const visibleStartupError = computed(() => startupError.value || localLibraryError.value)
 
 const loadingTitle = computed(() => {
   if (localLibraryState.value === 'indexing') return t('common.updatingData')
@@ -127,7 +140,6 @@ function restoreScroll(path: string) {
     return restored
   }
 
-  // Multi-stage restoration to guarantee accuracy
   doRestore()
   nextTick(() => {
     doRestore()
@@ -140,7 +152,6 @@ function restoreScroll(path: string) {
   }, 150)
 }
 
-// Router guard to save scroll position before routing
 router.beforeEach((_to, from) => {
   saveScrollPosition(from.fullPath)
 })
@@ -157,34 +168,106 @@ function onTransitionAfterEnter(path: string) {
   restoreScroll(path)
 }
 
-onMounted(async () => {
+async function bootstrapApp() {
+  startupError.value = null
   toastRef.value = toastEl.value as any
-  appStore.setupScanListener()
+  await appStore.setupScanListener()
   await localLibraryStore.startListeners()
   await appStore.loadSettings()
   await localLibraryStore.ensureLoaded()
 
-  // Auto-scan on startup if enabled and VAM directory is set
   if (appStore.autoScan && appStore.vamRootPath && !appStore.isScanning) {
     appStore.startScan(appStore.vamRootPath).catch((err) => {
       console.error('Failed auto-scan on startup:', err)
     })
   }
-})
-
-function onSidebarToggle(collapsed: boolean) {
-  appStore.sidebarCollapsed = collapsed
 }
+
+async function retryStartup() {
+  await bootstrapApp().catch((err) => {
+    startupError.value = String(err)
+  })
+}
+
+function openSettings() {
+  startupError.value = null
+  router.push('/settings')
+}
+
+onMounted(async () => {
+  await bootstrapApp().catch((err) => {
+    console.error('Failed to start app:', err)
+    startupError.value = String(err)
+  })
+})
 </script>
 
 <style scoped>
 .app-layout {
   position: relative;
   display: flex;
-  width: 100vw;
-  height: 100vh;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
   background: var(--bg-base);
   overflow: hidden;
+}
+
+.startup-error-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6);
+  background: rgba(22, 22, 24, 0.78);
+}
+
+.startup-error-card {
+  width: min(460px, 100%);
+  padding: var(--space-5);
+  border: 1px solid rgba(255, 69, 58, 0.28);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-lg);
+}
+
+.startup-error-card strong {
+  display: block;
+  margin-bottom: var(--space-2);
+  color: var(--color-error);
+  font-size: var(--text-lg);
+}
+
+.startup-error-card p {
+  margin-bottom: var(--space-4);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.6;
+  user-select: text;
+}
+
+.startup-error-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.startup-error-btn {
+  height: 32px;
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-sm);
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+}
+
+.startup-error-btn.primary {
+  background: var(--accent-gradient);
+  color: #ffffff;
 }
 
 .global-loading-overlay {
@@ -195,18 +278,16 @@ function onSidebarToggle(collapsed: boolean) {
   align-items: center;
   justify-content: center;
   padding: var(--space-6);
-  background: rgba(9, 10, 18, 0.48);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: rgba(22, 22, 24, 0.6);
 }
 
 .global-loading-card {
   width: min(420px, 100%);
   padding: var(--space-5);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-xl);
-  background: rgba(19, 21, 34, 0.88);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-lg);
 }
 
 .global-loading-head {
@@ -236,9 +317,9 @@ function onSidebarToggle(collapsed: boolean) {
 .global-loading-progress {
   position: relative;
   overflow: hidden;
-  height: 8px;
+  height: 6px;
   border-radius: var(--radius-full);
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .global-loading-progress-bar {
@@ -265,14 +346,16 @@ function onSidebarToggle(collapsed: boolean) {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  transition: margin-left var(--duration-base) var(--ease);
+  min-height: 0;
 }
 
 .main-content {
   flex: 1;
+  min-width: 0;
+  min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: var(--space-6);
+  padding: var(--space-5);
 }
 
 /* ── Background gradient overlay ───────────────────────────── */
@@ -285,7 +368,7 @@ function onSidebarToggle(collapsed: boolean) {
   pointer-events: none;
   z-index: -1;
   background:
-    radial-gradient(ellipse 80% 60% at 20% 10%, rgba(124, 92, 252, 0.06) 0%, transparent 60%),
-    radial-gradient(ellipse 60% 50% at 80% 80%, rgba(91, 141, 239, 0.04) 0%, transparent 50%);
+    radial-gradient(ellipse 80% 60% at 20% 10%, rgba(110, 107, 240, 0.04) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 50% at 80% 80%, rgba(91, 141, 239, 0.03) 0%, transparent 50%);
 }
 </style>

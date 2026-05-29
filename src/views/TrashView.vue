@@ -16,7 +16,7 @@
         :subtitle="$t('trash.statsSizeSub')"
         :icon="icons.space"
         trend="neutral"
-        color="#7c5cfc"
+        color="#6e6bf0"
       />
     </section>
 
@@ -574,7 +574,7 @@ const icons = {
   width: 100%;
   display: flex;
   flex-direction: column;
-  background: rgba(22, 22, 42, 0.9);
+  background: rgba(28, 28, 30, 0.9);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: var(--radius-lg);
   box-shadow: var(--glass-shadow);
@@ -668,7 +668,7 @@ const icons = {
 
 .confirm-btn:hover:not(:disabled) {
   opacity: 0.95;
-  box-shadow: 0 4px 12px rgba(124, 92, 252, 0.3);
+  box-shadow: 0 4px 12px rgba(110, 107, 240, 0.3);
 }
 
 .confirm-btn.danger {

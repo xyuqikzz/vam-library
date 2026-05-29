@@ -398,7 +398,7 @@ const modes = computed(() => [
     title: t('migration.modeByType'),
     description: t('migration.modeByTypeDesc'),
     icon: 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z',
-    color: '#7c5cfc',
+    color: '#6e6bf0',
   },
   {
     id: 'by_creator',
@@ -817,7 +817,7 @@ function formatSize(bytes: number): string {
   transition: background var(--duration-fast) var(--ease), color var(--duration-fast) var(--ease), border-color var(--duration-fast) var(--ease);
 }
 
-.config-toggle.active { background: rgba(124, 92, 252, 0.12); color: var(--accent-primary); border-color: var(--accent-primary); }
+.config-toggle.active { background: rgba(110, 107, 240, 0.12); color: var(--accent-primary); border-color: var(--accent-primary); }
 
 /* ── Preview ──────────────────────────────────────────────── */
 .preview-warnings {

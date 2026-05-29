@@ -1,5 +1,6 @@
 /* ============================================================
-   VAM Library Design System — Animations & Transitions
+   VAM Library Design System — Animations & Transitions v3
+   风格：克制、流畅、macOS 原生感
    ============================================================ */
 
 /* ── Keyframes ───────────────────────────────────────────────── */
@@ -13,34 +14,29 @@
   to   { opacity: 0; }
 }
 
+@keyframes slideInUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 @keyframes slideInLeft {
-  from { opacity: 0; transform: translateX(-16px); }
+  from { opacity: 0; transform: translateX(-12px); }
   to   { opacity: 1; transform: translateX(0); }
 }
 
 @keyframes slideInRight {
-  from { opacity: 0; transform: translateX(16px); }
+  from { opacity: 0; transform: translateX(12px); }
   to   { opacity: 1; transform: translateX(0); }
 }
 
-@keyframes slideInUp {
-  from { opacity: 0; transform: translateY(12px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-
 @keyframes scaleIn {
-  from { opacity: 0; transform: scale(0.92); }
+  from { opacity: 0; transform: scale(0.95); }
   to   { opacity: 1; transform: scale(1); }
 }
 
 @keyframes shimmer {
   0%   { background-position: -200% 0; }
   100% { background-position: 200% 0; }
-}
-
-@keyframes pulse-glow {
-  0%, 100% { box-shadow: 0 0 4px rgba(124, 92, 252, 0.4); }
-  50%      { box-shadow: 0 0 16px rgba(124, 92, 252, 0.7); }
 }
 
 @keyframes spin {
@@ -54,15 +50,15 @@
 }
 
 .animate-slideInUp {
-  animation: slideInUp var(--duration-base) var(--ease) both;
+  animation: slideInUp var(--duration-base) var(--ease-out) both;
 }
 
 .animate-slideInLeft {
-  animation: slideInLeft var(--duration-base) var(--ease) both;
+  animation: slideInLeft var(--duration-base) var(--ease-out) both;
 }
 
 .animate-scaleIn {
-  animation: scaleIn var(--duration-base) var(--ease) both;
+  animation: scaleIn var(--duration-base) var(--ease-out) both;
 }
 
 .animate-shimmer {
@@ -73,20 +69,16 @@
     transparent 100%
   );
   background-size: 200% 100%;
-  animation: shimmer 2s infinite linear;
+  animation: shimmer 1.8s infinite linear;
 }
 
 .animate-spin {
   animation: spin 1s linear infinite;
 }
 
-.animate-pulse-glow {
-  animation: pulse-glow 2s ease-in-out infinite;
-}
-
 /* ── Staggered Children ──────────────────────────────────────── */
 .stagger-children > * {
-  animation: slideInUp var(--duration-base) var(--ease) both;
+  animation: slideInUp var(--duration-base) var(--ease-out) both;
 }
 .stagger-children > *:nth-child(1) { animation-delay: 0ms; }
 .stagger-children > *:nth-child(2) { animation-delay: 50ms; }
@@ -96,11 +88,12 @@
 .stagger-children > *:nth-child(6) { animation-delay: 250ms; }
 .stagger-children > *:nth-child(7) { animation-delay: 300ms; }
 .stagger-children > *:nth-child(8) { animation-delay: 350ms; }
+.stagger-children > *:nth-child(n+9) { animation-delay: 400ms; }
 
 /* ── Vue Transition: fade ────────────────────────────────────── */
 .fade-enter-active,
 .fade-leave-active {
-  transition: opacity var(--duration-base) var(--ease);
+  transition: opacity var(--duration-fast) var(--ease);
 }
 
 .fade-enter-from,
@@ -118,12 +111,12 @@
 
 .slide-enter-from {
   opacity: 0;
-  transform: translateY(12px);
+  transform: translateY(8px);
 }
 
 .slide-leave-to {
   opacity: 0;
-  transform: translateY(-12px);
+  transform: translateY(-8px);
 }
 
 /* ── Vue Transition: slide-left ──────────────────────────────── */
@@ -136,12 +129,12 @@
 
 .slide-left-enter-from {
   opacity: 0;
-  transform: translateX(-16px);
+  transform: translateX(-12px);
 }
 
 .slide-left-leave-to {
   opacity: 0;
-  transform: translateX(16px);
+  transform: translateX(12px);
 }
 
 /* ── Vue Transition: scale ───────────────────────────────────── */
@@ -154,10 +147,80 @@
 
 .scale-enter-from {
   opacity: 0;
-  transform: scale(0.92);
+  transform: scale(0.95);
 }
 
 .scale-leave-to {
   opacity: 0;
+  transform: scale(0.95);
+}
+
+/* ── Vue Transition: scale-bounce ─────────────────────────── */
+.scale-bounce-enter-active {
+  transition:
+    opacity var(--duration-slow) var(--ease),
+    transform var(--duration-slow) var(--ease-bounce);
+}
+
+.scale-bounce-leave-active {
+  transition:
+    opacity var(--duration-fast) var(--ease),
+    transform var(--duration-fast) var(--ease);
+}
+
+.scale-bounce-enter-from {
+  opacity: 0;
   transform: scale(0.92);
+}
+
+.scale-bounce-leave-to {
+  opacity: 0;
+  transform: scale(0.96);
+}
+
+/* ── Vue Transition: modal ───────────────────────────────────── */
+.modal-enter-active {
+  transition:
+    opacity var(--duration-base) var(--ease),
+    transform var(--duration-slow) var(--ease-bounce);
+}
+
+.modal-leave-active {
+  transition:
+    opacity var(--duration-fast) var(--ease),
+    transform var(--duration-fast) var(--ease);
+}
+
+.modal-enter-from {
+  opacity: 0;
+  transform: scale(0.95) translateY(6px);
+}
+
+.modal-leave-to {
+  opacity: 0;
+  transform: scale(0.97) translateY(4px);
+}
+
+/* ── Vue Transition: overlay ─────────────────────────────────── */
+.overlay-enter-active,
+.overlay-leave-active {
+  transition: opacity var(--duration-base) var(--ease);
+}
+
+.overlay-enter-from,
+.overlay-leave-to {
+  opacity: 0;
+}
+
+/* ── Interactive Press Feedback ──────────────────────────────── */
+.press-feedback {
+  transition: transform var(--duration-fast) var(--ease);
+}
+
+.press-feedback:active {
+  transform: scale(0.98);
+}
+
+.press-feedback-strong:active {
+  transform: scale(0.95);
 }

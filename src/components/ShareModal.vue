@@ -431,8 +431,8 @@ function formatSize(bytes: number): string {
   width: 100vw;
   height: 100vh;
   background: rgba(0, 0, 0, 0.45);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  /* backdrop-filter removed */
+
   display: flex;
   align-items: center;
   justify-content: center;
@@ -445,7 +445,7 @@ function formatSize(bytes: number): string {
   max-height: 85vh;
   display: flex;
   flex-direction: column;
-  background: rgba(22, 22, 42, 0.88);
+  background: rgba(28, 28, 30, 0.88);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: var(--radius-lg);
   box-shadow: 0 24px 64px rgba(0, 0, 0, 0.4);
@@ -789,12 +789,12 @@ function formatSize(bytes: number): string {
   background: var(--accent-gradient);
   color: white;
   border: none;
-  box-shadow: 0 4px 12px rgba(124, 92, 252, 0.3);
+  box-shadow: 0 4px 12px rgba(110, 107, 240, 0.3);
 }
 
 .confirm-btn:hover {
   transform: translateY(-1px);
-  box-shadow: 0 6px 16px rgba(124, 92, 252, 0.4);
+  box-shadow: 0 6px 16px rgba(110, 107, 240, 0.4);
 }
 
 .confirm-btn:active {

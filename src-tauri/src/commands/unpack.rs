@@ -1,13 +1,13 @@
 use serde::{Deserialize, Serialize};
 use std::ffi::OsStr;
 use std::fs::{self, File};
-use std::io::{self, Read, Write};
+use std::io::{self, Read};
 use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter};
 use walkdir::WalkDir;
-use zip::{write::FileOptions, ZipArchive, ZipWriter};
+use zip::ZipArchive;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -26,6 +26,8 @@ pub struct ArchiveAnalysis {
     pub image_files: Vec<String>,
     pub suspected_var_id: Option<String>,
     pub base_path_in_archive: String,
+    pub nested_archives: Vec<String>,
+    pub disguised_archive_files: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -67,32 +69,14 @@ impl ArchiveKind {
             Self::Rar => "rar",
         }
     }
-}
 
-fn parse_version_from_filename(filename: &str) -> Option<i32> {
-    let stem = Path::new(filename)
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or(filename);
-
-    let parts: Vec<&str> = stem.split('.').collect();
-    if parts.len() >= 3 {
-        if let Ok(ver) = parts.last().unwrap().parse::<i32>() {
-            return Some(ver);
+    fn label(self) -> &'static str {
+        match self {
+            Self::Zip => "ZIP",
+            Self::SevenZip => "7Z",
+            Self::Rar => "RAR",
         }
     }
-
-    if let Ok(re) = regex::Regex::new(r"(?i)[-_]v?(\d+)") {
-        if let Some(caps) = re.captures(stem) {
-            if let Some(m) = caps.get(1) {
-                if let Ok(ver) = m.as_str().parse::<i32>() {
-                    return Some(ver);
-                }
-            }
-        }
-    }
-
-    None
 }
 
 fn lower_extension(path: &Path) -> String {
@@ -148,6 +132,15 @@ fn archive_kind_from_header(bytes: &[u8]) -> Option<ArchiveKind> {
     None
 }
 
+fn archive_kind_from_extension(path: &Path) -> Option<ArchiveKind> {
+    match lower_extension(path).as_str() {
+        "zip" => Some(ArchiveKind::Zip),
+        "7z" => Some(ArchiveKind::SevenZip),
+        "rar" => Some(ArchiveKind::Rar),
+        _ => None,
+    }
+}
+
 fn detect_archive_kind(path: &Path) -> Result<ArchiveKind, String> {
     if !path.exists() {
         return Err(format!("文件不存在: {}", path.display()));
@@ -158,23 +151,24 @@ fn detect_archive_kind(path: &Path) -> Result<ArchiveKind, String> {
         return Ok(kind);
     }
 
-    match lower_extension(path).as_str() {
-        "zip" | "var" => Ok(ArchiveKind::Zip),
-        "7z" => Ok(ArchiveKind::SevenZip),
-        "rar" => Ok(ArchiveKind::Rar),
-        _ => Err("暂不支持该文件，支持 rar / zip / 7z，或可识别为伪装压缩包的文件".to_string()),
-    }
+    archive_kind_from_extension(path).ok_or_else(|| {
+        "暂不支持该文件，支持 rar / zip / 7z，或可识别为伪装压缩包的文件".to_string()
+    })
 }
 
 fn detect_archive_kind_optional(path: &Path) -> Option<ArchiveKind> {
     detect_archive_kind(path).ok()
 }
 
+fn has_disguised_extension(path: &Path, kind: ArchiveKind) -> bool {
+    lower_extension(path) != kind.canonical_extension()
+}
+
 fn normalize_archive_name(name: &str) -> String {
     name.replace('\\', "/").trim_start_matches("./").to_string()
 }
 
-fn is_image_extension(path: &str) -> bool {
+fn looks_like_archive_path(path: &str) -> bool {
     matches!(
         Path::new(path)
             .extension()
@@ -182,14 +176,26 @@ fn is_image_extension(path: &str) -> bool {
             .unwrap_or("")
             .to_ascii_lowercase()
             .as_str(),
-        "jpg" | "jpeg" | "png" | "webp" | "bmp" | "gif"
+        "zip" | "7z" | "rar" | "jpg" | "jpeg" | "png" | "webp" | "bmp" | "gif" | "ico"
+    )
+}
+
+fn is_image_or_icon_path(path: &str) -> bool {
+    matches!(
+        Path::new(path)
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .unwrap_or("")
+            .to_ascii_lowercase()
+            .as_str(),
+        "jpg" | "jpeg" | "png" | "webp" | "bmp" | "gif" | "ico"
     )
 }
 
 fn list_archive_entries(path: &Path, kind: ArchiveKind) -> Result<Vec<ArchiveEntryInfo>, String> {
     match kind {
         ArchiveKind::Zip => list_zip_entries(path),
-        ArchiveKind::SevenZip | ArchiveKind::Rar => list_archive_entries_with_tar(path),
+        ArchiveKind::SevenZip | ArchiveKind::Rar => list_archive_entries_with_external_tool(path),
     }
 }
 
@@ -211,7 +217,7 @@ fn list_zip_entries(path: &Path) -> Result<Vec<ArchiveEntryInfo>, String> {
     Ok(entries)
 }
 
-fn list_archive_entries_with_tar(path: &Path) -> Result<Vec<ArchiveEntryInfo>, String> {
+fn list_archive_entries_with_external_tool(path: &Path) -> Result<Vec<ArchiveEntryInfo>, String> {
     let output = Command::new("tar")
         .arg("-tf")
         .arg(path)
@@ -222,7 +228,8 @@ fn list_archive_entries_with_tar(path: &Path) -> Result<Vec<ArchiveEntryInfo>, S
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
         let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
         let reason = if !stderr.is_empty() { stderr } else { stdout };
-        return Err(format!("读取压缩包目录失败: {}", reason));
+        return list_archive_entries_with_7z(path)
+            .map_err(|fallback| format!("读取压缩包目录失败: {}; {}", reason, fallback));
     }
 
     let mut entries = Vec::new();
@@ -238,33 +245,67 @@ fn list_archive_entries_with_tar(path: &Path) -> Result<Vec<ArchiveEntryInfo>, S
     Ok(entries)
 }
 
-fn read_package_meta_from_zip(
-    path: &Path,
-    meta_path: &str,
-) -> Option<crate::models::meta::PackageMeta> {
-    let file = File::open(path).ok()?;
-    let mut archive = ZipArchive::new(file).ok()?;
-    let mut meta_file = archive.by_name(meta_path).ok()?;
-    let mut contents = String::new();
-    meta_file.read_to_string(&mut contents).ok()?;
-    serde_json::from_str::<crate::models::meta::PackageMeta>(&contents).ok()
-}
+fn list_archive_entries_with_7z(path: &Path) -> Result<Vec<ArchiveEntryInfo>, String> {
+    let mut last_error = String::new();
 
-fn detect_base_path_from_meta(meta_path: &str) -> String {
-    if meta_path == "meta.json" {
-        return String::new();
+    for command_name in ["7z", "7zz", "7za"] {
+        let output = match Command::new(command_name)
+            .arg("l")
+            .arg("-slt")
+            .arg(path)
+            .output()
+        {
+            Ok(value) => value,
+            Err(err) => {
+                last_error = format!("{} 不可用: {}", command_name, err);
+                continue;
+            }
+        };
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            last_error = if !stderr.is_empty() { stderr } else { stdout };
+            continue;
+        }
+
+        let mut entries = Vec::new();
+        let mut current_path = None::<String>;
+        let mut current_is_dir = false;
+
+        for line in String::from_utf8_lossy(&output.stdout).lines() {
+            if let Some(value) = line.strip_prefix("Path = ") {
+                if let Some(name) = current_path.take() {
+                    if name != path.to_string_lossy().as_ref() {
+                        entries.push(ArchiveEntryInfo {
+                            name: normalize_archive_name(&name),
+                            is_file: !current_is_dir,
+                        });
+                    }
+                }
+                current_path = Some(value.trim().to_string());
+                current_is_dir = false;
+                continue;
+            }
+
+            if let Some(value) = line.strip_prefix("Folder = ") {
+                current_is_dir = value.trim() == "+";
+            }
+        }
+
+        if let Some(name) = current_path.take() {
+            if name != path.to_string_lossy().as_ref() {
+                entries.push(ArchiveEntryInfo {
+                    name: normalize_archive_name(&name),
+                    is_file: !current_is_dir,
+                });
+            }
+        }
+
+        return Ok(entries);
     }
 
-    let parent = Path::new(meta_path).parent();
-    let parent = parent
-        .map(|value| value.to_string_lossy().replace('\\', "/"))
-        .unwrap_or_default();
-
-    if parent.is_empty() {
-        String::new()
-    } else {
-        format!("{}/", parent.trim_end_matches('/'))
-    }
+    Err(last_error)
 }
 
 fn analyze_entries(
@@ -276,192 +317,49 @@ fn analyze_entries(
 ) -> ArchiveAnalysis {
     let mut file_count = 0usize;
     let mut sample_files = Vec::new();
-    let mut contains_meta_json = false;
-    let mut meta_json_path: Option<String> = None;
-    let mut contains_var_files = false;
-    let mut var_files = Vec::new();
+    let mut nested_archives = Vec::new();
+    let mut disguised_archive_files = Vec::new();
     let mut has_image_files = false;
     let mut image_files = Vec::new();
-    let mut paths = Vec::new();
+
+    if has_disguised_extension(Path::new(&archive_path), kind) {
+        disguised_archive_files.push(file_name.clone());
+    }
 
     for entry in entries {
-        let name = entry.name.clone();
-        paths.push(name.clone());
-
         if !entry.is_file {
             continue;
         }
 
         file_count += 1;
         if sample_files.len() < 12 {
-            sample_files.push(name.clone());
+            sample_files.push(entry.name.clone());
         }
 
-        if name.ends_with("meta.json") {
-            contains_meta_json = true;
-            meta_json_path = Some(name.clone());
+        if looks_like_archive_path(&entry.name) && nested_archives.len() < 12 {
+            nested_archives.push(entry.name.clone());
         }
 
-        if name.to_ascii_lowercase().ends_with(".var") {
-            contains_var_files = true;
-            var_files.push(name.clone());
-        }
-
-        if is_image_extension(&name) {
+        if is_image_or_icon_path(&entry.name) {
             has_image_files = true;
             if image_files.len() < 5 {
-                image_files.push(name.clone());
+                image_files.push(entry.name.clone());
             }
         }
     }
 
-    if contains_var_files {
-        return ArchiveAnalysis {
-            file_path: archive_path,
-            file_name,
-            size_bytes,
-            archive_type: "var_container".to_string(),
-            recommended_action: "extract_vars".to_string(),
-            file_count,
-            sample_files,
-            contains_meta_json,
-            contains_var_files,
-            var_files,
-            has_image_files,
-            image_files,
-            suspected_var_id: None,
-            base_path_in_archive: String::new(),
-        };
-    }
-
-    if let Some(meta_path) = meta_json_path {
-        let base_path = detect_base_path_from_meta(&meta_path);
-        let suspected_var_id = if kind == ArchiveKind::Zip {
-            read_package_meta_from_zip(Path::new(&archive_path), &meta_path).map(|parsed| {
-                let creator = if parsed.creator_name.trim().is_empty() {
-                    "Unknown".to_string()
-                } else {
-                    parsed.creator_name.trim().to_string()
-                };
-
-                let name = if parsed.package_name.trim().is_empty() {
-                    Path::new(&file_name)
-                        .file_stem()
-                        .and_then(|s| s.to_str())
-                        .unwrap_or("Unknown")
-                        .to_string()
-                } else {
-                    parsed.package_name.trim().to_string()
-                };
-
-                let version = parse_version_from_filename(&file_name).unwrap_or(1);
-                format!("{}.{}.{}", creator, name, version)
-            })
-        } else {
-            None
-        };
-
-        return ArchiveAnalysis {
-            file_path: archive_path,
-            file_name,
-            size_bytes,
-            archive_type: "misnamed_var".to_string(),
-            recommended_action: "rename_to_var".to_string(),
-            file_count,
-            sample_files,
-            contains_meta_json: true,
-            contains_var_files: false,
-            var_files: Vec::new(),
-            has_image_files,
-            image_files,
-            suspected_var_id,
-            base_path_in_archive: base_path,
-        };
-    }
-
-    let mut has_saves = false;
-    let mut has_custom = false;
-    let mut has_addon_packages = false;
-    let mut base_path = String::new();
-
-    for path in &paths {
-        let lower = path.to_ascii_lowercase();
-        if lower.contains("/saves/") || lower.starts_with("saves/") {
-            let index = lower.find("saves/").unwrap_or(0);
-            base_path = path[..index].to_string();
-            has_saves = true;
-            break;
-        }
-        if lower.contains("/custom/") || lower.starts_with("custom/") {
-            let index = lower.find("custom/").unwrap_or(0);
-            base_path = path[..index].to_string();
-            has_custom = true;
-            break;
-        }
-        if lower.contains("/addonpackages/") || lower.starts_with("addonpackages/") {
-            let index = lower.find("addonpackages/").unwrap_or(0);
-            base_path = path[..index].to_string();
-            has_addon_packages = true;
-            break;
-        }
-    }
-
-    if has_saves || has_custom || has_addon_packages {
-        return ArchiveAnalysis {
-            file_path: archive_path,
-            file_name,
-            size_bytes,
-            archive_type: "vam_content".to_string(),
-            recommended_action: "extract_content".to_string(),
-            file_count,
-            sample_files,
-            contains_meta_json: false,
-            contains_var_files: false,
-            var_files: Vec::new(),
-            has_image_files,
-            image_files,
-            suspected_var_id: None,
-            base_path_in_archive: base_path,
-        };
-    }
-
-    let mut preset_type = None::<&str>;
-    for path in &paths {
-        let lower = path.to_ascii_lowercase();
-        if lower.ends_with(".vac") {
-            preset_type = Some("appearance");
-            break;
-        }
-        if lower.ends_with(".json") {
-            preset_type = Some("scene");
-        }
-    }
-
-    if let Some(kind_label) = preset_type {
-        return ArchiveAnalysis {
-            file_path: archive_path,
-            file_name,
-            size_bytes,
-            archive_type: "flat_content".to_string(),
-            recommended_action: format!("extract_flat_{}", kind_label),
-            file_count,
-            sample_files,
-            contains_meta_json: false,
-            contains_var_files: false,
-            var_files: Vec::new(),
-            has_image_files,
-            image_files,
-            suspected_var_id: None,
-            base_path_in_archive: String::new(),
-        };
-    }
+    let archive_type = if !nested_archives.is_empty() || !disguised_archive_files.is_empty() {
+        "recursive_archive"
+    } else {
+        "plain_archive"
+    };
 
     ArchiveAnalysis {
         file_path: archive_path,
         file_name,
         size_bytes,
-        archive_type: "unknown".to_string(),
-        recommended_action: "extract_to_temp".to_string(),
+        archive_type: archive_type.to_string(),
+        recommended_action: "recursive_extract".to_string(),
         file_count,
         sample_files,
         contains_meta_json: false,
@@ -471,6 +369,8 @@ fn analyze_entries(
         image_files,
         suspected_var_id: None,
         base_path_in_archive: String::new(),
+        nested_archives,
+        disguised_archive_files,
     }
 }
 
@@ -579,7 +479,7 @@ fn extract_zip_to_dir(path: &Path, dest_dir: &Path) -> Result<Vec<String>, Strin
     Ok(extracted_files)
 }
 
-fn extract_archive_with_tar(path: &Path, dest_dir: &Path) -> Result<(), String> {
+fn extract_archive_with_external_tool(path: &Path, dest_dir: &Path) -> Result<(), String> {
     fs::create_dir_all(dest_dir).map_err(|e| format!("创建解压目录失败: {}", e))?;
 
     let output = Command::new("tar")
@@ -594,10 +494,42 @@ fn extract_archive_with_tar(path: &Path, dest_dir: &Path) -> Result<(), String> 
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
         let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
         let reason = if !stderr.is_empty() { stderr } else { stdout };
-        return Err(format!("解压失败: {}", reason));
+        return extract_archive_with_7z(path, dest_dir)
+            .map_err(|fallback| format!("解压失败: {}; {}", reason, fallback));
     }
 
     Ok(())
+}
+
+fn extract_archive_with_7z(path: &Path, dest_dir: &Path) -> Result<(), String> {
+    let mut last_error = String::new();
+    let output_arg = format!("-o{}", dest_dir.to_string_lossy());
+
+    for command_name in ["7z", "7zz", "7za"] {
+        let output = match Command::new(command_name)
+            .arg("x")
+            .arg("-y")
+            .arg(&output_arg)
+            .arg(path)
+            .output()
+        {
+            Ok(value) => value,
+            Err(err) => {
+                last_error = format!("{} 不可用: {}", command_name, err);
+                continue;
+            }
+        };
+
+        if output.status.success() {
+            return Ok(());
+        }
+
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        last_error = if !stderr.is_empty() { stderr } else { stdout };
+    }
+
+    Err(last_error)
 }
 
 fn extract_archive_to_dir(
@@ -608,7 +540,7 @@ fn extract_archive_to_dir(
     match kind {
         ArchiveKind::Zip => extract_zip_to_dir(path, dest_dir),
         ArchiveKind::SevenZip | ArchiveKind::Rar => {
-            extract_archive_with_tar(path, dest_dir)?;
+            extract_archive_with_external_tool(path, dest_dir)?;
             collect_relative_files(dest_dir, dest_dir)
         }
     }
@@ -632,141 +564,6 @@ fn collect_relative_files(root: &Path, base: &Path) -> Result<Vec<String>, Strin
     }
     files.sort();
     Ok(files)
-}
-
-fn copy_tree_contents(source_root: &Path, target_dir: &Path) -> Result<Vec<String>, String> {
-    let mut extracted_files = Vec::new();
-    for entry in WalkDir::new(source_root) {
-        let entry = entry.map_err(|e| format!("遍历目录失败: {}", e))?;
-        if !entry.file_type().is_file() {
-            continue;
-        }
-
-        let relative = entry
-            .path()
-            .strip_prefix(source_root)
-            .map_err(|e| format!("计算相对路径失败: {}", e))?;
-        let dest_path = ensure_unique_path(&target_dir.join(relative));
-
-        if let Some(parent) = dest_path.parent() {
-            fs::create_dir_all(parent).map_err(|e| format!("创建目标目录失败: {}", e))?;
-        }
-
-        fs::copy(entry.path(), &dest_path).map_err(|e| format!("复制文件失败: {}", e))?;
-        let relative_name = dest_path
-            .strip_prefix(target_dir)
-            .map_err(|e| format!("计算输出路径失败: {}", e))?
-            .to_string_lossy()
-            .replace('\\', "/");
-        extracted_files.push(relative_name);
-    }
-
-    extracted_files.sort();
-    Ok(extracted_files)
-}
-
-fn copy_files_by_extension(
-    source_root: &Path,
-    target_dir: &Path,
-    extension: &str,
-) -> Result<Vec<String>, String> {
-    let mut extracted_files = Vec::new();
-    for entry in WalkDir::new(source_root) {
-        let entry = entry.map_err(|e| format!("遍历目录失败: {}", e))?;
-        if !entry.file_type().is_file() {
-            continue;
-        }
-
-        let current_ext = entry
-            .path()
-            .extension()
-            .and_then(|value| value.to_str())
-            .unwrap_or("")
-            .to_ascii_lowercase();
-        if current_ext != extension {
-            continue;
-        }
-
-        let file_name = entry
-            .path()
-            .file_name()
-            .and_then(|value| value.to_str())
-            .unwrap_or("file");
-        let dest_path = ensure_unique_path(&target_dir.join(file_name));
-        fs::copy(entry.path(), &dest_path).map_err(|e| format!("复制文件失败: {}", e))?;
-
-        extracted_files.push(
-            dest_path
-                .file_name()
-                .and_then(|value| value.to_str())
-                .unwrap_or("file")
-                .to_string(),
-        );
-    }
-
-    extracted_files.sort();
-    Ok(extracted_files)
-}
-
-fn resolve_base_root(extracted_root: &Path, base_path_in_archive: &str) -> PathBuf {
-    let trimmed = base_path_in_archive.trim_matches('/');
-    if trimmed.is_empty() {
-        extracted_root.to_path_buf()
-    } else {
-        extracted_root.join(trimmed.replace('/', std::path::MAIN_SEPARATOR_STR))
-    }
-}
-
-fn zip_directory_contents(source_root: &Path, output_path: &Path) -> Result<(), String> {
-    let file = File::create(output_path).map_err(|e| format!("创建打包文件失败: {}", e))?;
-    let mut zip_writer = ZipWriter::new(file);
-    let options = FileOptions::<()>::default().compression_method(zip::CompressionMethod::Deflated);
-    let mut buffer = vec![0u8; 128 * 1024];
-
-    for entry in WalkDir::new(source_root) {
-        let entry = entry.map_err(|e| format!("遍历打包目录失败: {}", e))?;
-        let path = entry.path();
-        if path == source_root {
-            continue;
-        }
-
-        let relative = path
-            .strip_prefix(source_root)
-            .map_err(|e| format!("计算相对路径失败: {}", e))?
-            .to_string_lossy()
-            .replace('\\', "/");
-
-        if entry.file_type().is_dir() {
-            if !relative.is_empty() {
-                zip_writer
-                    .add_directory(format!("{}/", relative.trim_end_matches('/')), options)
-                    .map_err(|e| format!("写入目录条目失败: {}", e))?;
-            }
-            continue;
-        }
-
-        zip_writer
-            .start_file(relative, options)
-            .map_err(|e| format!("写入文件条目失败: {}", e))?;
-
-        let mut input = File::open(path).map_err(|e| format!("读取待打包文件失败: {}", e))?;
-        loop {
-            let read_bytes = input
-                .read(&mut buffer)
-                .map_err(|e| format!("读取待打包文件失败: {}", e))?;
-            if read_bytes == 0 {
-                break;
-            }
-            zip_writer
-                .write_all(&buffer[..read_bytes])
-                .map_err(|e| format!("写入打包内容失败: {}", e))?;
-        }
-    }
-
-    zip_writer
-        .finish()
-        .map_err(|e| format!("完成打包失败: {}", e))?;
-    Ok(())
 }
 
 fn list_visible_children(dir: &Path) -> Result<Vec<PathBuf>, String> {
@@ -801,78 +598,136 @@ fn rename_archive_to_canonical_extension(
     Ok(renamed)
 }
 
-fn unwrap_single_payload_chain(root: &Path) -> Result<PathBuf, String> {
-    let mut current = root.to_path_buf();
+fn collect_nested_archive_files(root: &Path) -> Result<Vec<PathBuf>, String> {
+    let mut archive_files = Vec::new();
+    for entry in WalkDir::new(root) {
+        let entry = entry.map_err(|e| format!("遍历目录失败: {}", e))?;
+        if !entry.file_type().is_file() {
+            continue;
+        }
 
-    for _ in 0..8 {
-        if current.is_file() {
-            if let Some(kind) = detect_archive_kind_optional(&current) {
-                let normalized_archive = rename_archive_to_canonical_extension(&current, kind)?;
-                let next_dir = ensure_unique_path(
-                    &normalized_archive
-                        .with_file_name(format!(
-                            "{}_unpacked",
-                            normalized_archive
-                                .file_stem()
-                                .and_then(OsStr::to_str)
-                                .unwrap_or("archive")
-                        ))
-                        .with_extension(""),
-                );
-                fs::create_dir_all(&next_dir)
-                    .map_err(|e| format!("创建嵌套解压目录失败: {}", e))?;
-                extract_archive_to_dir(&normalized_archive, kind, &next_dir)?;
-                current = next_dir;
+        if detect_archive_kind_optional(entry.path()).is_some() {
+            archive_files.push(entry.path().to_path_buf());
+        }
+    }
+    archive_files.sort();
+    Ok(archive_files)
+}
+
+fn unpack_nested_archives(
+    app_handle: &AppHandle,
+    root: &Path,
+    max_depth: usize,
+) -> Result<usize, String> {
+    let mut unpacked_count = 0usize;
+
+    for depth in 0..max_depth {
+        let archive_files = collect_nested_archive_files(root)?;
+        if archive_files.is_empty() {
+            return Ok(unpacked_count);
+        }
+
+        let total = archive_files.len();
+        for (index, archive_path) in archive_files.iter().enumerate() {
+            if !archive_path.exists() {
                 continue;
             }
+
+            let kind = detect_archive_kind(archive_path)?;
+            let normalized_archive = rename_archive_to_canonical_extension(archive_path, kind)?;
+            let stem = normalized_archive
+                .file_stem()
+                .and_then(OsStr::to_str)
+                .unwrap_or("archive");
+            let dest_dir =
+                ensure_unique_path(&normalized_archive.parent().unwrap_or(root).join(stem));
+
+            emit_progress(
+                app_handle,
+                35.0 + ((depth as f64 + (index as f64 / total as f64)) * 45.0 / max_depth as f64),
+                format!(
+                    "继续解压 {}: {}",
+                    kind.label(),
+                    normalized_archive.display()
+                ),
+                index,
+                total,
+            );
+
+            fs::create_dir_all(&dest_dir).map_err(|e| format!("创建嵌套解压目录失败: {}", e))?;
+            extract_archive_to_dir(&normalized_archive, kind, &dest_dir)?;
+            fs::remove_file(&normalized_archive)
+                .map_err(|e| format!("清理中间压缩包失败: {}", e))?;
+            unpacked_count += 1;
+        }
+    }
+
+    Err(format!(
+        "嵌套层级超过 {} 层，已停止以避免循环解压",
+        max_depth
+    ))
+}
+
+fn collapse_single_folder_chain(root: &Path) -> Result<PathBuf, String> {
+    let mut current = root.to_path_buf();
+
+    for _ in 0..16 {
+        if !current.is_dir() {
             return Ok(current);
         }
 
         let children = list_visible_children(&current)?;
-        if children.len() != 1 {
+        if children.len() != 1 || !children[0].is_dir() {
             return Ok(current);
         }
 
-        let only_child = children[0].clone();
-        if only_child.is_dir() {
-            current = only_child;
-            continue;
-        }
-
-        if let Some(kind) = detect_archive_kind_optional(&only_child) {
-            let normalized_archive = rename_archive_to_canonical_extension(&only_child, kind)?;
-            let next_dir = ensure_unique_path(
-                &normalized_archive
-                    .with_file_name(format!(
-                        "{}_unpacked",
-                        normalized_archive
-                            .file_stem()
-                            .and_then(OsStr::to_str)
-                            .unwrap_or("archive")
-                    ))
-                    .with_extension(""),
-            );
-            fs::create_dir_all(&next_dir).map_err(|e| format!("创建嵌套解压目录失败: {}", e))?;
-            extract_archive_to_dir(&normalized_archive, kind, &next_dir)?;
-            current = next_dir;
-            continue;
-        }
-
-        return Ok(only_child);
+        current = children[0].clone();
     }
 
     Ok(current)
 }
 
-fn summarize_output(target: &Path) -> Result<Vec<String>, String> {
-    if target.is_file() {
-        return Ok(vec![target
-            .file_name()
-            .and_then(|value| value.to_str())
-            .unwrap_or("file")
-            .to_string()]);
+fn copy_file_to_target(source: &Path, target_dir: &Path) -> Result<PathBuf, String> {
+    let file_name = source
+        .file_name()
+        .and_then(OsStr::to_str)
+        .unwrap_or("unpacked_file");
+    let dest_path = ensure_unique_path(&target_dir.join(file_name));
+    fs::copy(source, &dest_path).map_err(|e| format!("复制文件失败: {}", e))?;
+    Ok(dest_path)
+}
+
+fn copy_dir_to_target(
+    source_root: &Path,
+    target_dir: &Path,
+    preferred_name: &str,
+) -> Result<PathBuf, String> {
+    let dest_root = ensure_unique_path(&target_dir.join(preferred_name));
+    fs::create_dir_all(&dest_root).map_err(|e| format!("创建目标目录失败: {}", e))?;
+
+    for entry in WalkDir::new(source_root) {
+        let entry = entry.map_err(|e| format!("遍历目录失败: {}", e))?;
+        let relative = entry
+            .path()
+            .strip_prefix(source_root)
+            .map_err(|e| format!("计算相对路径失败: {}", e))?;
+        if relative.as_os_str().is_empty() {
+            continue;
+        }
+
+        let dest_path = dest_root.join(relative);
+        if entry.file_type().is_dir() {
+            fs::create_dir_all(&dest_path).map_err(|e| format!("创建目录失败: {}", e))?;
+            continue;
+        }
+
+        if let Some(parent) = dest_path.parent() {
+            fs::create_dir_all(parent).map_err(|e| format!("创建目录失败: {}", e))?;
+        }
+        fs::copy(entry.path(), &dest_path).map_err(|e| format!("复制文件失败: {}", e))?;
     }
-    collect_relative_files(target, target)
+
+    Ok(dest_root)
 }
 
 fn cleanup_temp_dir(path: &Path) {
@@ -906,130 +761,59 @@ pub async fn analyze_archive(archive_path: String) -> Result<ArchiveAnalysis, St
     ))
 }
 
-fn execute_rename_to_var(
+fn execute_recursive_extract(
     app_handle: &AppHandle,
     analysis: &ArchiveAnalysis,
     target_dir: &Path,
     kind: ArchiveKind,
 ) -> Result<UnpackResult, String> {
-    let target_var_name = if let Some(var_id) = &analysis.suspected_var_id {
-        format!("{}.var", var_id)
-    } else {
-        let stem = Path::new(&analysis.file_name)
-            .file_stem()
-            .and_then(|value| value.to_str())
-            .unwrap_or("package");
-        format!("{}.var", stem)
-    };
-
     let source_path = Path::new(&analysis.file_path);
-    let preferred_destination = target_dir.join(&target_var_name);
+    let temp_dir = create_temp_dir("recursive_unpack")?;
+    let stem = Path::new(&analysis.file_name)
+        .file_stem()
+        .and_then(OsStr::to_str)
+        .unwrap_or("unpacked_archive");
 
-    if kind == ArchiveKind::Zip
-        && lower_extension(source_path) == "var"
-        && source_path == preferred_destination
-    {
-        return Ok(UnpackResult {
-            success: true,
-            message: format!("已识别为标准 VAR 包: {}", target_var_name),
-            extracted_files: vec![target_var_name],
-            destination_path: analysis.file_path.clone(),
-        });
-    }
-
-    let destination_var_path = ensure_unique_path(&preferred_destination);
-
-    if kind == ArchiveKind::Zip && analysis.base_path_in_archive.is_empty() {
-        emit_progress(app_handle, 20.0, &target_var_name, 0, 1);
-        fs::copy(source_path, &destination_var_path)
-            .map_err(|e| format!("复制 VAR 文件失败: {}", e))?;
-        emit_progress(app_handle, 100.0, &target_var_name, 1, 1);
-
-        return Ok(UnpackResult {
-            success: true,
-            message: format!("已成功重命名并输出为 VAR 包: {}", target_var_name),
-            extracted_files: vec![target_var_name],
-            destination_path: destination_var_path.to_string_lossy().to_string(),
-        });
-    }
-
-    let temp_dir = create_temp_dir("repack")?;
-    emit_progress(app_handle, 10.0, "正在解压原始压缩包", 0, 3);
+    emit_progress(app_handle, 10.0, "正在解压外层压缩包", 0, 3);
     let extract_result = extract_archive_to_dir(source_path, kind, &temp_dir);
     if let Err(err) = extract_result {
         cleanup_temp_dir(&temp_dir);
         return Err(err);
     }
 
-    let source_root = resolve_base_root(&temp_dir, &analysis.base_path_in_archive);
-    if !source_root.exists() {
-        cleanup_temp_dir(&temp_dir);
-        return Err("未找到可重新打包的 VAM 包根目录".to_string());
-    }
-
-    emit_progress(app_handle, 65.0, "正在重新封装为 .var", 1, 3);
-    let zip_result = zip_directory_contents(&source_root, &destination_var_path);
-    cleanup_temp_dir(&temp_dir);
-    zip_result?;
-    emit_progress(app_handle, 100.0, &target_var_name, 3, 3);
-
-    Ok(UnpackResult {
-        success: true,
-        message: format!("已成功转换并输出为 VAR 包: {}", target_var_name),
-        extracted_files: vec![target_var_name],
-        destination_path: destination_var_path.to_string_lossy().to_string(),
-    })
-}
-
-fn execute_extract_vars(
-    app_handle: &AppHandle,
-    analysis: &ArchiveAnalysis,
-    target_dir: &Path,
-    kind: ArchiveKind,
-) -> Result<UnpackResult, String> {
-    let temp_dir = create_temp_dir("extract_vars")?;
-    emit_progress(app_handle, 10.0, "正在解压压缩包", 0, 2);
-    let extract_result = extract_archive_to_dir(Path::new(&analysis.file_path), kind, &temp_dir);
-    if let Err(err) = extract_result {
+    emit_progress(app_handle, 30.0, "正在查找嵌套压缩包和伪装后缀", 1, 3);
+    let nested_result = unpack_nested_archives(app_handle, &temp_dir, 16);
+    if let Err(err) = nested_result {
         cleanup_temp_dir(&temp_dir);
         return Err(err);
     }
+    let nested_count = nested_result.unwrap_or(0);
 
-    let mut extracted_files = Vec::new();
-    for entry in WalkDir::new(&temp_dir) {
-        let entry = entry.map_err(|e| format!("遍历临时目录失败: {}", e))?;
-        if !entry.file_type().is_file() {
-            continue;
-        }
-
-        let ext = entry
-            .path()
-            .extension()
-            .and_then(|value| value.to_str())
-            .unwrap_or("")
-            .to_ascii_lowercase();
-        if ext != "var" {
-            continue;
-        }
-
-        let file_name = entry
-            .path()
+    emit_progress(app_handle, 82.0, "正在整理最终输出", 2, 3);
+    let final_root = collapse_single_folder_chain(&temp_dir)?;
+    let output_path = if final_root.is_file() {
+        copy_file_to_target(&final_root, target_dir)?
+    } else {
+        let preferred_name = final_root
             .file_name()
-            .and_then(|value| value.to_str())
-            .unwrap_or("package.var");
-        let dest_path = ensure_unique_path(&target_dir.join(file_name));
-        fs::copy(entry.path(), &dest_path).map_err(|e| format!("复制 VAR 文件失败: {}", e))?;
-        extracted_files.push(
-            dest_path
-                .file_name()
-                .and_then(|value| value.to_str())
-                .unwrap_or("package.var")
-                .to_string(),
-        );
-    }
+            .and_then(OsStr::to_str)
+            .filter(|name| !name.starts_with("vam_box_recursive_unpack_"))
+            .unwrap_or(stem);
+        copy_dir_to_target(&final_root, target_dir, preferred_name)?
+    };
 
     cleanup_temp_dir(&temp_dir);
-    extracted_files.sort();
+
+    let extracted_files = if output_path.is_file() {
+        vec![output_path
+            .file_name()
+            .and_then(OsStr::to_str)
+            .unwrap_or("unpacked_file")
+            .to_string()]
+    } else {
+        collect_relative_files(&output_path, &output_path)?
+    };
+
     emit_progress(
         app_handle,
         100.0,
@@ -1038,133 +822,21 @@ fn execute_extract_vars(
         extracted_files.len(),
     );
 
-    Ok(UnpackResult {
-        success: true,
-        message: format!("已成功提取 {} 个 VAR 包", extracted_files.len()),
-        extracted_files,
-        destination_path: target_dir.to_string_lossy().to_string(),
-    })
-}
-
-fn execute_extract_content(
-    app_handle: &AppHandle,
-    analysis: &ArchiveAnalysis,
-    target_dir: &Path,
-    kind: ArchiveKind,
-) -> Result<UnpackResult, String> {
-    let temp_dir = create_temp_dir("extract_content")?;
-    emit_progress(app_handle, 10.0, "正在解压压缩包", 0, 2);
-    let extract_result = extract_archive_to_dir(Path::new(&analysis.file_path), kind, &temp_dir);
-    if let Err(err) = extract_result {
-        cleanup_temp_dir(&temp_dir);
-        return Err(err);
-    }
-
-    let source_root = resolve_base_root(&temp_dir, &analysis.base_path_in_archive);
-    if !source_root.exists() {
-        cleanup_temp_dir(&temp_dir);
-        return Err("未找到可提取的资源根目录".to_string());
-    }
-
-    emit_progress(app_handle, 70.0, "正在整理标准目录结构", 1, 2);
-    let copy_result = copy_tree_contents(&source_root, target_dir);
-    cleanup_temp_dir(&temp_dir);
-    let extracted_files = copy_result?;
-    emit_progress(
-        app_handle,
-        100.0,
-        "完成解压",
-        extracted_files.len(),
-        extracted_files.len(),
-    );
-
-    Ok(UnpackResult {
-        success: true,
-        message: format!("成功整理并提取 {} 个资源文件", extracted_files.len()),
-        extracted_files,
-        destination_path: target_dir.to_string_lossy().to_string(),
-    })
-}
-
-fn execute_extract_flat(
-    app_handle: &AppHandle,
-    analysis: &ArchiveAnalysis,
-    target_dir: &Path,
-    kind: ArchiveKind,
-    extension: &str,
-    label: &str,
-) -> Result<UnpackResult, String> {
-    let temp_dir = create_temp_dir("extract_flat")?;
-    emit_progress(app_handle, 10.0, "正在解压压缩包", 0, 2);
-    let extract_result = extract_archive_to_dir(Path::new(&analysis.file_path), kind, &temp_dir);
-    if let Err(err) = extract_result {
-        cleanup_temp_dir(&temp_dir);
-        return Err(err);
-    }
-
-    emit_progress(app_handle, 70.0, format!("正在整理{}", label), 1, 2);
-    let copy_result = copy_files_by_extension(&temp_dir, target_dir, extension);
-    cleanup_temp_dir(&temp_dir);
-    let extracted_files = copy_result?;
-    emit_progress(
-        app_handle,
-        100.0,
-        "完成解压",
-        extracted_files.len(),
-        extracted_files.len(),
-    );
-
-    Ok(UnpackResult {
-        success: true,
-        message: format!("已成功提取 {} 个{}文件", extracted_files.len(), label),
-        extracted_files,
-        destination_path: target_dir.to_string_lossy().to_string(),
-    })
-}
-
-fn execute_extract_to_temp(
-    app_handle: &AppHandle,
-    analysis: &ArchiveAnalysis,
-    target_dir: &Path,
-    kind: ArchiveKind,
-) -> Result<UnpackResult, String> {
-    let stem = Path::new(&analysis.file_name)
-        .file_stem()
-        .and_then(|value| value.to_str())
-        .unwrap_or("unpacked_archive");
-    let temp_dest = ensure_unique_path(&target_dir.join(format!("{}_unpacked", stem)));
-    fs::create_dir_all(&temp_dest).map_err(|e| format!("创建目标目录失败: {}", e))?;
-
-    emit_progress(app_handle, 10.0, "正在解压外层压缩包", 0, 3);
-    extract_archive_to_dir(Path::new(&analysis.file_path), kind, &temp_dest)?;
-
-    emit_progress(app_handle, 55.0, "正在识别嵌套压缩包", 1, 3);
-    let final_target = unwrap_single_payload_chain(&temp_dest)?;
-
-    emit_progress(app_handle, 90.0, "正在整理最终输出", 2, 3);
-    let extracted_files = summarize_output(&final_target)?;
-    emit_progress(
-        app_handle,
-        100.0,
-        "完成解压",
-        extracted_files.len(),
-        extracted_files.len(),
-    );
-
-    let message = if final_target != temp_dest {
+    let message = if nested_count > 0 {
         format!(
-            "已自动继续解压嵌套压缩包，并定位到真实根内容，共输出 {} 个文件",
+            "已完成通用递归解压，额外解开 {} 个嵌套或伪装压缩包，最终输出 {} 个文件",
+            nested_count,
             extracted_files.len()
         )
     } else {
-        format!("已成功解压 {} 个文件到独立目录", extracted_files.len())
+        format!("已完成解压，最终输出 {} 个文件", extracted_files.len())
     };
 
     Ok(UnpackResult {
         success: true,
         message,
         extracted_files,
-        destination_path: final_target.to_string_lossy().to_string(),
+        destination_path: output_path.to_string_lossy().to_string(),
     })
 }
 
@@ -1185,31 +857,5 @@ pub async fn execute_unpack(
 
     fs::create_dir_all(&target_dir).map_err(|e| format!("创建目标文件夹失败: {}", e))?;
     let archive_kind = detect_archive_kind(Path::new(&analysis.file_path))?;
-
-    match analysis.recommended_action.as_str() {
-        "rename_to_var" => execute_rename_to_var(&app_handle, &analysis, &target_dir, archive_kind),
-        "extract_vars" => execute_extract_vars(&app_handle, &analysis, &target_dir, archive_kind),
-        "extract_content" => {
-            execute_extract_content(&app_handle, &analysis, &target_dir, archive_kind)
-        }
-        "extract_flat_appearance" => execute_extract_flat(
-            &app_handle,
-            &analysis,
-            &target_dir,
-            archive_kind,
-            "vac",
-            "外观预设",
-        ),
-        "extract_flat_scene" => execute_extract_flat(
-            &app_handle,
-            &analysis,
-            &target_dir,
-            archive_kind,
-            "json",
-            "场景预设",
-        ),
-        "extract_to_temp" | _ => {
-            execute_extract_to_temp(&app_handle, &analysis, &target_dir, archive_kind)
-        }
-    }
+    execute_recursive_extract(&app_handle, &analysis, &target_dir, archive_kind)
 }

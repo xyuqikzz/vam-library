@@ -7,6 +7,7 @@ const host = process.env.TAURI_DEV_HOST;
 
 // https://vite.dev/config/
 export default defineConfig(async () => ({
+  base: "./",
   plugins: [vue()],
 
   resolve: {
@@ -35,5 +36,9 @@ export default defineConfig(async () => ({
       // 3. tell Vite to ignore watching `src-tauri`
       ignored: ["**/src-tauri/**"],
     },
+  },
+  build: {
+    target: ["chrome87", "edge88", "es2020"],
+    cssTarget: "chrome87",
   },
 }));
