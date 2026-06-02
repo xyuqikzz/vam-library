@@ -2,6 +2,8 @@
 
 VAM Library 是一个基于 Tauri 2、Vue 3 和 TypeScript 的桌面端 Virt-A-Mate 资源管理工具。它面向本地 VAM 资源库，帮助用户扫描、浏览、整理、去重、迁移和分享 `.var` 资源包，并为按需启动与 Hub 下载提供基础工作流。
 
+仓库描述：基于 Tauri 2 + Vue 3 的 Virt-A-Mate 本地资源管理工具，支持资源扫描、依赖分析、去重、迁移和下载管理。
+
 ## 当前状态
 
 项目处于早期开发阶段，版本为 `0.1.0`。仓库中已经包含前端界面、Tauri 命令注册、本地 SQLite 索引、资源扫描、依赖分析、迁移、下载等模块的实现或入口。
@@ -143,4 +145,6 @@ npm run tauri:build
 
 ## 许可证
 
-当前仓库暂未声明许可证。如需公开分发，请先补充明确的 License 文件。
+本项目采用 MIT License 开源。
+
+Copyright (c) 2026 xyuqikzz
