@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::path::Path;
-use std::time::{SystemTime};
+use std::time::SystemTime;
 
 use rayon::prelude::*;
 use walkdir::WalkDir;
@@ -12,8 +12,8 @@ use crate::services::var_parser;
 use serde::{Deserialize, Serialize};
 
 /// Number of .var files parsed per parallel batch. Progress is reported once
-/// per chunk from the main thread, so this trades progress granularity for
-/// parallelism.
+/// per chunk from the calling thread, so this also controls progress
+/// granularity.
 const PARSE_CHUNK_SIZE: usize = 64;
 
 /// Progress information for ongoing scans
@@ -148,15 +148,14 @@ pub fn scan_addon_packages_with_cache(
     let mut failures = Vec::new();
     let mut skipped_files = 0usize;
 
-    // First pass: decide what actually needs parsing. Cache hits (matching
-    // size + modified time) are skipped, and files whose modified time could
-    // not be read are recorded as failures right away. This mirrors the old
-    // serial logic but keeps the expensive ZIP parsing out of the loop.
-    let mut to_parse: Vec<&ScannedVarFile> = Vec::with_capacity(total_files);
+    // First, decide which files actually need (re)parsing. Files that are
+    // unchanged since the last successful scan (same size + mtime) are skipped
+    // via the incremental cache, and files whose mtime could not be read are
+    // recorded as failures up front.
+    let mut to_parse: Vec<&ScannedVarFile> = Vec::new();
     for var_file in &var_files {
         if var_file.modified_time.is_empty() {
-            let error_msg =
-                format!("{}: failed to read modified time", var_file.path.display());
+            let error_msg = format!("{}: failed to read modified time", var_file.path.display());
             errors.push(error_msg.clone());
             failures.push(ScanFailure {
                 file_path: var_file.file_path.clone(),
@@ -180,11 +179,12 @@ pub fn scan_addon_packages_with_cache(
         to_parse.push(var_file);
     }
 
-    // Second pass: parse the remaining files in parallel chunks. rayon does
-    // the heavy ZIP/meta.json work across the thread pool; progress is
-    // reported once per chunk from this (single) thread so the &mut FnMut
-    // callback does not need to be Send/Sync.
-    let mut processed = 0usize;
+    // Second pass: parse the remaining .var files in parallel batches. Parsing
+    // is the expensive part (open archive, read meta.json, walk ZIP central
+    // directory) and is embarrassingly parallel. Progress is reported from this
+    // thread between chunks so the &mut FnMut callback is never shared across
+    // worker threads.
+    let mut parsed = 0usize;
     for chunk in to_parse.chunks(PARSE_CHUNK_SIZE) {
         if let Some(ref mut cb) = on_progress {
             let current_file = chunk
@@ -195,7 +195,7 @@ pub fn scan_addon_packages_with_cache(
                 .to_string();
             cb(ScanProgress {
                 total_files,
-                processed_files: skipped_files + processed,
+                processed_files: skipped_files + parsed,
                 current_file,
                 phase: "parsing".to_string(),
             });
@@ -223,7 +223,7 @@ pub fn scan_addon_packages_with_cache(
             }
         }
 
-        processed += chunk.len();
+        parsed += chunk.len();
     }
 
     let duration = start.elapsed();
