@@ -28,18 +28,16 @@ impl Database {
 
         // Performance & concurrency tuning.
         //
-        // The whole app shares a single Mutex<Connection>, and the scan,
-        // download worker, file watcher and UI queries all contend for it.
-        // These pragmas keep that contention cheap and avoid spurious
-        // "database is locked" errors:
+        // The whole app shares a single Mutex<Connection>, and several
+        // background workers (scanner, download worker, file watcher) compete
+        // with UI read queries. WAL allows concurrent readers alongside a
+        // single writer, NORMAL synchronous is safe under WAL and far faster,
+        // and busy_timeout prevents transient lock contention from surfacing as
+        // immediate "database is locked" errors. The cache/mmap/temp settings
+        // speed up bulk scan writes and large-library queries.
         //
-        // - journal_mode=WAL   : concurrent readers alongside a single writer
-        // - synchronous=NORMAL : safe under WAL, far fewer fsyncs than FULL
-        // - foreign_keys=ON    : enforce ON DELETE CASCADE relationships
-        // - busy_timeout=5000  : block up to 5s on a locked db instead of erroring
-        // - temp_store=MEMORY  : keep temporary b-trees in RAM
-        // - cache_size=-65536  : ~64 MiB page cache (negative = KiB)
-        // - mmap_size          : 256 MiB memory-mapped I/O for large reads
+        // journal_mode=WAL returns a result row, so PRAGMAs are executed as a
+        // batch via execute_batch.
         conn.execute_batch(
             "PRAGMA journal_mode=WAL;\n\
              PRAGMA synchronous=NORMAL;\n\
