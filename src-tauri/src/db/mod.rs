@@ -26,13 +26,30 @@ impl Database {
         let conn = Connection::open(db_path)
             .map_err(|e| AppError::Database(format!("Failed to open database: {}", e)))?;
 
-        // Enable WAL mode for better concurrent read performance
-        conn.execute_batch("PRAGMA journal_mode=WAL;")
-            .map_err(|e| AppError::Database(format!("Failed to set journal mode: {}", e)))?;
-
-        // Enable foreign keys
-        conn.execute_batch("PRAGMA foreign_keys=ON;")
-            .map_err(|e| AppError::Database(format!("Failed to enable foreign keys: {}", e)))?;
+        // Performance & concurrency tuning.
+        //
+        // The whole app shares a single Mutex<Connection>, and several
+        // background workers (scanner, download worker, file watcher) compete
+        // with UI read queries. WAL allows concurrent readers alongside a
+        // single writer, NORMAL synchronous is safe under WAL and far faster,
+        // and busy_timeout prevents transient lock contention from surfacing as
+        // immediate "database is locked" errors. The cache/mmap/temp settings
+        // speed up bulk scan writes and large-library queries.
+        //
+        // journal_mode=WAL returns a result row, so PRAGMAs are executed as a
+        // batch via execute_batch.
+        conn.execute_batch(
+            "PRAGMA journal_mode=WAL;\n\
+             PRAGMA synchronous=NORMAL;\n\
+             PRAGMA foreign_keys=ON;\n\
+             PRAGMA busy_timeout=5000;\n\
+             PRAGMA temp_store=MEMORY;\n\
+             PRAGMA cache_size=-65536;\n\
+             PRAGMA mmap_size=268435456;",
+        )
+        .map_err(|e| {
+            AppError::Database(format!("Failed to configure database pragmas: {}", e))
+        })?;
 
         // Run migrations
         schema::create_tables(&conn)?;
