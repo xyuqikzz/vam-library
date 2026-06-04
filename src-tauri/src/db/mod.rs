@@ -26,13 +26,32 @@ impl Database {
         let conn = Connection::open(db_path)
             .map_err(|e| AppError::Database(format!("Failed to open database: {}", e)))?;
 
-        // Enable WAL mode for better concurrent read performance
-        conn.execute_batch("PRAGMA journal_mode=WAL;")
-            .map_err(|e| AppError::Database(format!("Failed to set journal mode: {}", e)))?;
-
-        // Enable foreign keys
-        conn.execute_batch("PRAGMA foreign_keys=ON;")
-            .map_err(|e| AppError::Database(format!("Failed to enable foreign keys: {}", e)))?;
+        // Performance & concurrency tuning.
+        //
+        // The whole app shares a single Mutex<Connection>, and the scan,
+        // download worker, file watcher and UI queries all contend for it.
+        // These pragmas keep that contention cheap and avoid spurious
+        // "database is locked" errors:
+        //
+        // - journal_mode=WAL   : concurrent readers alongside a single writer
+        // - synchronous=NORMAL : safe under WAL, far fewer fsyncs than FULL
+        // - foreign_keys=ON    : enforce ON DELETE CASCADE relationships
+        // - busy_timeout=5000  : block up to 5s on a locked db instead of erroring
+        // - temp_store=MEMORY  : keep temporary b-trees in RAM
+        // - cache_size=-65536  : ~64 MiB page cache (negative = KiB)
+        // - mmap_size          : 256 MiB memory-mapped I/O for large reads
+        conn.execute_batch(
+            "PRAGMA journal_mode=WAL;\n\
+             PRAGMA synchronous=NORMAL;\n\
+             PRAGMA foreign_keys=ON;\n\
+             PRAGMA busy_timeout=5000;\n\
+             PRAGMA temp_store=MEMORY;\n\
+             PRAGMA cache_size=-65536;\n\
+             PRAGMA mmap_size=268435456;",
+        )
+        .map_err(|e| {
+            AppError::Database(format!("Failed to configure database pragmas: {}", e))
+        })?;
 
         // Run migrations
         schema::create_tables(&conn)?;
