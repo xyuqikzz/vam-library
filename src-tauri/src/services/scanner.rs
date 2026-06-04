@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 use std::path::Path;
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{SystemTime};
 
+use rayon::prelude::*;
 use walkdir::WalkDir;
 
 use crate::errors::AppError;
@@ -9,6 +10,11 @@ use crate::models::var_package::VarPackage;
 use crate::services::var_parser;
 
 use serde::{Deserialize, Serialize};
+
+/// Number of .var files parsed per parallel batch. Progress is reported once
+/// per chunk from the main thread, so this trades progress granularity for
+/// parallelism.
+const PARSE_CHUNK_SIZE: usize = 64;
 
 /// Progress information for ongoing scans
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -141,79 +147,83 @@ pub fn scan_addon_packages_with_cache(
     let mut errors = Vec::new();
     let mut failures = Vec::new();
     let mut skipped_files = 0usize;
-    let mut last_progress_at = Instant::now()
-        .checked_sub(Duration::from_millis(250))
-        .unwrap_or_else(Instant::now);
-    let mut last_progress_idx = 0usize;
 
-    // Second pass: parse each .var file
-    for (idx, var_file) in var_files.iter().enumerate() {
-        let filename = var_file
-            .path
-            .file_name()
-            .and_then(|f| f.to_str())
-            .unwrap_or("unknown")
-            .to_string();
-
-        let should_report = idx == 0
-            || idx + 1 == total_files
-            || idx.saturating_sub(last_progress_idx) >= 25
-            || last_progress_at.elapsed() >= Duration::from_millis(250);
-        if should_report {
-            if let Some(ref mut cb) = on_progress {
-                cb(ScanProgress {
-                    total_files,
-                    processed_files: idx,
-                    current_file: filename.clone(),
-                    phase: "parsing".to_string(),
-                });
-            }
-            last_progress_at = Instant::now();
-            last_progress_idx = idx;
-        }
-
-        let file_path = var_file.file_path.clone();
-        let size_bytes = var_file.size_bytes;
-        let modified_time = var_file.modified_time.clone();
-
-        if modified_time.is_empty() {
-            let error_msg = format!("{}: failed to read modified time", var_file.path.display());
+    // First pass: decide what actually needs parsing. Cache hits (matching
+    // size + modified time) are skipped, and files whose modified time could
+    // not be read are recorded as failures right away. This mirrors the old
+    // serial logic but keeps the expensive ZIP parsing out of the loop.
+    let mut to_parse: Vec<&ScannedVarFile> = Vec::with_capacity(total_files);
+    for var_file in &var_files {
+        if var_file.modified_time.is_empty() {
+            let error_msg =
+                format!("{}: failed to read modified time", var_file.path.display());
             errors.push(error_msg.clone());
             failures.push(ScanFailure {
-                file_path,
-                size_bytes,
-                modified_time,
+                file_path: var_file.file_path.clone(),
+                size_bytes: var_file.size_bytes,
+                modified_time: var_file.modified_time.clone(),
                 error: error_msg,
             });
             continue;
         }
 
-        if let Some(cache_entry) = cache.get(&file_path) {
+        if let Some(cache_entry) = cache.get(&var_file.file_path) {
             if cache_entry.scan_status == "ok"
-                && cache_entry.size_bytes == size_bytes
-                && cache_entry.modified_time == modified_time
+                && cache_entry.size_bytes == var_file.size_bytes
+                && cache_entry.modified_time == var_file.modified_time
             {
                 skipped_files += 1;
                 continue;
             }
         }
 
-        match var_parser::parse_var_file(&var_file.path) {
-            Ok(package) => {
-                packages.push(package);
-            }
-            Err(e) => {
-                let error_msg = format!("{}: {}", var_file.path.display(), e);
-                log::warn!("Failed to parse .var file: {}", error_msg);
-                errors.push(error_msg.clone());
-                failures.push(ScanFailure {
-                    file_path,
-                    size_bytes,
-                    modified_time,
-                    error: error_msg,
-                });
+        to_parse.push(var_file);
+    }
+
+    // Second pass: parse the remaining files in parallel chunks. rayon does
+    // the heavy ZIP/meta.json work across the thread pool; progress is
+    // reported once per chunk from this (single) thread so the &mut FnMut
+    // callback does not need to be Send/Sync.
+    let mut processed = 0usize;
+    for chunk in to_parse.chunks(PARSE_CHUNK_SIZE) {
+        if let Some(ref mut cb) = on_progress {
+            let current_file = chunk
+                .first()
+                .and_then(|vf| vf.path.file_name())
+                .and_then(|f| f.to_str())
+                .unwrap_or("")
+                .to_string();
+            cb(ScanProgress {
+                total_files,
+                processed_files: skipped_files + processed,
+                current_file,
+                phase: "parsing".to_string(),
+            });
+        }
+
+        let chunk_results: Vec<(&ScannedVarFile, Result<VarPackage, AppError>)> = chunk
+            .par_iter()
+            .map(|var_file| (*var_file, var_parser::parse_var_file(&var_file.path)))
+            .collect();
+
+        for (var_file, result) in chunk_results {
+            match result {
+                Ok(package) => packages.push(package),
+                Err(e) => {
+                    let error_msg = format!("{}: {}", var_file.path.display(), e);
+                    log::warn!("Failed to parse .var file: {}", error_msg);
+                    errors.push(error_msg.clone());
+                    failures.push(ScanFailure {
+                        file_path: var_file.file_path.clone(),
+                        size_bytes: var_file.size_bytes,
+                        modified_time: var_file.modified_time.clone(),
+                        error: error_msg,
+                    });
+                }
             }
         }
+
+        processed += chunk.len();
     }
 
     let duration = start.elapsed();
