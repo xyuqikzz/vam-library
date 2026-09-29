@@ -1,4 +1,17 @@
 export default {
+  sceneBrowserMod: {
+    update: 'Update mod',
+    updateAvailable: 'An older mod is installed. Version 1.0.2 fixes folder navigation in the scene preview. Exit VaM to update.',
+    title: 'Game mod · Scene browser',
+    description: 'Adds “作者 A–Z” (Author A–Z) and “按文件夹浏览” (Browse folders) to the in-game scene sort menu. Scenes by the same creator stay together.',
+    usage: 'Folder cards appear in the scene thumbnail grid and follow the physical AddonPackages hierarchy. Open a folder to see its packaged scenes; use the parent or root cards to go back. Choose a native sort mode to exit. Resource files are not moved.',
+    requirements: 'Targets VaM 1.22.0.13 and the BepInEx 5 / Harmony binaries used to build this mod. Compatibility is checked before installation. Exit the game first.',
+    noGame: 'Select your game root directory below first.',
+    installed: 'Installed', notInstalled: 'Not installed', refresh: 'Check status', install: 'Install mod', uninstall: 'Uninstall mod',
+    conflict: 'A different or modified DLL exists at the target. It will not be overwritten or removed.',
+    installSuccess: 'Mod installed and verified. Open the scene sort menu after starting the game.',
+    uninstallSuccess: 'Mod removed. Game resources were preserved.',
+  },
   // ── App Brand ──────────────────────────────────────────────────
   app: {
     name: 'VAM Library',

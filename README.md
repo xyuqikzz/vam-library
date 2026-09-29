@@ -20,6 +20,8 @@ The app uses a Vue 3 frontend talking to a Rust backend via Tauri commands. All 
 
 ### Features
 
+- **In-game scene browser mod** — Install/uninstall the bundled BepInEx mod from Settings. Adds author A–Z grouping and physical `AddonPackages` folder navigation to VaM's scene browser. Targets the recorded VaM 1.22.0.13 / BepInEx build; see [mod instructions](mods/SceneBrowser/README.md).
+
 - **Dashboard** — Overview of total packages, library size, recent additions, library health, and detection of corrupted packages.
 - **Package management** — Browse indexed `.var` packages with search, folder/tag filtering, thumbnails and scene previews; quick-delete packages, manage tags, and open packages or paths in the system file explorer.
 - **Scenes & Appearances** — Dedicated views to browse scenes and appearance presets contained in your library.
@@ -161,6 +163,8 @@ VAM Library 是一个用于管理本地 Virt-A-Mate 资源库（`.var` 资源包
 应用采用 Vue 3 前端 + Rust 后端，通过 Tauri 命令通信。所有索引数据保存在本地；只有你主动触发的移动 / 复制 / 链接 / 删除操作才会动到你真实的 VAM 文件。
 
 ### 主要功能
+
+- **游戏内场景浏览模组** — 在设置中安装 / 卸载内置 BepInEx 模组，在游戏场景预览中加入作者 A–Z 分组排序及真实 `AddonPackages` 文件夹浏览。适配清单中记录的 VaM 1.22.0.13 / BepInEx 构建，详见[模组说明](mods/SceneBrowser/README.md)。
 
 - **仪表盘** — 总览包数量、资源体积、最近新增、库健康状态，并检测损坏的资源包。
 - **包管理** — 浏览已索引的 `.var` 包，支持搜索、文件夹 / 标签筛选、缩略图与场景预览；可快速删除、管理标签，并在系统文件管理器中打开包或路径。

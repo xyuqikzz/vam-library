@@ -54,6 +54,9 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            commands::game_mods::get_scene_browser_mod_status,
+            commands::game_mods::install_scene_browser_mod,
+            commands::game_mods::uninstall_scene_browser_mod,
             commands::scan::scan_vam_directory,
             commands::scan::validate_vam_directory,
             commands::scan::start_file_watcher,

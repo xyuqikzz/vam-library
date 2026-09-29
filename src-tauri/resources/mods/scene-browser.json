@@ -1,0 +1,18 @@
+{
+  "version": "1.0.2",
+  "gameVersion": "1.22.0.13",
+  "files": [
+    {
+      "sha256": "b368d7a6bf3c2a51861741d26c13a0e92e687db55c99c6285320717d7e4978db",
+      "path": "VaM_Data/Managed/Assembly-CSharp.dll"
+    },
+    {
+      "sha256": "3de63e90e4aa683dcfcfeaa0cfa36b5d72f07a21be5ff9bb1743e8a2a48218f2",
+      "path": "BepInEx/core/BepInEx.dll"
+    },
+    {
+      "sha256": "c5adb25a38f112ad1d2ceee431c64ac4c750e4e080dbabac9deddb52532a185b",
+      "path": "BepInEx/core/0Harmony.dll"
+    }
+  ]
+}

@@ -1,4 +1,17 @@
 export default {
+  sceneBrowserMod: {
+    update: '更新模组',
+    updateAvailable: '检测到旧版模组。1.0.2 修复场景预览器中的文件夹入口，退出游戏后即可更新。',
+    title: '游戏模组 · 场景浏览增强',
+    description: '在游戏的场景预览排序菜单中加入“作者 A–Z”和“按文件夹浏览”。同一作者的场景排在一起。',
+    usage: '文件夹模式在场景缩略图区域显示真实 AddonPackages 文件夹卡片，点击进入；当前层显示该层 VAR 包中的场景，并提供返回上级、根目录入口。选择原排序即可退出，不移动资源文件。',
+    requirements: '适配 VaM 1.22.0.13 和本模组构建时的 BepInEx 5 / Harmony 环境。安装前会校验兼容性，请先退出游戏。',
+    noGame: '请先在下方设置游戏根目录。',
+    installed: '已安装', notInstalled: '未安装', refresh: '检查状态', install: '安装模组', uninstall: '卸载模组',
+    conflict: '安装位置存在其他版本或修改过的 DLL，软件不会覆盖或删除它。',
+    installSuccess: '模组已安装并校验。下次启动游戏后，打开场景预览的排序菜单即可使用。',
+    uninstallSuccess: '模组已卸载，游戏资源未改动。',
+  },
   // ── App Brand ──────────────────────────────────────────────────
   app: {
     name: 'VAM Library',

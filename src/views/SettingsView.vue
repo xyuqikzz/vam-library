@@ -1,5 +1,6 @@
 <template>
   <div class="settings-view animate-fadeIn">
+    <SceneBrowserModPanel />
     <!-- General -->
     <GlassPanel :title="$t('settings.general')">
       <div class="setting-row">
@@ -341,6 +342,7 @@ import { useLocalLibraryStore } from '@/stores/localLibrary'
 import { useNotification } from '@/composables/useNotification'
 import { invoke } from '@tauri-apps/api/core'
 import GlassPanel from '@/components/common/GlassPanel.vue'
+import SceneBrowserModPanel from '@/components/SceneBrowserModPanel.vue'
 
 const { t } = useI18n()
 const appStore = useAppStore()
