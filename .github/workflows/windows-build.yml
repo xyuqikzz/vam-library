@@ -1,0 +1,116 @@
+name: Windows build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-build-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' }}
+
+jobs:
+  build:
+    name: Build Windows x64
+    runs-on: windows-2022
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      CARGO_TERM_COLOR: always
+      CARGO_INCREMENTAL: '0'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Check application and tag versions
+        id: version
+        run: node .github/scripts/check-version.mjs
+
+      - name: Set up Rust
+        run: |
+          rustup toolchain install stable --profile minimal
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          rustup default stable
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: src-tauri -> target
+          cache-on-failure: true
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Type-check and build frontend
+        run: npm run build
+
+      # The ignored game integration test requires proprietary local VaM files.
+      # CI tests the app and packages the already committed scene-browser DLL.
+      - name: Test Rust backend
+        run: cargo test --release --locked --manifest-path src-tauri/Cargo.toml
+
+      - name: Build Windows installers
+        run: |
+          # A restored Rust cache may contain bundles from an earlier version.
+          $bundle = Join-Path $env:GITHUB_WORKSPACE 'src-tauri/target/release/bundle'
+          if (Test-Path -LiteralPath $bundle) {
+            $resolved = (Resolve-Path -LiteralPath $bundle).Path
+            $workspace = [IO.Path]::GetFullPath($env:GITHUB_WORKSPACE).TrimEnd('\') + '\'
+            if (!$resolved.StartsWith($workspace, [StringComparison]::OrdinalIgnoreCase)) { throw 'Unexpected bundle path' }
+            Remove-Item -LiteralPath $resolved -Recurse -Force
+          }
+          npm run tauri -- build --ci --bundles nsis,msi -- --locked
+
+      - name: Collect installers, portable ZIP and checksums
+        env:
+          APP_VERSION: ${{ steps.version.outputs.version }}
+        run: ./.github/scripts/collect-windows-artifacts.ps1
+
+      - name: Upload Windows packages
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: VAM-Library-windows-x64-${{ steps.version.outputs.version }}-${{ github.run_number }}
+          path: artifacts/*
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+
+  release:
+    name: Publish version release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: VAM-Library-windows-x64-*
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create release and attach Windows packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          (cd artifacts && sha256sum --check SHA256SUMS.txt)
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" --verify-tag --title "VAM Library $RELEASE_TAG" --generate-notes
+          fi
+          gh release upload "$RELEASE_TAG" artifacts/* --clobber
