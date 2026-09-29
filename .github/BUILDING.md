@@ -4,7 +4,7 @@
 
 - 推送 `main`：运行前端检查、Rust 测试，构建并上传安装包。
 - GitHub Actions 中选择 **Windows build → Run workflow**：手动打包指定分支。
-- 推送 `vX.Y.Z` 标签：同样构建，成功后自动创建 GitHub Release 并上传文件。标签必须匹配 `package.json`、`src-tauri/tauri.conf.json`、`src-tauri/Cargo.toml` 中一致的版本号。普通分支构建不会创建 Release。
+- 推送 `X.Y.Z` 或 `vX.Y.Z` 标签：同样构建，成功后自动创建 GitHub Release 并上传文件。标签必须匹配 `package.json`、`src-tauri/tauri.conf.json`、`src-tauri/Cargo.toml` 中一致的版本号。普通分支构建不会创建 Release。
 
 ## 下载
 
@@ -23,4 +23,4 @@
 
 场景浏览模组 DLL 已在仓库中，直接内置到应用。GitHub 不包含游戏程序集，不重新编译该 DLL，也不运行需要本地游戏的 ignored 集成测试。更新模组源码后，应先在本地按 `mods/SceneBrowser/README.md` 构建和验证，并一起提交新 DLL 与兼容性清单。
 
-发布新版本时先更新并提交三个应用版本号，再创建和推送对应的 `vX.Y.Z` 标签。工作流不会替你创建标签或改变版本号。模组版本与应用版本独立，例如模组 1.0.2 可以内置在应用 0.1.0 中。
+发布新版本时先更新并提交三个应用版本号，再创建和推送对应的 `X.Y.Z` 或 `vX.Y.Z` 附注标签。建议用 `git tag -a X.Y.Z -F 中文说明文件.md` 写入功能说明，发布页会读取标签备注。工作流不会替你创建标签或改变版本号。模组版本与应用版本独立，例如模组 1.0.2 可以内置在应用 0.1.0 中。
