@@ -111,6 +111,13 @@ jobs:
           set -euo pipefail
           (cd artifacts && sha256sum --check SHA256SUMS.txt)
           if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release create "$RELEASE_TAG" --verify-tag --title "VAM Library $RELEASE_TAG" --notes-from-tag
+            tag_ref=$(gh api "repos/$GH_REPO/git/ref/tags/$RELEASE_TAG")
+            tag_sha=$(jq -r '.object.sha' <<< "$tag_ref")
+            if [[ $(jq -r '.object.type' <<< "$tag_ref") == tag ]]; then
+              gh api "repos/$GH_REPO/git/tags/$tag_sha" --jq '.message' > release-notes.md
+            else
+              gh api "repos/$GH_REPO/commits/$tag_sha" --jq '.commit.message' > release-notes.md
+            fi
+            gh release create "$RELEASE_TAG" --verify-tag --title "VAM Library $RELEASE_TAG" --notes-file release-notes.md
           fi
           gh release upload "$RELEASE_TAG" artifacts/* --clobber
