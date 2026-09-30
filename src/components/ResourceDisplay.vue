@@ -46,7 +46,7 @@
           <div v-for="pkg in paginatedPackages" :key="pkg.id" class="large-card glass-card-component" @click="selectPackage(pkg)">
             <!-- 缩略图区域 -->
             <div class="large-card-thumb">
-              <img v-if="thumbnails[pkg.id]" :src="thumbnails[pkg.id]" :alt="getVarFileName(pkg)" class="thumb-img" @error="onThumbError(pkg.id)" />
+              <img data-resource-preview v-if="thumbnails[pkg.id]" :src="thumbnails[pkg.id]" :alt="getVarFileName(pkg)" class="thumb-img" @error="onThumbError(pkg.id)" />
               <div v-else class="thumb-placeholder">
                 <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
                   <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="1.5" />
@@ -87,7 +87,7 @@
         <div v-else-if="viewMode === 'small-card'" class="small-card-grid">
           <div v-for="pkg in paginatedPackages" :key="pkg.id" class="small-card glass-card-component" @click="selectPackage(pkg)">
             <div class="small-card-thumb">
-              <img v-if="thumbnails[pkg.id]" :src="thumbnails[pkg.id]" :alt="getVarFileName(pkg)" class="thumb-img" @error="onThumbError(pkg.id)" />
+              <img data-resource-preview v-if="thumbnails[pkg.id]" :src="thumbnails[pkg.id]" :alt="getVarFileName(pkg)" class="thumb-img" @error="onThumbError(pkg.id)" />
               <div v-else class="thumb-placeholder sm">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
                   <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="1.5" />
@@ -113,7 +113,7 @@
           </div>
           <div v-for="pkg in paginatedPackages" :key="pkg.id" class="list-row" @click="selectPackage(pkg)">
             <span class="list-cell col-thumb">
-              <img v-if="thumbnails[pkg.id]" :src="thumbnails[pkg.id]" :alt="getVarFileName(pkg)" class="list-thumb-img" @error="onThumbError(pkg.id)" />
+              <img data-resource-preview v-if="thumbnails[pkg.id]" :src="thumbnails[pkg.id]" :alt="getVarFileName(pkg)" class="list-thumb-img" @error="onThumbError(pkg.id)" />
               <div v-else class="list-thumb-placeholder">
                 <span class="type-dot-sm" :class="'type-' + (pkg.resource_types[0] || 'other')" />
                 <span>{{ $t('packages.noThumbnail') }}</span>
@@ -166,7 +166,7 @@
     <Transition name="slide-right">
       <div v-if="selectedPackage" class="detail-panel glass-panel">
         <div class="detail-header">
-          <button class="detail-close" @click="selectedPackage = null">
+          <button class="detail-close" :aria-label="$t('gameContent.close')" :disabled="extractingCharacter" @click="selectedPackage = null">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" /></svg>
           </button>
           <button
@@ -197,7 +197,7 @@
             >
               <span>{{ dependencyCompletionLoading ? '查询中...' : '补齐依赖' }}</span>
             </button>
-            <button v-if="props.showQuickDelete" class="action-bar-btn delete" :disabled="deleteLoading" @click="quickDeleteSelected(true)" :title="$t('common.delete')">
+            <button v-if="props.showQuickDelete" class="action-bar-btn delete" :disabled="deleteLoading || extractingCharacter" @click="quickDeleteSelected(true)" :title="$t('common.delete')">
               <span>{{ $t('common.delete') }}</span>
             </button>
             <button class="action-bar-btn open-location" @click="openPackageFolder" :title="$t('packages.openLocation')">
@@ -205,8 +205,10 @@
             </button>
           </div>
 
+          <PackageSceneExtractor :key="selectedPackage.id" :package-id="selectedPackage.id" @busy-change="extractingCharacter = $event" />
+
           <div class="detail-thumb">
-            <img v-if="detailThumb" :src="detailThumb" :alt="getVarFileName(selectedPackage)" class="detail-thumb-img" />
+            <img data-resource-preview v-if="detailThumb" :src="detailThumb" :alt="getVarFileName(selectedPackage)" class="detail-thumb-img" />
             <div v-else class="detail-thumb-placeholder">
               <svg width="40" height="40" viewBox="0 0 24 24" fill="none">
                 <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="1.5" />
@@ -254,7 +256,7 @@
                     :title="image.path"
                     @click="openImagePreview(image)"
                   >
-                    <img
+                    <img data-resource-preview
                       v-if="packageImageUrls[image.path]"
                       :src="packageImageUrls[image.path]"
                       :alt="image.path"
@@ -328,7 +330,7 @@
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" /></svg>
           </button>
         </div>
-        <img v-if="previewImageUrl" class="image-preview-img" :src="previewImageUrl" :alt="previewImage.path" />
+        <img data-resource-preview v-if="previewImageUrl" class="image-preview-img" :src="previewImageUrl" :alt="previewImage.path" />
         <div v-else class="image-preview-loading">{{ $t('common.loading') }}</div>
       </div>
     </div>
@@ -385,6 +387,7 @@ import { useRouter } from 'vue-router'
 import { invoke } from '@tauri-apps/api/core'
 import EmptyState from '@/components/common/EmptyState.vue'
 import ShareModal from '@/components/ShareModal.vue'
+import PackageSceneExtractor from '@/components/PackageSceneExtractor.vue'
 import { useNotification } from '@/composables/useNotification'
 import { useDownloadStore } from '@/stores/download'
 import type { PackageDisplayItem, PackageImageEntry } from '@/types/package'
@@ -704,6 +707,7 @@ onUnmounted(() => { observer?.disconnect() })
 
 // ── 选中与详情 ────────────────────────────────────────────────
 const selectedPackage = ref<PackageDisplayItem | null>(null)
+const extractingCharacter = ref(false)
 const selectedPackageImages = ref<PackageImageEntry[]>([])
 const imageListLoading = ref(false)
 const packageImageUrls = ref<Record<string, string>>({})
@@ -799,6 +803,7 @@ function dependencyRelationStatusText(dep: DependencyRelation): string {
 }
 
 function selectPackage(pkg: PackageDisplayItem) {
+  if (extractingCharacter.value) return
   selectedPackage.value = pkg
   previewImage.value = null
   imagesExpanded.value = false
@@ -1324,7 +1329,7 @@ function resourceTypeLabel(type: string): string {
 .detail-panel {
   position: absolute; top: 0; right: 0; width: min(520px, 88vw); height: 100%; z-index: calc(var(--z-overlay) + 10);
   border-radius: 0; border-left: 1px solid var(--border-subtle);
-  background: rgba(28, 28, 30, 0.92); /* backdrop-filter removed */
+  background: var(--bg-surface);
   display: flex; flex-direction: column;
   box-shadow: -24px 0 60px rgba(0, 0, 0, 0.35);
 }
@@ -1359,6 +1364,7 @@ function resourceTypeLabel(type: string): string {
   flex-shrink: 0;
 }
 .detail-body { flex: 1; overflow-y: auto; padding: var(--space-5); display: flex; flex-direction: column; gap: var(--space-4); }
+.detail-body > * { flex-shrink: 0; }
 .detail-thumb { width: 100%; height: 220px; border-radius: var(--radius-md); overflow: hidden; background: #000; display: flex; align-items: center; justify-content: center; }
 .detail-thumb-img { width: 100%; height: 100%; object-fit: contain; }
 .detail-thumb-placeholder {

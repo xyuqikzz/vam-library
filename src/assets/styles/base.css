@@ -380,3 +380,11 @@ textarea:focus,
   background: var(--bg-active);
   border-color: var(--border-strong);
 }
+
+/* Preview blur is enabled unless an explicitly saved preference turns it off.
+   Mark content images, not application logos; root scope also covers Teleport. */
+:root:not([data-preview-blur="off"]) img[data-resource-preview],
+:root:not([data-preview-blur="off"]) [data-resource-preview-content] img {
+  filter: blur(20px) !important;
+  clip-path: inset(0);
+}

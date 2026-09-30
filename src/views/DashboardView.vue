@@ -55,7 +55,7 @@
               class="recent-card"
               :title="`${pkg.creator}.${pkg.name}`"
             >
-              <img
+              <img data-resource-preview
                 v-if="thumbnails[pkg.id]"
                 :src="thumbnails[pkg.id]"
                 :alt="pkg.creator + '.' + pkg.name"

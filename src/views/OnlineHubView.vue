@@ -110,8 +110,8 @@
           >
             <!-- Thumbnail Area -->
             <div class="card-thumb-area">
-              <img v-if="item.image_url" :src="item.image_url" class="card-img" alt="cover" loading="lazy" />
-              <img v-else-if="item.icon_url" :src="item.icon_url" class="card-icon-img" alt="icon" loading="lazy" />
+              <img data-resource-preview v-if="item.image_url" :src="item.image_url" class="card-img" alt="cover" loading="lazy" />
+              <img data-resource-preview v-else-if="item.icon_url" :src="item.icon_url" class="card-icon-img" alt="icon" loading="lazy" />
               <div v-else class="card-placeholder">
                 <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
                   <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
@@ -230,8 +230,8 @@
             <div class="panel-info-card glass-card">
               <div class="panel-hero-row">
                 <div class="panel-image-container">
-                  <img v-if="detailPackage.image_url" :src="detailPackage.image_url" class="panel-cover-img" alt="cover" />
-                  <img v-else-if="detailPackage.icon_url" :src="detailPackage.icon_url" class="panel-icon-img" alt="icon" />
+                  <img data-resource-preview v-if="detailPackage.image_url" :src="detailPackage.image_url" class="panel-cover-img" alt="cover" />
+                  <img data-resource-preview v-else-if="detailPackage.icon_url" :src="detailPackage.icon_url" class="panel-icon-img" alt="icon" />
                   <div v-else class="panel-img-placeholder">
                     <svg width="40" height="40" viewBox="0 0 24 24" fill="none">
                       <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
@@ -280,7 +280,7 @@
                 <div class="loading-spinner-sm"></div>
                 <span>正在加载描述...</span>
               </div>
-              <div v-else-if="detailPackage.description" class="desc-content text-sm text-secondary" v-html="formatDescription(detailPackage.description)"></div>
+              <div v-else-if="detailPackage.description" class="desc-content text-sm text-secondary" data-resource-preview-content v-html="formatDescription(detailPackage.description)"></div>
               <div v-else class="text-secondary text-sm italic">无详细描述</div>
             </div>
 

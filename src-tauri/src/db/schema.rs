@@ -164,6 +164,10 @@ CREATE INDEX IF NOT EXISTS idx_package_tags_tag ON package_tags(tag);
 
 /// Execute all CREATE TABLE and CREATE INDEX statements
 pub fn create_tables(conn: &Connection) -> Result<(), AppError> {
+    conn.execute_batch("CREATE TABLE IF NOT EXISTS game_content_names (
+        vam_root TEXT NOT NULL, resource_key TEXT NOT NULL, name TEXT NOT NULL,
+        PRIMARY KEY (vam_root, resource_key)
+    );")?;
     conn.execute_batch(CREATE_PACKAGES_TABLE)
         .map_err(|e| AppError::Database(format!("Failed to create packages table: {}", e)))?;
 
@@ -273,6 +277,8 @@ pub fn create_tables(conn: &Connection) -> Result<(), AppError> {
                 e
             ))
         })?;
+
+    ensure_column(conn, "resource_migration_log", "file_modified_time", "TEXT")?;
 
     conn.execute_batch(CREATE_CLEANUP_TRASH_TABLE)
         .map_err(|e| AppError::Database(format!("Failed to create cleanup_trash table: {}", e)))?;

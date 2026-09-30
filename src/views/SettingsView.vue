@@ -102,6 +102,29 @@
       </div>
     </GlassPanel>
 
+    <GlassPanel :title="$t('settings.previewSettings')">
+      <div class="setting-row">
+        <div class="setting-info">
+          <h4 id="blur-previews-label" class="setting-label">{{ $t('settings.blurPreviews') }}</h4>
+          <p id="blur-previews-description" class="setting-description">{{ $t('settings.blurPreviewsDesc') }}</p>
+        </div>
+        <div class="setting-control">
+          <button
+            type="button"
+            role="switch"
+            aria-labelledby="blur-previews-label"
+            aria-describedby="blur-previews-description"
+            :aria-checked="appStore.blurPreviews"
+            :class="['toggle-switch', { on: appStore.blurPreviews }]"
+            :disabled="isSavingPreviewSettings"
+            @click="togglePreviewBlur"
+          >
+            <span class="toggle-thumb" />
+          </button>
+        </div>
+      </div>
+    </GlassPanel>
+
     <!-- Language Settings -->
     <GlassPanel :title="$t('settings.language')">
       <div class="setting-row">
@@ -297,7 +320,7 @@
       <div class="about-content">
         <div class="about-row">
           <span class="about-label">{{ $t('settings.version') }}</span>
-          <span class="about-value">0.1.0</span>
+          <span class="about-value">0.1.1</span>
         </div>
         <div class="about-row">
           <span class="about-label">{{ $t('settings.framework') }}</span>
@@ -363,6 +386,19 @@ const {
 } = storeToRefs(appStore)
 
 const notify = useNotification()
+const isSavingPreviewSettings = ref(false)
+async function togglePreviewBlur() {
+  if (isSavingPreviewSettings.value) return
+  isSavingPreviewSettings.value = true
+  try {
+    await appStore.setBlurPreviews(!appStore.blurPreviews)
+  } catch (error) {
+    notify.error(t('settings.previewSaveFailed', { error: String(error) }))
+  } finally {
+    isSavingPreviewSettings.value = false
+  }
+}
+
 const isClearingThumbnails = ref(false)
 const isClearingLocalData = ref(false)
 const confirmClearLocalData = ref(false)

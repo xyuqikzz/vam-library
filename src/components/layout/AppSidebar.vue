@@ -156,6 +156,16 @@ const browseItems = computed(() => [
 
 const resourcesItems = computed(() => [
   {
+    route: '/appearances',
+    label: t('sidebar.appearances'),
+    icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="7" r="4" stroke="currentColor" stroke-width="1.5"/><path d="M5 21v-2a7 7 0 0 1 14 0v2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>',
+  },
+  {
+    route: '/scenes',
+    label: t('sidebar.scenes'),
+    icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3l-5.6 2.9 1.1-6.2L3 9.6l6.2-.9L12 3Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>',
+  },
+  {
     route: '/online',
     label: t('sidebar.onlineHub'),
     icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.5"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" stroke="currentColor" stroke-width="1.5"/></svg>',
@@ -179,18 +189,13 @@ const toolsItems = computed(() => [
     icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M9 9H21V21H9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   },
   {
-    route: '/on-demand',
-    label: t('sidebar.onDemand'),
-    icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M8 5v14l11-7L8 5Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M4 6v12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>',
-  },
-  {
     route: '/migration',
     label: t('sidebar.migration'),
     icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4 12H20M20 12L16 8M20 12L16 16" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 6H4M4 6L8 2M4 6L8 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.4"/></svg>',
   },
   {
-    route: '/unpack',
-    label: t('sidebar.unpack'),
+    route: '/ingestion',
+    label: t('sidebar.ingestion'),
     icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 2L3 7v10l9 5 9-5V7l-9-5z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M12 22V12" stroke="currentColor" stroke-width="1.5"/><path d="M21 7l-9 5L3 7" stroke="currentColor" stroke-width="1.5"/><path d="M12 12V6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M9 9l3-3 3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   },
   {

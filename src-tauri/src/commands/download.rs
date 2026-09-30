@@ -55,7 +55,7 @@ pub async fn pause_download(
     // 2. Trigger cancellation of tokio task if it is active
     {
         let mut active = manager.active_downloads.lock().unwrap();
-        if let Some(cancel_tx) = active.remove(&id) {
+        if let Some(cancel_tx) = active.get_mut(&id).and_then(Option::take) {
             let _ = cancel_tx.send(());
         }
     }
@@ -93,7 +93,7 @@ pub async fn cancel_download(
     // 1. If currently downloading, trigger cancel
     {
         let mut active = manager.active_downloads.lock().unwrap();
-        if let Some(cancel_tx) = active.remove(&id) {
+        if let Some(cancel_tx) = active.get_mut(&id).and_then(Option::take) {
             let _ = cancel_tx.send(());
         }
     }
@@ -117,10 +117,14 @@ pub async fn retry_download(
     {
         let mut queue = manager.queue.lock().unwrap();
         if let Some(item) = queue.iter_mut().find(|i| i.id == id) {
-            item.status = DownloadStatus::Pending;
-            item.progress = 0.0;
-            item.downloaded_bytes = 0;
-            item.error_msg = None;
+            if item.status == DownloadStatus::Failed
+                || item.status == DownloadStatus::Paused
+                || (item.status == DownloadStatus::Completed && !item.indexed)
+            {
+                item.status = DownloadStatus::Pending;
+                item.error_msg = None;
+                item.warning_msg = None;
+            }
         }
     }
 

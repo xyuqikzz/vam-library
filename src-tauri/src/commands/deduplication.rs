@@ -1,53 +1,16 @@
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
-use tauri::State;
-
 use crate::db::Database;
 use crate::errors::AppError;
 use crate::services::install_context::resolve_install_context;
+use crate::services::resource_dedup::{self, DedupSnapshot, DedupSummary, DuplicateGroup};
+use crate::services::resource_files::{self as files};
+use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
+use std::path::{Path, PathBuf};
+use std::sync::Mutex;
+use tauri::{Manager, State};
 
-/// A single instance in a duplicate group
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DuplicateInstance {
-    pub package_id: String,
-    pub file_path: String,
-    pub size_bytes: u64,
-    pub is_recommended_keep: bool,
-    #[serde(default)]
-    pub source_type: String,
-    #[serde(default)]
-    pub link_type: Option<String>,
-}
-
-/// A group of duplicate files
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DuplicateGroup {
-    pub id: String,
-    pub strategy: String,
-    pub file_hash: String,
-    pub resource_path: String,
-    pub total_wasted_bytes: u64,
-    pub file_count: usize,
-    pub instances: Vec<DuplicateInstance>,
-}
-
-/// Summary of deduplication scan results
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DedupSummary {
-    pub duplicate_groups: usize,
-    pub total_wasted_bytes: u64,
-    pub safe_to_clean_count: usize,
-    pub total_files: usize,
-    pub scanned_files: usize,
-}
-
-/// Resolution action for a group
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DuplicateResolution {
-    pub group_id: String,
-    pub keep_package_ids: Vec<String>,
-}
+#[derive(Default)]
+pub struct DedupState(pub Mutex<Option<DedupSnapshot>>);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CleanupTrashEntry {
@@ -59,289 +22,81 @@ pub struct CleanupTrashEntry {
     pub created_at: String,
 }
 
-/// Helper function to compute the MD5 hash of a physical file on disk using a 64KB buffer.
-fn compute_file_md5(path: &str) -> Result<String, String> {
-    let mut file =
-        std::fs::File::open(path).map_err(|e| format!("Failed to open file '{}': {}", path, e))?;
-    let mut context = md5::Context::new();
-    let mut buffer = [0u8; 65536]; // 64KB buffer
-    loop {
-        let n = std::io::Read::read(&mut file, &mut buffer)
-            .map_err(|e| format!("Failed to read file '{}': {}", path, e))?;
-        if n == 0 {
-            break;
-        }
-        context.consume(&buffer[..n]);
-    }
-    let digest = context.compute();
-    Ok(format!("{:x}", digest))
+#[derive(Debug, Serialize)]
+pub struct CleanupResult {
+    pub cleaned: usize,
+    pub archived: usize,
+    pub removed_directories: usize,
+    pub errors: Vec<String>,
 }
 
-/// Scan all physical packages to find duplicate .var files based on Name and MD5.
-/// Computes MD5 incrementally for packages that have multiple physical copies.
 #[tauri::command]
 pub async fn scan_for_duplicates(
-    db: State<'_, Database>,
-    _vam_root: String,
+    app_handle: tauri::AppHandle,
+    vam_root: String,
 ) -> Result<DedupSummary, String> {
-    db.with_conn(|conn| {
-        // 1. Find all package IDs that have multiple copies on disk
-        let mut stmt = conn.prepare(
-            "SELECT package_id, COUNT(*) as cnt
-             FROM physical_packages
-             GROUP BY package_id
-             HAVING cnt > 1"
-        ).map_err(|e| e.to_string())?;
-
-        let duplicate_pkg_ids: Vec<String> = stmt.query_map([], |row| {
-            Ok(row.get::<_, String>(0)?)
-        })
-        .map_err(|e| e.to_string())?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| e.to_string())?;
-
-        let mut scanned = 0;
-
-        // 2. Incremental/Lazy MD5 computation for these potential duplicates
-        for pkg_id in &duplicate_pkg_ids {
-            let mut stmt2 = conn.prepare(
-                "SELECT file_path, file_md5 FROM physical_packages WHERE package_id = ?1"
-            ).map_err(|e| e.to_string())?;
-
-            let rows: Vec<(String, Option<String>)> = stmt2.query_map(rusqlite::params![pkg_id], |row| {
-                Ok((row.get(0)?, row.get(1)?))
-            })
-            .map_err(|e| e.to_string())?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| e.to_string())?;
-
-            for (file_path, existing_md5) in rows {
-                if existing_md5.is_none() || existing_md5.as_ref().unwrap().is_empty() {
-                    if Path::new(&file_path).exists() {
-                        if let Ok(md5_val) = compute_file_md5(&file_path) {
-                            conn.execute(
-                                "UPDATE physical_packages SET file_md5 = ?1 WHERE file_path = ?2",
-                                rusqlite::params![md5_val, file_path],
-                            ).map_err(|e| e.to_string())?;
-                        }
-                    }
-                    scanned += 1;
-                }
-            }
+    tauri::async_runtime::spawn_blocking(move || {
+        let _guard = files::maintenance_lock()?;
+        let mut root = PathBuf::from(vam_root);
+        if root.join("AddonPackages").is_dir() {
+            root = root.join("AddonPackages");
         }
-
-        // 3. Find true duplicate groups (same package_id and same MD5)
-        let mut group_stmt = conn.prepare(
-            "SELECT package_id, file_md5, COUNT(*) as cnt, SUM(size_bytes) as total_size, MAX(size_bytes) as single_size
-             FROM physical_packages
-             WHERE file_md5 IS NOT NULL AND file_md5 != ''
-             GROUP BY package_id, file_md5
-             HAVING cnt > 1"
-        ).map_err(|e| e.to_string())?;
-
-        let groups: Vec<(String, String, i64, i64, i64)> = group_stmt.query_map([], |row| {
-            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?))
-        })
-        .map_err(|e| e.to_string())?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| e.to_string())?;
-
-        let duplicate_groups = groups.len();
-        let mut total_wasted_bytes = 0u64;
-
-        for (_pkg_id, _md5, _cnt, total_size, single_size) in &groups {
-            // Wasted space = total size - size of 1 kept copy
-            let wasted = *total_size as u64 - *single_size as u64;
-            total_wasted_bytes += wasted;
-        }
-
-        let total_files: usize = conn.query_row(
-            "SELECT COUNT(*) FROM physical_packages",
-            [],
-            |row| row.get(0)
-        ).unwrap_or(0);
-
-        Ok(DedupSummary {
-            duplicate_groups,
-            total_wasted_bytes,
-            safe_to_clean_count: duplicate_groups,
-            scanned_files: scanned,
-            total_files,
-        })
+        let snapshot = resource_dedup::scan(
+            &root,
+            load_manifest_link_types(&app_handle).into_keys().collect(),
+        )?;
+        let summary = snapshot.summary.clone();
+        *app_handle
+            .state::<DedupState>()
+            .0
+            .lock()
+            .map_err(|e| e.to_string())? = Some(snapshot);
+        Ok(summary)
     })
-    .map_err(|e| e.to_string())
+    .await
+    .map_err(|e| e.to_string())?
 }
 
-/// Retrieve all duplicate physical package groups with their instances.
 #[tauri::command]
 pub async fn get_duplicate_groups(
-    app_handle: tauri::AppHandle,
-    db: State<'_, Database>,
+    state: State<'_, DedupState>,
 ) -> Result<Vec<DuplicateGroup>, String> {
-    let manifest_link_types = load_manifest_link_types(&app_handle);
-    db.with_conn(|conn| {
-        let mut group_stmt = conn.prepare(
-            "SELECT package_id, file_md5, COUNT(*) as cnt, SUM(size_bytes) as total_size, MAX(size_bytes) as single_size
-             FROM physical_packages
-             WHERE file_md5 IS NOT NULL AND file_md5 != ''
-             GROUP BY package_id, file_md5
-             HAVING cnt > 1"
-        ).map_err(|e| e.to_string())?;
-
-        let groups: Vec<(String, String, i64, i64, i64)> = group_stmt.query_map([], |row| {
-            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?))
-        })
+    Ok(state
+        .0
+        .lock()
         .map_err(|e| e.to_string())?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| e.to_string())?;
-
-        let mut dup_groups = Vec::new();
-
-        for (pkg_id, md5, cnt, total_size, single_size) in groups {
-            let mut inst_stmt = conn.prepare(
-                "SELECT file_path, size_bytes FROM physical_packages WHERE package_id = ?1 AND file_md5 = ?2"
-            ).map_err(|e| e.to_string())?;
-
-            let mut instances: Vec<(String, i64)> = inst_stmt.query_map(rusqlite::params![pkg_id, md5], |row| {
-                Ok((row.get(0)?, row.get(1)?))
-            })
-            .map_err(|e| e.to_string())?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| e.to_string())?;
-
-            // Sort instances by length of file path (recommend keeping shortest path, which is typically cleaner/closer to root)
-            instances.sort_by(|a, b| a.0.len().cmp(&b.0.len()));
-
-            let mut dup_instances = Vec::new();
-            for (idx, (file_path, size)) in instances.iter().enumerate() {
-                let path_obj = Path::new(file_path);
-                
-                // Get parent directory name for display in UI
-                let folder_name = path_obj.parent()
-                    .and_then(|p| p.file_name())
-                    .and_then(|f| f.to_str())
-                    .unwrap_or("AddonPackages")
-                    .to_string();
-
-                let (source_type, link_type) =
-                    classify_physical_file(path_obj, Some(&manifest_link_types));
-                dup_instances.push(DuplicateInstance {
-                    package_id: folder_name, // Displays folder name (e.g. "Subfolder" or "AddonPackages")
-                    file_path: file_path.clone(),
-                    size_bytes: *size as u64,
-                    is_recommended_keep: idx == 0,
-                    source_type,
-                    link_type,
-                });
-            }
-
-            let wasted = total_size as u64 - single_size as u64;
-
-            dup_groups.push(DuplicateGroup {
-                id: format!("group_{}", md5.chars().take(8).collect::<String>()),
-                strategy: "exact".to_string(),
-                file_hash: md5,
-                resource_path: pkg_id,
-                total_wasted_bytes: wasted,
-                file_count: cnt as usize,
-                instances: dup_instances,
-            });
-        }
-
-        Ok(dup_groups)
-    })
-    .map_err(|e| e.to_string())
+        .as_ref()
+        .map(|s| s.groups.clone())
+        .unwrap_or_default())
 }
 
-/// 将重复 .var 文件移入 VAM Library 回收站，并同步更新数据库引用。
 #[tauri::command]
 pub async fn execute_cleanup(
     app_handle: tauri::AppHandle,
-    db: State<'_, Database>,
-    instances: Vec<DuplicateInstance>,
-) -> Result<usize, String> {
-    let install_context = resolve_install_context(&app_handle)?;
-    let trash_dir = PathBuf::from(install_context.vam_root)
-        .join("VAMBoxLibrary")
-        .join(".trash");
-    std::fs::create_dir_all(&trash_dir)
-        .map_err(|e| format!("创建回收站目录失败 {}: {}", trash_dir.display(), e))?;
-
-    let cleaned_count = db
-        .with_conn(|conn| {
-            let mut cleaned_count = 0;
-
-            for instance in &instances {
-                // 1. Query the package_id associated with this file_path before deleting
-                let package_id_opt: Option<String> = conn
-                    .query_row(
-                        "SELECT package_id FROM physical_packages WHERE file_path = ?1",
-                        rusqlite::params![instance.file_path],
-                        |row| row.get(0),
-                    )
-                    .ok();
-
-                let package_id = match package_id_opt {
-                    Some(id) => id,
-                    None => continue, // If not found in physical_packages, skip
-                };
-
-                // 2. 移入回收站，不做永久删除。
-                let path = Path::new(&instance.file_path);
-                if path.exists() {
-                    let trash_path = build_trash_path(&trash_dir, path);
-                    if let Err(e) = std::fs::rename(path, &trash_path) {
-                        log::error!("Failed to move duplicate file {}: {}", path.display(), e);
-                        continue;
-                    }
-                    conn.execute(
-                    "INSERT INTO cleanup_trash (package_id, original_path, trash_path, size_bytes)
-                     VALUES (?1, ?2, ?3, ?4)",
-                    rusqlite::params![
-                        package_id,
-                        instance.file_path,
-                        trash_path.to_string_lossy().to_string(),
-                        instance.size_bytes as i64
-                    ],
-                )
-                .map_err(|e| e.to_string())?;
-                    cleaned_count += 1;
-                }
-
-                // 3. Delete from physical_packages
-                let _ = conn.execute(
-                    "DELETE FROM physical_packages WHERE file_path = ?1",
-                    rusqlite::params![instance.file_path],
-                );
-
-                // 4. Update or delete the main packages table record
-                let remaining_path: Option<String> = conn
-                    .query_row(
-                        "SELECT file_path FROM physical_packages WHERE package_id = ?1 LIMIT 1",
-                        rusqlite::params![package_id],
-                        |row| row.get(0),
-                    )
-                    .ok();
-
-                if let Some(rem_path) = remaining_path {
-                    // If there's still another physical copy left, update packages to point to it
-                    let _ = conn.execute(
-                        "UPDATE packages SET file_path = ?1 WHERE id = ?2",
-                        rusqlite::params![rem_path, package_id],
-                    );
-                } else {
-                    // If NO physical copies left, delete from the packages table entirely
-                    let _ = conn.execute(
-                        "DELETE FROM packages WHERE id = ?1",
-                        rusqlite::params![package_id],
-                    );
-                }
+    scan_id: String,
+    file_paths: Vec<String>,
+) -> Result<CleanupResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let _guard = files::maintenance_lock()?;
+        // Consume the preview once. A partial failure must be rescanned before retrying.
+        let snapshot = {
+            let state = app_handle.state::<DedupState>();
+            let mut state = state.0.lock().map_err(|e| e.to_string())?;
+            if state.as_ref().map(|s| &s.summary.scan_id) != Some(&scan_id) {
+                return Err("扫描已过期，请重新扫描".into());
             }
-            Ok(cleaned_count)
-        })
-        .map_err(|e| e.to_string())?;
-
-    if cleaned_count > 0 {
+            state.take().unwrap()
+        };
+        let context = resolve_install_context(&app_handle)?;
+        let trash = PathBuf::from(context.vam_root)
+            .join("VAMBoxLibrary")
+            .join(".trash");
+        let result = organize_snapshot(
+            &app_handle.state::<Database>(),
+            &snapshot,
+            &trash,
+            &file_paths,
+        )?;
         crate::commands::library_events::emit_library_index_changed(
             &app_handle,
             "dedupe_changed",
@@ -353,15 +108,202 @@ pub async fn execute_cleanup(
                 "folders",
                 "dedupe",
             ],
-            Vec::new(),
-            instances
-                .iter()
-                .map(|instance| instance.file_path.clone())
-                .collect(),
+            vec![],
+            file_paths,
         );
-    }
+        Ok(result)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
 
-    Ok(cleaned_count)
+fn organize_snapshot(
+    db: &Database,
+    snapshot: &DedupSnapshot,
+    trash: &Path,
+    file_paths: &[String],
+) -> Result<CleanupResult, String> {
+    let scan_id = &snapshot.summary.scan_id;
+    let deletions = resource_dedup::validate_selection(&snapshot, &file_paths)?;
+    let selected: HashSet<_> = file_paths.iter().map(|p| files::path_key(p)).collect();
+    let mut archives = Vec::new();
+    for item in snapshot.groups.iter().flat_map(|g| &g.instances) {
+        if let Some(destination) = &item.archive_destination {
+            files::ensure_no_links(Path::new(destination))?;
+            if Path::new(destination).exists() && !selected.contains(&files::path_key(destination))
+            {
+                return Err(format!(
+                    "依赖旧版本目标已存在且未列入清理，已停止，请先处理冲突: {}",
+                    destination
+                ));
+            }
+            archives.push((item.clone(), destination.clone()));
+        }
+    }
+    files::ensure_no_links(&trash)?;
+    let mut result = CleanupResult {
+        cleaned: 0,
+        archived: 0,
+        removed_directories: 0,
+        errors: vec![],
+    };
+    for (index, item) in deletions.iter().enumerate() {
+        if let Some(file) = snapshot.files.iter().find(|f| f.path == item.file_path) {
+            if let Err(e) = files::verify(file) {
+                result.errors.push(e);
+                break;
+            }
+        }
+        let group = snapshot
+            .groups
+            .iter()
+            .find(|g| g.instances.iter().any(|i| i.file_path == item.file_path))
+            .ok_or("清理分组已失效")?;
+        if let Some(error) = group
+            .instances
+            .iter()
+            .filter(|i| i.is_recommended_keep)
+            .filter_map(|i| snapshot.files.iter().find(|f| f.path == i.file_path))
+            .find_map(|f| files::verify(f).err())
+        {
+            result.errors.push(error);
+            break;
+        }
+        let destination = trash.join(format!(
+            "{}_{}_{}",
+            scan_id,
+            index,
+            Path::new(&item.file_path)
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+        ));
+        let action = db.with_conn(|conn| {
+                let tx = conn.unchecked_transaction()?;
+                tx.execute("INSERT INTO cleanup_trash (package_id, original_path, trash_path, size_bytes) VALUES (?1,?2,?3,?4)",
+                    rusqlite::params![item.package_id, item.file_path, destination.to_string_lossy(), item.size_bytes])?;
+                files::transfer(Path::new(&item.file_path), &destination, "move").map_err(AppError::Io)?;
+                let update = (|| -> Result<(), AppError> {
+                    tx.execute("DELETE FROM physical_packages WHERE lower(replace(file_path, '\\', '/')) = ?1", [files::path_key(&item.file_path)])?;
+                    let replacement = snapshot.groups.iter().flat_map(|g| &g.instances).find(|i| i.package_id.eq_ignore_ascii_case(&item.package_id) && !selected.contains(&files::path_key(&i.file_path)) && Path::new(&i.file_path).exists());
+                    if let Some(keep) = replacement {
+                        files::index_package(&tx, Path::new(&keep.file_path))?;
+                    tx.execute("DELETE FROM packages WHERE lower(replace(file_path, '\\', '/')) = ?1", [files::path_key(&item.file_path)])?;
+                    } else {
+                        tx.execute("DELETE FROM packages WHERE lower(replace(file_path, '\\', '/')) = ?1", [files::path_key(&item.file_path)])?;
+                    }
+                    tx.commit()?;
+                    Ok(())
+                })();
+                if let Err(e) = update {
+                    let rollback = files::transfer(&destination, Path::new(&item.file_path), "move");
+                    return Err(AppError::Io(format!("索引更新失败: {}; 文件恢复: {:?}", e, rollback)));
+                }
+                Ok(())
+            });
+        match action {
+            Ok(()) => result.cleaned += 1,
+            Err(e) => {
+                result.errors.push(format!("{}: {}", item.file_path, e));
+                break;
+            }
+        }
+    }
+    if result.errors.is_empty() {
+        for (item, destination) in archives {
+            let action = db.with_conn(|conn| {
+                    let tx = conn.unchecked_transaction()?;
+                    // Reuse the migration log so the existing restore action can undo the archive.
+                    tx.execute("INSERT INTO resource_migration_log (task_id,package_id,source_path,destination_path,action,size_bytes,status,completed_at,file_modified_time) VALUES (?1,?2,?3,?4,'move',?5,'completed',datetime('now'),?6)",
+                        rusqlite::params![scan_id,item.package_id,item.file_path,destination,item.size_bytes,files::fingerprint(Path::new(&item.file_path)).map_err(AppError::Io)?.modified])?;
+                    files::transfer(Path::new(&item.file_path),Path::new(&destination),"move").map_err(AppError::Io)?;
+                    let update = (|| -> Result<(), AppError> {
+                        files::update_index_path(&tx,&item.file_path,&destination)?;
+                        files::index_package(&tx,Path::new(&destination))?;
+                        tx.commit()?; Ok(())
+                    })();
+                    if let Err(e) = update {
+                        let rollback = files::transfer(Path::new(&destination),Path::new(&item.file_path),"move");
+                        return Err(AppError::Io(format!("归档索引失败: {}; 文件恢复: {:?}",e,rollback)));
+                    }
+                    Ok(())
+                });
+            match action {
+                Ok(()) => result.archived += 1,
+                Err(e) => {
+                    result.errors.push(e.to_string());
+                    break;
+                }
+            }
+        }
+    }
+    // Newly found survivors may never have been indexed before this disk scan.
+    for group in &snapshot.groups {
+        if !group.instances.iter().any(|i| {
+            selected.contains(&files::path_key(&i.file_path)) || i.archive_destination.is_some()
+        }) {
+            continue;
+        }
+        for item in group.instances.iter().filter(|i| i.is_recommended_keep) {
+            let path = item
+                .archive_destination
+                .as_deref()
+                .filter(|p| Path::new(p).exists())
+                .unwrap_or(&item.file_path);
+            if let Ok(pkg) = crate::services::var_parser::parse_var_file(Path::new(path)) {
+                if let Err(e) = db.with_conn(|conn| {
+                    let tx = conn.unchecked_transaction()?;
+                    files::index_parsed_package(&tx, &pkg)?;
+                    tx.commit()?;
+                    Ok(())
+                }) {
+                    result
+                        .errors
+                        .push(format!("文件已整理，索引更新失败，请重新扫描资源库: {}", e));
+                }
+            }
+        }
+    }
+    match files::remove_empty_dirs_excluding(Path::new(&snapshot.summary.root), &snapshot.excluded)
+    {
+        Ok((count, errors)) => {
+            result.removed_directories = count;
+            result.errors.extend(errors);
+        }
+        Err(e) => result.errors.push(e),
+    }
+    Ok(result)
+}
+
+pub fn managed_link_paths(app_handle: &tauri::AppHandle) -> HashSet<String> {
+    load_manifest_link_types(app_handle).into_keys().collect()
+}
+
+fn load_manifest_link_types(app_handle: &tauri::AppHandle) -> HashMap<String, String> {
+    let Ok(context) = resolve_install_context(app_handle) else {
+        return HashMap::new();
+    };
+    let Ok(content) = std::fs::read_to_string(context.manifest_path) else {
+        return HashMap::new();
+    };
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(&content) else {
+        return HashMap::new();
+    };
+    value
+        .get("links")
+        .and_then(|v| v.as_array())
+        .map(|links| {
+            links
+                .iter()
+                .filter_map(|v| {
+                    Some((
+                        files::path_key(v.get("link")?.as_str()?),
+                        v.get("link_type")?.as_str()?.to_string(),
+                    ))
+                })
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 pub fn purge_expired_trash_internal(conn: &rusqlite::Connection) -> Result<usize, AppError> {
@@ -486,60 +428,8 @@ pub async fn restore_cleanup_trash_item(
     db: State<'_, Database>,
     trash_id: i64,
 ) -> Result<(), String> {
-    let package_id = db
-        .with_conn(|conn| {
-            let (package_id, original_path, trash_path, size_bytes): (String, String, String, i64) =
-                conn.query_row(
-                    "SELECT package_id, original_path, trash_path, size_bytes
-                 FROM cleanup_trash
-                 WHERE id = ?1 AND restored_at IS NULL",
-                    rusqlite::params![trash_id],
-                    |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
-                )
-                .map_err(|e| AppError::Database(e.to_string()))?;
-
-            let trash_path_buf = PathBuf::from(&trash_path);
-            let original_path_buf = PathBuf::from(&original_path);
-            if !trash_path_buf.exists() {
-                return Err(AppError::Io(format!(
-                    "回收站文件不存在: {}",
-                    trash_path_buf.display()
-                )));
-            }
-            if original_path_buf.exists() {
-                return Err(AppError::Io(format!(
-                    "原路径已存在，无法恢复: {}",
-                    original_path_buf.display()
-                )));
-            }
-            if let Some(parent) = original_path_buf.parent() {
-                std::fs::create_dir_all(parent).map_err(|e| {
-                    AppError::Io(format!("创建恢复目录失败 {}: {}", parent.display(), e))
-                })?;
-            }
-            std::fs::rename(&trash_path_buf, &original_path_buf)
-                .map_err(|e| AppError::Io(format!("恢复文件失败: {}", e)))?;
-
-            conn.execute(
-            "INSERT OR REPLACE INTO physical_packages (file_path, package_id, size_bytes, scan_time)
-             VALUES (?1, ?2, ?3, datetime('now'))",
-            rusqlite::params![original_path, package_id, size_bytes],
-        )
-        .map_err(|e| AppError::Database(e.to_string()))?;
-            conn.execute(
-                "UPDATE packages SET file_path = ?1, updated_at = datetime('now') WHERE id = ?2",
-                rusqlite::params![original_path, package_id],
-            )
-            .map_err(|e| AppError::Database(e.to_string()))?;
-            conn.execute(
-                "UPDATE cleanup_trash SET restored_at = datetime('now') WHERE id = ?1",
-                rusqlite::params![trash_id],
-            )
-            .map_err(|e| AppError::Database(e.to_string()))?;
-
-            Ok(package_id)
-        })
-        .map_err(|e| e.to_string())?;
+    let _guard = files::maintenance_lock()?;
+    let package_id = restore_trash_item(&db, trash_id)?;
 
     crate::commands::library_events::emit_library_index_changed(
         &app_handle,
@@ -559,141 +449,121 @@ pub async fn restore_cleanup_trash_item(
     Ok(())
 }
 
-/// Legacy command for previewing cleanup (kept for backward compatibility, though UI calls execute_cleanup)
-#[tauri::command]
-pub async fn preview_cleanup(
-    db: State<'_, Database>,
-    resolutions: Vec<DuplicateResolution>,
-) -> Result<Vec<DuplicateInstance>, String> {
+fn restore_trash_item(db: &Database, trash_id: i64) -> Result<String, String> {
     db.with_conn(|conn| {
-        let mut to_delete = Vec::new();
-
-        for resolution in &resolutions {
-            let hash_prefix = resolution.group_id.strip_prefix("group_").unwrap_or("");
-
-            let mut stmt = conn
-                .prepare(
-                    "SELECT file_path, package_id, size_bytes
-                 FROM physical_packages
-                 WHERE file_md5 LIKE ?1",
-                )
-                .map_err(|e| e.to_string())?;
-
-            let pattern = format!("{}%", hash_prefix);
-            let instances: Vec<(String, String, i64)> = stmt
-                .query_map(rusqlite::params![&pattern], |row| {
-                    Ok((row.get(0)?, row.get(1)?, row.get(2)?))
-                })
-                .map_err(|e| e.to_string())?
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(|e| e.to_string())?;
-
-            for (file_path, pkg_id, size_bytes) in instances {
-                if resolution.keep_package_ids.contains(&pkg_id) {
-                    continue;
-                }
-
-                to_delete.push(DuplicateInstance {
-                    package_id: pkg_id,
-                    source_type: classify_physical_file(Path::new(&file_path), None).0,
-                    link_type: classify_physical_file(Path::new(&file_path), None).1,
-                    file_path,
-                    size_bytes: size_bytes as u64,
-                    is_recommended_keep: false,
-                });
+        let tx = conn.unchecked_transaction()?;
+        let (package_id, original, trash, size): (String,String,String,u64) = tx.query_row(
+            "SELECT package_id,original_path,trash_path,size_bytes FROM cleanup_trash WHERE id=?1 AND restored_at IS NULL",[trash_id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?)))?;
+        let snapshot=files::fingerprint(Path::new(&trash)).map_err(AppError::Io)?;
+        if snapshot.size!=size {return Err(AppError::Validation("回收站文件已变化".into()));}
+        files::transfer(Path::new(&trash),Path::new(&original),"move").map_err(AppError::Io)?;
+        let update=(||->Result<(),AppError>{
+            if let Ok(pkg)=crate::services::var_parser::parse_var_file(Path::new(&original)) {
+                files::index_parsed_package(&tx,&pkg)?;
             }
+            tx.execute("UPDATE cleanup_trash SET restored_at=datetime('now') WHERE id=?1",[trash_id])?;
+            tx.commit()?;Ok(())
+        })();
+        if let Err(e)=update {
+            let rollback=files::transfer(Path::new(&original),Path::new(&trash),"move");
+            return Err(AppError::Io(format!("恢复索引失败: {}; 文件恢复: {:?}",e,rollback)));
         }
-
-        Ok(to_delete)
-    })
-    .map_err(|e| e.to_string())
+        Ok(package_id)
+    }).map_err(|e|e.to_string())
 }
 
-fn build_trash_path(trash_dir: &Path, original_path: &Path) -> PathBuf {
-    let file_name = original_path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or("package.var");
-    let stamp = chrono::Utc::now().timestamp_millis();
-    trash_dir.join(format!("{}_{}", stamp, file_name))
-}
-
-fn load_manifest_link_types(app_handle: &tauri::AppHandle) -> HashMap<String, String> {
-    let Ok(context) = resolve_install_context(app_handle) else {
-        return HashMap::new();
-    };
-    let Ok(content) = std::fs::read_to_string(context.manifest_path) else {
-        return HashMap::new();
-    };
-    let Ok(value) = serde_json::from_str::<serde_json::Value>(&content) else {
-        return HashMap::new();
-    };
-
-    value
-        .get("links")
-        .and_then(|links| links.as_array())
-        .map(|links| {
-            links
-                .iter()
-                .filter_map(|entry| {
-                    let link = entry.get("link")?.as_str()?.to_string();
-                    let link_type = entry.get("link_type")?.as_str()?.to_string();
-                    Some((normalize_path_key(&link), link_type))
-                })
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
-fn classify_physical_file(
-    path: &Path,
-    manifest_link_types: Option<&HashMap<String, String>>,
-) -> (String, Option<String>) {
-    let path_key = normalize_path_key(&path.to_string_lossy());
-    if let Some(link_type) = manifest_link_types.and_then(|links| links.get(&path_key)) {
-        return (link_type.clone(), Some(link_type.clone()));
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use files::tests::TestDir;
+    use std::io::Write;
+    fn var(d: &TestDir, name: &str, deps: serde_json::Value) {
+        let path = d.0.join(name);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let mut zip = zip::ZipWriter::new(std::fs::File::create(path).unwrap());
+        zip.start_file("meta.json", zip::write::SimpleFileOptions::default())
+            .unwrap();
+        zip.write_all(
+            serde_json::json!({"dependencies":deps})
+                .to_string()
+                .as_bytes(),
+        )
+        .unwrap();
+        zip.finish().unwrap();
     }
-
-    if std::fs::symlink_metadata(path)
-        .map(|metadata| metadata.file_type().is_symlink())
-        .unwrap_or(false)
-    {
-        return ("symlink".to_string(), Some("symlink".to_string()));
+    #[test]
+    fn recycle_unindexed_files_archive_pinned_and_restore() {
+        let d = TestDir::new();
+        let data = TestDir::new();
+        let db = Database::new(&data.0.join("db.sqlite")).unwrap();
+        var(&d, "old/A.Asset.1.var", serde_json::json!({}));
+        var(&d, "old/A.Asset.2.var", serde_json::json!({}));
+        var(&d, "A.Asset.3.var", serde_json::json!({}));
+        var(&d, "B.Scene.1.var", serde_json::json!({"A.Asset.1":{}}));
+        d.write("a/readme.txt", b"same");
+        d.write("b/readme.txt", b"same");
+        let snapshot = resource_dedup::scan(&d.0, HashSet::new()).unwrap();
+        let selected: Vec<_> = snapshot
+            .groups
+            .iter()
+            .flat_map(|g| &g.instances)
+            .filter(|i| !i.is_recommended_keep)
+            .map(|i| i.file_path.clone())
+            .collect();
+        let result = organize_snapshot(&db, &snapshot, &data.0.join("trash"), &selected).unwrap();
+        assert!(result.errors.is_empty(), "{:?}", result.errors);
+        assert_eq!(result.cleaned, 2);
+        assert_eq!(result.archived, 1);
+        assert!(d
+            .0
+            .join(files::REFERENCED_DIR)
+            .join("A.Asset.1.var")
+            .exists());
+        assert!(d.0.join("A.Asset.3.var").exists());
+        let ids = db
+            .with_conn(|conn| {
+                let mut stmt = conn.prepare("SELECT id FROM cleanup_trash")?;
+                let result = stmt
+                    .query_map([], |r| r.get::<_, i64>(0))?
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(result)
+            })
+            .unwrap();
+        for id in ids {
+            restore_trash_item(&db, id).unwrap();
+        }
+        assert!(d.0.join("old/A.Asset.2.var").exists());
+        assert!(d.0.join("a/readme.txt").exists());
+        assert!(d.0.join("b/readme.txt").exists());
+        let count = db
+            .with_conn(|c| {
+                Ok(c.query_row(
+                    "SELECT COUNT(*) FROM packages WHERE id='A.Asset.2'",
+                    [],
+                    |r| r.get::<_, i64>(0),
+                )?)
+            })
+            .unwrap();
+        assert_eq!(count, 1);
     }
-
-    if has_multiple_links(path) {
-        return ("hard_link".to_string(), Some("hard_link".to_string()));
+    #[test]
+    fn failed_database_write_leaves_originals_untouched() {
+        let d = TestDir::new();
+        let data = TestDir::new();
+        let db = Database::new(&data.0.join("db.sqlite")).unwrap();
+        d.write("a/readme.txt", b"same");
+        d.write("b/readme.txt", b"same");
+        let snapshot = resource_dedup::scan(&d.0, HashSet::new()).unwrap();
+        let selected: Vec<_> = snapshot.groups[0]
+            .instances
+            .iter()
+            .filter(|i| !i.is_recommended_keep)
+            .map(|i| i.file_path.clone())
+            .collect();
+        db.with_conn(|c|{c.execute_batch("CREATE TRIGGER fail_trash BEFORE INSERT ON cleanup_trash BEGIN SELECT RAISE(ABORT,'test failure'); END;")?;Ok(())}).unwrap();
+        let result = organize_snapshot(&db, &snapshot, &data.0.join("trash"), &selected).unwrap();
+        assert_eq!(result.cleaned, 0);
+        assert_eq!(result.errors.len(), 1);
+        assert!(selected.iter().all(|p| Path::new(p).exists()));
     }
-
-    let normalized = path.to_string_lossy().replace('\\', "/").to_lowercase();
-    if normalized.contains("/VAMBoxLibrary/addonpackages/") {
-        ("managed_library".to_string(), None)
-    } else if normalized.contains("/addonpackages/") {
-        ("real_file".to_string(), None)
-    } else {
-        ("external".to_string(), None)
-    }
-}
-
-fn normalize_path_key(path: &str) -> String {
-    path.replace('\\', "/").to_lowercase()
-}
-
-#[cfg(windows)]
-fn has_multiple_links(path: &Path) -> bool {
-    let _ = path;
-    false
-}
-
-#[cfg(unix)]
-fn has_multiple_links(path: &Path) -> bool {
-    use std::os::unix::fs::MetadataExt;
-    std::fs::metadata(path)
-        .map(|metadata| metadata.nlink() > 1)
-        .unwrap_or(false)
-}
-
-#[cfg(not(any(windows, unix)))]
-fn has_multiple_links(_path: &Path) -> bool {
-    false
 }

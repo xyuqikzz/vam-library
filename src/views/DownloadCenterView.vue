@@ -178,9 +178,9 @@
               
               <!-- Retry for Failed -->
               <button
-                v-if="item.status === 'Failed'"
+                v-if="item.status === 'Failed' || (item.status === 'Completed' && !item.indexed)"
                 class="icon-btn text-warning"
-                :title="$t('download.actions.retry')"
+                :title="item.status === 'Completed' ? $t('download.actions.retryIndex') : $t('download.actions.retry')"
                 @click="downloadStore.retryTask(item.id)"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
@@ -201,6 +201,11 @@
             </div>
           </div>
 
+          <div v-if="item.status === 'Completed' && item.warning_msg" class="warning-msg-bar text-xs" role="status">
+            <strong>{{ $t('download.card.savedWarning') }}:</strong>
+            <span>{{ item.warning_msg }}</span>
+          </div>
+          <div v-if="item.status === 'Downloading' && item.error_msg" class="warning-msg-bar text-xs" role="status">{{ item.error_msg }}</div>
           <!-- Error Message Sub-card -->
           <div v-if="item.status === 'Failed' && item.error_msg" class="error-msg-bar text-xs">
             <span class="error-label font-semibold">{{ $t('download.card.error') }}:</span>
@@ -291,6 +296,8 @@ function installModeLabel(mode: string | null): string {
 </script>
 
 <style scoped>
+.warning-msg-bar { display: flex; gap: 8px; padding: 10px 16px; color: var(--color-warning); background: rgba(245,158,11,.08); border-top: 1px solid rgba(245,158,11,.2); overflow-wrap: anywhere; user-select: text; }
+
 .download-center-view {
   display: flex;
   flex-direction: column;

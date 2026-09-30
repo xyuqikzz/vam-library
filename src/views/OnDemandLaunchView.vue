@@ -131,7 +131,7 @@
               @click="openPackagePicker"
             >
               <div class="preview-thumb">
-                <img v-if="thumbnails[pkg.id]" :src="thumbnails[pkg.id]" :alt="pkg.id + '.var'" />
+                <img data-resource-preview v-if="thumbnails[pkg.id]" :src="thumbnails[pkg.id]" :alt="pkg.id + '.var'" />
                 <span v-else>{{ t('packages.noThumbnail') }}</span>
               </div>
               <div class="preview-info">
@@ -315,7 +315,7 @@
                   </span>
                   <span class="picker-type" :class="`type-${pkg.resource_types[0] || 'other'}`">{{ resourceTypeLabel(pkg.resource_types[0] || 'other') }}</span>
                   <span class="picker-thumb">
-                    <img v-if="thumbnails[pkg.id]" :src="thumbnails[pkg.id]" :alt="pkg.id + '.var'" />
+                    <img data-resource-preview v-if="thumbnails[pkg.id]" :src="thumbnails[pkg.id]" :alt="pkg.id + '.var'" />
                     <span v-else>{{ t('packages.noThumbnail') }}</span>
                   </span>
                   <span class="picker-card-name" :title="pkg.id + '.var'">
@@ -350,7 +350,7 @@
 
             <aside class="picker-detail">
               <div class="detail-preview">
-                <img v-if="focusedPackage && thumbnails[focusedPackage.id]" :src="thumbnails[focusedPackage.id]" :alt="focusedPackage.id + '.var'" />
+                <img data-resource-preview v-if="focusedPackage && thumbnails[focusedPackage.id]" :src="thumbnails[focusedPackage.id]" :alt="focusedPackage.id + '.var'" />
                 <span v-else>{{ t('packages.noThumbnail') }}</span>
               </div>
               <template v-if="focusedPackage">

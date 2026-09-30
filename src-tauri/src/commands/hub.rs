@@ -6,7 +6,7 @@ use tauri::Emitter;
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
 
-use crate::services::downloader::{index_downloaded_package, validate_var_file};
+use crate::services::downloader::{index_downloaded_package_with_warning, validate_var_file};
 use crate::services::install_context::resolve_install_context;
 use std::sync::{Mutex, OnceLock};
 use tauri::Manager;
@@ -845,6 +845,7 @@ struct DownloadProgress {
     total: u64,
     percentage: f64,
     status: String,
+    warning_msg: Option<String>,
 }
 
 #[tauri::command]
@@ -864,33 +865,22 @@ pub async fn download_hub_file(
     let target_path = target_dir.join(&filename);
     let part_path = temp_dir.join(format!("{}.part", filename));
 
-    // 2. Start HTTP request
-    let client = reqwest::Client::builder()
-        .connect_timeout(std::time::Duration::from_secs(10))
-        .build()
-        .map_err(|e| format!("Failed to build HTTP client: {}", e))?;
-    let mut res = client
-        .get(&url)
-        .header(
-            reqwest::header::USER_AGENT,
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        )
-        .header(
-            reqwest::header::COOKIE,
-            hub_cookie_header(Some(&app_handle)),
-        )
-        .send()
-        .await
-        .map_err(|e| format!("Failed to connect to VAM Hub: {}", e))?;
-
-    if !res.status().is_success() {
-        return Err(format!(
-            "VAM Hub returned unsuccessful status code: {}",
-            res.status()
-        ));
+    if target_path.exists() {
+        return Err(format!("目标文件已存在，未覆盖: {}", target_path.display()));
     }
-
-    let total_size = res.content_length().unwrap_or(0);
+    let client = crate::services::download_http::client()?;
+    let (_cancel_tx, mut cancel_rx) = tokio::sync::oneshot::channel();
+    let mut res = crate::services::download_http::request(
+        &client,
+        &url,
+        &hub_cookie_header(Some(&app_handle)),
+        0,
+        &mut cancel_rx,
+        |_, _| {},
+    )
+    .await?;
+    let (_, total_size) =
+        crate::services::download_http::response_layout(res.status(), res.headers(), 0)?;
 
     // 3. 写入隔离的临时文件，完成校验后再移动到资源目录。
     let mut file = File::create(&part_path)
@@ -926,6 +916,7 @@ pub async fn download_hub_file(
                 total: total_size,
                 percentage,
                 status: "downloading".to_string(),
+                warning_msg: None,
             },
         );
     }
@@ -935,17 +926,22 @@ pub async fn download_hub_file(
         .map_err(|e| format!("Failed to flush local file: {}", e))?;
     drop(file);
 
-    if let Err(e) = validate_var_file(&part_path) {
+    if total_size > 0 && downloaded != total_size {
+        return Err("下载未完成，临时文件已保留。".into());
+    }
+    let check_path = part_path.clone();
+    let validation = tokio::task::spawn_blocking(move || validate_var_file(&check_path))
+        .await
+        .map_err(|e| e.to_string())?;
+    if let Err(error) = validation {
         let _ = std::fs::remove_file(&part_path);
-        return Err(e);
+        return Err(error);
     }
-
-    if target_path.exists() {
-        let _ = std::fs::remove_file(&target_path);
-    }
-    std::fs::rename(&part_path, &target_path)
-        .map_err(|e| format!("Failed to move completed download into place: {}", e))?;
-    index_downloaded_package(&app_handle, &target_path)?;
+    crate::services::resource_files::transfer(&part_path, &target_path, "move")?;
+    let warning_msg = match index_downloaded_package_with_warning(&app_handle, &target_path) {
+        Ok(warning) => warning,
+        Err(error) => Some(format!("文件已保存，但入库失败: {}", error)),
+    };
 
     // 5. Emit completed event
     let _ = app_handle.emit(
@@ -956,6 +952,7 @@ pub async fn download_hub_file(
             total: total_size,
             percentage: 100.0,
             status: "completed".to_string(),
+            warning_msg,
         },
     );
 

@@ -28,24 +28,39 @@
       />
     </section>
 
+    <section class="scan-options glass-panel">
+      <label for="dedup-root">{{ t('deduplication.sourceDirectory') }}</label>
+      <div class="scan-directory-row">
+        <input id="dedup-root" v-model="resourceRoot" :placeholder="defaultRoot" :disabled="busy" />
+        <button class="restore-btn" :disabled="busy" @click="chooseRoot">{{ t('deduplication.browse') }}</button>
+      </div>
+      <p class="text-sm text-secondary">{{ t('deduplication.rules') }}</p>
+      <p class="text-xs text-tertiary">{{ t('deduplication.ordinaryRule') }}</p>
+      <p v-if="dedupSummary" class="text-xs">{{ t('deduplication.scanSummary', { count: dedupSummary.total_files, archive: dedupSummary.archive_count }) }}</p>
+      <details v-if="dedupSummary?.warnings.length" class="text-xs">
+        <summary>{{ t('deduplication.scanWarnings', { count: dedupSummary.warnings.length }) }}</summary>
+        <p v-for="warning in dedupSummary.warnings" :key="warning">{{ warning }}</p>
+      </details>
+    </section>
     <!-- Action Bar -->
     <div class="action-bar">
       <button
         class="scan-btn"
-        :disabled="isDedupScanning || isScanning || !vamRootPath"
+        :disabled="busy || !effectiveRoot"
         @click="handleScan"
       >
         <span>{{ isDedupScanning ? $t('common.loading') : $t('deduplication.scanButton') }}</span>
       </button>
       <button
-        v-if="cleanupList.length > 0"
+        v-if="cleanupList.length > 0 || archiveList.length > 0"
         class="cleanup-btn"
+        :disabled="busy"
         @click="showCleanupPreview = true"
       >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
           <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14M22 4L12 14.01l-3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
         </svg>
-        <span>{{ $t('deduplication.reviewCleanup', { count: cleanupList.length }) }}</span>
+        <span>{{ t('deduplication.reviewOrganize', { count: cleanupList.length, archive: archiveList.length }) }}</span>
       </button>
       <button
         v-if="trashList.length > 0"
@@ -60,88 +75,69 @@
       </button>
     </div>
 
-    <!-- Duplicate Groups List -->
-    <div v-if="duplicateGroups.length > 0" class="dedup-content glass-panel">
+    <!-- Keep groups at their natural height; paginate large scan results. -->
+    <section v-if="duplicateGroups.length > 0" class="dedup-content glass-panel">
       <div class="dedup-header">
-        <h3 class="dedup-header-title">{{ $t('deduplication.duplicates') }}</h3>
-        <span class="dedup-header-count text-xs text-tertiary">{{ $t('deduplication.groups_count', { count: duplicateGroups.length }) }}</span>
+        <h3 class="dedup-header-title">{{ t('deduplication.duplicates') }}</h3>
+        <span class="text-xs text-tertiary">{{ t('deduplication.filteredGroups', { count: filteredGroups.length, total: duplicateGroups.length }) }}</span>
       </div>
-      <div class="dedup-body">
-        <div
-          v-for="group in duplicateGroups"
-          :key="group.id"
-          :class="['dup-group', { expanded: expandedGroup === group.id }]"
-        >
-          <!-- Group header -->
-          <div class="dup-group-header" @click="toggleGroup(group.id)">
-            <div class="dup-group-info">
-              <div class="dup-group-path text-sm">{{ group.resource_path }}</div>
-              <div class="dup-group-meta text-xs text-tertiary">
-                {{ $t('deduplication.copies', { count: group.file_count }) }} &middot; {{ $t('deduplication.wasted', { size: formatSize(group.total_wasted_bytes) }) }}
-              </div>
-            </div>
-            <div class="dup-group-actions">
-              <button
-                v-if="!allSelectedFor(group)"
-                class="dup-action-btn dup-action-keep text-xs"
-                @click.stop="selectAllForKeep(group)"
-              >
-                {{ $t('deduplication.keepAll') }}
-              </button>
-              <button
-                v-if="!allSelectedFor(group)"
-                class="dup-action-btn dup-action-clean text-xs"
-                @click.stop="selectRecommendedForKeep(group)"
-              >
-                {{ $t('deduplication.keepRecommended') }}
-              </button>
-              <span
-                v-if="allSelectedFor(group)"
-                class="dup-selected-badge text-xs"
-              >{{ $t('deduplication.selected') }}</span>
-              <span class="dup-expand-icon">{{ expandedGroup === group.id ? '▾' : '▸' }}</span>
-            </div>
-          </div>
-
-          <!-- Group instances -->
-          <div v-if="expandedGroup === group.id" class="dup-instances">
-            <div
-              v-for="instance in group.instances"
-              :key="instance.package_id"
-              :class="['dup-instance', {
-                'dup-keep': selectedInstances[group.id]?.has(instance.package_id),
-                'dup-remove': !selectedInstances[group.id]?.has(instance.package_id),
-              }]"
-              @click="toggleInstance(group.id, instance.package_id)"
-            >
-              <div class="dup-inst-indicator">
-                <svg
-                  v-if="selectedInstances[group.id]?.has(instance.package_id)"
-                  width="16" height="16" viewBox="0 0 16 16" fill="none"
-                >
-                  <rect x="1" y="1" width="14" height="14" rx="3" fill="#3ecf8e" />
-                  <path d="M5 8L7 10L11 6" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-                </svg>
-                <svg v-else width="16" height="16" viewBox="0 0 16 16" fill="none">
-                  <rect x="1" y="1" width="14" height="14" rx="3" fill="none" stroke="var(--border-subtle)" stroke-width="1.5" />
-                </svg>
-              </div>
-              <div class="dup-inst-info">
-                <span class="dup-inst-path text-xs">{{ instance.package_id }}.var</span>
-                <span class="dup-inst-meta text-xs text-tertiary">
-                  {{ instance.file_path }} &middot; {{ formatSize(instance.size_bytes) }}
+      <div class="dedup-search">
+        <input v-model="groupSearch" type="search" :aria-label="t('deduplication.searchPaths')" :placeholder="t('deduplication.searchPaths')" />
+        <span class="text-xs text-tertiary">{{ t('deduplication.pathsHint') }}</span>
+      </div>
+      <div ref="groupListEl" class="dedup-body">
+        <article v-for="group in visibleGroups" :key="group.id" class="dup-group">
+          <div class="dup-group-header">
+            <button class="dup-group-toggle" :aria-expanded="!collapsedGroups.has(group.id)" @click="toggleGroup(group.id)">
+              <span class="dup-expand-icon">{{ collapsedGroups.has(group.id) ? '▸' : '▾' }}</span>
+              <span class="dup-group-info">
+                <span class="dup-group-path text-sm">{{ group.resource_path }}</span>
+                <span class="dup-group-meta text-xs text-tertiary">
+                  {{ t('deduplication.copies', { count: group.file_count }) }} · {{ t('deduplication.wasted', { size: formatSize(group.total_wasted_bytes) }) }}
                 </span>
-              </div>
-              <span class="dup-source-badge text-xs">{{ sourceTypeLabel(instance.source_type) }}</span>
-              <span
-                v-if="instance.is_recommended_keep"
-                class="dup-rec-badge text-xs"
-              >{{ $t('deduplication.recommended') }}</span>
+              </span>
+            </button>
+            <div class="dup-group-actions">
+              <button class="dup-action-btn text-xs" @click="copyPaths(group.instances.map(i => i.file_path))">{{ t('deduplication.copyGroupPaths') }}</button>
+              <button v-if="!allSelectedFor(group)" class="dup-action-btn dup-action-keep text-xs" :disabled="busy" @click="selectAllForKeep(group)">{{ t('deduplication.keepAll') }}</button>
+              <button v-else class="dup-action-btn dup-action-clean text-xs" :disabled="busy" @click="selectRecommendedForKeep(group)">{{ t('deduplication.keepRecommended') }}</button>
             </div>
           </div>
-        </div>
+          <div v-if="!collapsedGroups.has(group.id)" class="dup-instances">
+            <div v-for="instance in group.instances" :key="instance.file_path" class="dup-instance">
+              <input
+                type="checkbox"
+                :checked="selectedInstances[group.id]?.has(instance.file_path)"
+                :disabled="busy || instance.is_recommended_keep"
+                :aria-label="t('deduplication.keepFile', { path: instance.file_path })"
+                @change="toggleInstance(group.id, instance.file_path)"
+              />
+              <div class="dup-inst-info">
+                <div class="dup-inst-heading">
+                  <span class="dup-inst-name text-sm">{{ fileName(instance.file_path) }}</span>
+                  <span :class="['dup-status', instance.archive_destination ? 'archive' : selectedInstances[group.id]?.has(instance.file_path) ? 'keep' : 'recycle']">
+                    {{ instance.archive_destination ? t('deduplication.willArchive') : selectedInstances[group.id]?.has(instance.file_path) ? t('deduplication.keepStatus') : t('deduplication.recycleStatus') }}
+                  </span>
+                  <span v-if="instance.referenced_by.length" class="dup-source-badge text-xs" :title="instance.referenced_by.join('\n')">{{ t('deduplication.pinned') }}</span>
+                </div>
+                <span class="dup-file-path text-xs">{{ instance.file_path }}</span>
+                <span class="dup-inst-meta text-xs text-tertiary">{{ formatSize(instance.size_bytes) }} · {{ t('deduplication.modified') }}: {{ new Date(instance.modified_time).toLocaleString() }}</span>
+                <span v-if="instance.archive_destination" class="dup-file-path text-xs text-secondary">{{ t('deduplication.archiveTarget') }}: {{ instance.archive_destination }}</span>
+              </div>
+              <button class="dup-copy-btn text-xs" :aria-label="t('deduplication.copyFilePath', { path: instance.file_path })" @click="copyPaths([instance.file_path])">{{ t('deduplication.copyPath') }}</button>
+            </div>
+          </div>
+        </article>
+        <p v-if="!filteredGroups.length" class="dedup-no-match text-sm text-secondary">{{ t('deduplication.noMatchingGroups') }}</p>
       </div>
-    </div>
+      <nav class="dedup-pagination" :aria-label="t('deduplication.groupPages')">
+        <span class="text-xs text-tertiary">{{ t('deduplication.pageInfo', { page: currentPage, total: pageCount, size: pageSize }) }}</span>
+        <div class="dup-group-actions">
+          <button class="dup-page-btn" :disabled="currentPage <= 1" @click="currentPage--">{{ t('deduplication.previousPage') }}</button>
+          <button class="dup-page-btn" :disabled="currentPage >= pageCount" @click="currentPage++">{{ t('deduplication.nextPage') }}</button>
+        </div>
+      </nav>
+    </section>
 
     <!-- Empty State -->
     <div v-else-if="hasScanned && duplicateGroups.length === 0" class="dedup-content glass-panel">
@@ -189,8 +185,14 @@
               <div v-for="item in cleanupList" :key="item.file_path" class="cleanup-preview-item">
                 <span class="path text-xs text-primary truncate" :title="item.file_path">{{ item.file_path }}</span>
                 <span class="meta text-xs text-tertiary">
-                  {{ $t('packages.type') }}: {{ item.package_id }}.var &middot; {{ formatSize(item.size_bytes) }}
+                  {{ fileName(item.file_path) }} &middot; {{ formatSize(item.size_bytes) }}
                 </span>
+              </div>
+            </div>
+            <div v-if="archiveList.length" class="cleanup-scroll-list list-scrollbar">
+              <strong>{{ t('deduplication.archivePreview') }}</strong>
+              <div v-for="item in archiveList" :key="item.file_path" class="cleanup-preview-item">
+                <span class="text-xs">{{ item.file_path }} → {{ item.archive_destination }}</span>
               </div>
             </div>
             <div class="cleanup-summary border-t">
@@ -219,8 +221,9 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, reactive, computed, watch } from 'vue'
+import { nextTick, onMounted, ref, reactive, computed, watch } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
+import { open } from '@tauri-apps/plugin-dialog'
 import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
@@ -236,12 +239,15 @@ interface DuplicateInstance {
   is_recommended_keep: boolean
   source_type: string
   link_type: string | null
+  modified_time: string
+  version: number | null
+  referenced_by: string[]
+  archive_destination: string | null
 }
 
 interface DuplicateGroup {
   id: string
   strategy: string
-  file_hash: string
   resource_path: string
   total_wasted_bytes: number
   file_count: number
@@ -249,6 +255,10 @@ interface DuplicateGroup {
 }
 
 interface DedupSummary {
+  scan_id: string
+  root: string
+  archive_count: number
+  warnings: string[]
   duplicate_groups: number
   total_wasted_bytes: number
   safe_to_clean_count: number
@@ -272,10 +282,32 @@ const { vamRootPath, isScanning } = storeToRefs(appStore)
 const { revision } = storeToRefs(localLibraryStore)
 const notify = useNotification()
 
+const resourceRoot = ref('')
+const defaultRoot = computed(() => vamRootPath.value ? `${vamRootPath.value}/AddonPackages` : '')
+const effectiveRoot = computed(() => resourceRoot.value.trim() || defaultRoot.value)
+const busy = computed(() => isDedupScanning.value || isScanning.value || isCleaning.value || isRestoring.value)
 const dedupSummary = ref<DedupSummary | null>(null)
 const duplicateGroups = ref<DuplicateGroup[]>([])
 const hasScanned = ref(false)
-const expandedGroup = ref<string | null>(null)
+const collapsedGroups = ref(new Set<string>())
+const groupSearch = ref('')
+const currentPage = ref(1)
+const pageSize = 20
+const groupListEl = ref<HTMLElement | null>(null)
+const filteredGroups = computed(() => {
+  const query = groupSearch.value.trim().toLocaleLowerCase().replace(/\\/g, '/')
+  if (!query) return duplicateGroups.value
+  const matches = (value: string) => value.toLocaleLowerCase().replace(/\\/g, '/').includes(query)
+  return duplicateGroups.value.filter(group => matches(group.resource_path) || group.instances.some(i => matches(i.file_path)))
+})
+const pageCount = computed(() => Math.max(1, Math.ceil(filteredGroups.value.length / pageSize)))
+const visibleGroups = computed(() => filteredGroups.value.slice((currentPage.value - 1) * pageSize, currentPage.value * pageSize))
+watch(groupSearch, () => { currentPage.value = 1 })
+watch(pageCount, count => { currentPage.value = Math.min(currentPage.value, count) })
+watch([currentPage, groupSearch], async () => {
+  await nextTick()
+  if (groupListEl.value) groupListEl.value.scrollTop = 0
+})
 const showCleanupPreview = ref(false)
 const isCleaning = ref(false)
 const isRestoring = ref(false)
@@ -292,13 +324,31 @@ const cleanupList = computed(() => {
     const selected = selectedInstances[group.id]
     if (!selected) continue
     for (const instance of group.instances) {
-      if (!selected.has(instance.package_id)) {
+      if (!selected.has(instance.file_path)) {
         list.push(instance)
       }
     }
   }
   return list
 })
+
+const archiveList = computed(() => duplicateGroups.value.flatMap(group => group.instances.filter(i => i.archive_destination && selectedInstances[group.id]?.has(i.file_path))))
+function invalidateScan() {
+  duplicateGroups.value = []
+  collapsedGroups.value = new Set()
+  groupSearch.value = ''
+  currentPage.value = 1
+  dedupSummary.value = null
+  hasScanned.value = false
+  showCleanupPreview.value = false
+  for (const key of Object.keys(selectedInstances)) delete selectedInstances[key]
+}
+watch([resourceRoot, vamRootPath], invalidateScan)
+async function chooseRoot() {
+  const path = await open({ directory: true, multiple: false })
+  if (typeof path === 'string') resourceRoot.value = path
+}
+function fileName(path: string) { return path.split(/[\\/]/).pop() || path }
 
 const emptyStateDescription = computed(() => {
   if (!hasScanned.value || !dedupSummary.value) {
@@ -312,13 +362,12 @@ const emptyStateDescription = computed(() => {
 
 onMounted(async () => {
   await localLibraryStore.ensureLoaded()
-  await loadData()
   await loadTrash()
 })
 
 watch(revision, async () => {
   if (isCleaning.value || isRestoring.value || isDedupScanning.value) return
-  await loadData()
+  invalidateScan()
   await loadTrash()
 })
 
@@ -330,13 +379,14 @@ async function loadData() {
     }
     if (duplicateGroups.value.length > 0) {
       hasScanned.value = true
-      // Initialize selection: all instances selected (keep all) by default
+      // Keep recommended copies; protected versions cannot be deselected.
       for (const group of duplicateGroups.value) {
-        selectedInstances[group.id] = new Set(group.instances.map(i => i.package_id))
+        selectedInstances[group.id] = new Set(group.instances.filter(i => i.is_recommended_keep).map(i => i.file_path))
       }
     }
-  } catch {
-    // No data yet
+  } catch (err) {
+    invalidateScan()
+    notify.error(String(err))
   }
 }
 
@@ -349,13 +399,12 @@ async function loadTrash() {
 }
 
 async function handleScan() {
-  if (!vamRootPath.value || isScanning.value || isDedupScanning.value) return
+  if (!effectiveRoot.value || isScanning.value || isDedupScanning.value) return
   isDedupScanning.value = true
-  hasScanned.value = false
-  duplicateGroups.value = []
+  invalidateScan()
   try {
     dedupSummary.value = await invoke<DedupSummary>('scan_for_duplicates', {
-      vamRoot: vamRootPath.value,
+      vamRoot: effectiveRoot.value,
     })
     hasScanned.value = true
     await loadData()
@@ -367,22 +416,21 @@ async function handleScan() {
 }
 
 async function handleCleanup() {
-  if (cleanupList.value.length === 0 || isCleaning.value) return
+  if ((!cleanupList.value.length && !archiveList.value.length) || isCleaning.value || !dedupSummary.value) return
   isCleaning.value = true
   try {
-    const deletedCount = await invoke<number>('execute_cleanup', {
-      instances: cleanupList.value,
+    const result = await invoke<{ cleaned: number; archived: number; removed_directories: number; errors: string[] }>('execute_cleanup', {
+      scanId: dedupSummary.value.scan_id,
+      filePaths: cleanupList.value.map(i => i.file_path),
     })
-    notify.success(`成功清理了 ${deletedCount} 个物理重复包！`, '清理成功')
+    notify.success(t('deduplication.organized', { count: result.cleaned, archive: result.archived, folders: result.removed_directories }))
+    if (result.errors.length) notify.error(result.errors.join('\n'))
     showCleanupPreview.value = false
-    // Refresh list
-    if (vamRootPath.value) {
-      dedupSummary.value = await invoke('scan_for_duplicates', { vamRoot: vamRootPath.value })
-    }
-    await loadData()
+    await handleScan()
     await loadTrash()
-  } catch (err: any) {
-    notify.error(`清理失败: ${err}`, '错误')
+  } catch (err) {
+    notify.error(String(err), t('common.error'))
+    invalidateScan()
   } finally {
     isCleaning.value = false
   }
@@ -395,7 +443,7 @@ async function handleRestoreLatest() {
     await invoke('restore_cleanup_trash_item', { trashId: trashList.value[0].id })
     notify.success(t('deduplication.restoreSuccess'), t('common.success'))
     await loadTrash()
-    await loadData()
+    await handleScan()
   } catch (err: any) {
     notify.error(`恢复失败: ${err}`, t('common.error'))
   } finally {
@@ -404,11 +452,22 @@ async function handleRestoreLatest() {
 }
 
 function toggleGroup(groupId: string) {
-  expandedGroup.value = expandedGroup.value === groupId ? null : groupId
+  if (collapsedGroups.value.has(groupId)) collapsedGroups.value.delete(groupId)
+  else collapsedGroups.value.add(groupId)
+}
+
+async function copyPaths(paths: string[]) {
+  try {
+    await navigator.clipboard.writeText(paths.join('\n'))
+    notify.success(t('deduplication.pathsCopied', { count: paths.length }))
+  } catch (err) {
+    notify.error(t('deduplication.copyFailed', { error: String(err) }))
+  }
 }
 
 function toggleInstance(groupId: string, pkgId: string) {
   if (!selectedInstances[groupId]) return
+  if (duplicateGroups.value.find(g => g.id === groupId)?.instances.find(i => i.file_path === pkgId)?.is_recommended_keep) return
   if (selectedInstances[groupId].has(pkgId)) {
     // Don't allow deselecting the last instance
     if (selectedInstances[groupId].size <= 1) return
@@ -419,18 +478,18 @@ function toggleInstance(groupId: string, pkgId: string) {
 }
 
 function selectAllForKeep(group: DuplicateGroup) {
-  selectedInstances[group.id] = new Set(group.instances.map(i => i.package_id))
+  selectedInstances[group.id] = new Set(group.instances.map(i => i.file_path))
 }
 
 function selectRecommendedForKeep(group: DuplicateGroup) {
   selectedInstances[group.id] = new Set(
     group.instances
       .filter(i => i.is_recommended_keep)
-      .map(i => i.package_id)
+      .map(i => i.file_path)
   )
   // If no recommended, keep at least one
   if (selectedInstances[group.id].size === 0) {
-    selectedInstances[group.id].add(group.instances[0].package_id)
+    selectedInstances[group.id].add(group.instances[0].file_path)
   }
 }
 
@@ -445,17 +504,6 @@ function formatSize(bytes: number): string {
   return `${(bytes / Math.pow(1024, i)).toFixed(i > 0 ? 1 : 0)} ${units[i]}`
 }
 
-function sourceTypeLabel(sourceType: string): string {
-  const labels: Record<string, string> = {
-    managed_library: '托管库',
-    real_file: '真实文件',
-    hard_link: '硬链接',
-    symlink: '符号链接',
-    external: '外部路径',
-  }
-  return labels[sourceType] || sourceType || '未知来源'
-}
-
 const icons = {
   duplicates: 'M3 3h12v12H3zM9 9h12v12H9',
   space: 'M4 7V4a2 2 0 0 1 2-2h8.5L20 7.5V20a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-3M2 12h16M6 9v6',
@@ -465,11 +513,16 @@ const icons = {
 </script>
 
 <style scoped>
+.scan-options { padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.scan-directory-row { display: flex; gap: 8px; }
+.scan-directory-row input { flex: 1; min-width: 0; padding: 9px 12px; background: var(--bg-base); border: 1px solid var(--border-subtle); border-radius: 6px; color: var(--text-primary); }
+.scan-options details { max-height: 160px; overflow: auto; overflow-wrap: anywhere; }
+
 .deduplication-view {
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
-  height: 100%;
+  min-height: 100%;
 }
 
 .summary-grid {
@@ -534,7 +587,8 @@ const icons = {
 .restore-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .dedup-content {
-  flex: 1;
+  flex: 1 0 auto;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -561,156 +615,42 @@ const icons = {
   font-variant-numeric: tabular-nums;
 }
 
-.dedup-body {
-  flex: 1;
-  overflow-y: auto;
-  padding: var(--space-2);
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-/* ── Duplicate Group ──────────────────────────────────────── */
-.dup-group {
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  transition: border-color var(--duration-fast) var(--ease);
-}
-
-.dup-group.expanded {
-  border-color: var(--border-default);
-}
-
-.dup-group-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-3) var(--space-4);
-  cursor: pointer;
-  transition: background var(--duration-fast) var(--ease);
-}
-
-.dup-group-header:hover {
-  background: var(--bg-hover);
-}
-
-.dup-group-info {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-  flex: 1;
-}
-
-.dup-group-path {
-  color: var(--text-primary);
-  font-weight: var(--font-medium);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 400px;
-}
-
-.dup-group-meta { font-variant-numeric: tabular-nums; }
-
-.dup-group-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  flex-shrink: 0;
-}
-
-.dup-action-btn {
-  padding: 2px 10px;
-  border-radius: var(--radius-full);
-  font-weight: var(--font-semibold);
-  transition: background var(--duration-fast) var(--ease);
-}
-
-.dup-action-keep { background: rgba(62, 207, 142, 0.15); color: var(--color-success); }
-.dup-action-keep:hover { background: rgba(62, 207, 142, 0.25); }
-
-.dup-action-clean { background: rgba(110, 107, 240, 0.12); color: var(--accent-primary); }
-.dup-action-clean:hover { background: rgba(110, 107, 240, 0.2); }
-
-.dup-selected-badge {
-  padding: 2px 10px;
-  border-radius: var(--radius-full);
-  background: rgba(62, 207, 142, 0.12);
-  color: var(--color-success);
-  font-weight: var(--font-semibold);
-}
-
-.dup-expand-icon {
-  color: var(--text-tertiary);
-  font-size: 12px;
-  width: 16px;
-  text-align: center;
-}
-
-/* ── Instances ────────────────────────────────────────────── */
-.dup-instances {
-  border-top: 1px solid var(--border-subtle);
-}
-
-.dup-instance {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-2) var(--space-4);
-  cursor: pointer;
-  transition: background var(--duration-fast) var(--ease);
-}
-
-.dup-instance:hover { background: var(--bg-hover); }
-
-.dup-instance + .dup-instance {
-  border-top: 1px solid var(--border-subtle);
-}
-
-.dup-instance.dup-keep { opacity: 1; }
-.dup-instance.dup-remove { opacity: 0.5; }
-
-.dup-inst-indicator {
-  flex-shrink: 0;
-}
-
-.dup-inst-info {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  min-width: 0;
-  flex: 1;
-}
-
-.dup-inst-path {
-  color: var(--text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.dup-inst-meta { font-variant-numeric: tabular-nums; }
-
-.dup-rec-badge {
-  padding: 2px 8px;
-  border-radius: var(--radius-full);
-  background: rgba(110, 107, 240, 0.1);
-  color: var(--accent-primary);
-  font-weight: var(--font-semibold);
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-.dup-source-badge {
-  padding: 2px 8px;
-  border-radius: var(--radius-full);
-  background: rgba(96, 165, 250, 0.1);
-  color: var(--color-info);
-  font-weight: var(--font-semibold);
-  white-space: nowrap;
-  flex-shrink: 0;
+.dedup-search { display: flex; align-items: center; gap: 12px; padding: 12px 16px; flex-wrap: wrap; }
+.dedup-search input { flex: 1 1 280px; min-width: 0; padding: 8px 10px; background: var(--bg-input); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); }
+.dedup-body { min-height: 260px; max-height: 65vh; overflow-y: auto; padding: 12px; display: block; }
+.dup-group { border: 1px solid var(--border-subtle); border-radius: var(--radius-md); overflow: hidden; }
+.dup-group + .dup-group { margin-top: 12px; }
+.dup-group-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px; background: var(--bg-hover); flex-wrap: wrap; }
+.dup-group-toggle { display: flex; align-items: center; gap: 8px; text-align: left; flex: 1 1 260px; min-width: 0; }
+.dup-group-info { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.dup-group-path { color: var(--text-primary); font-weight: var(--font-semibold); overflow-wrap: anywhere; }
+.dup-group-meta, .dup-inst-meta { font-variant-numeric: tabular-nums; }
+.dup-group-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.dup-action-btn, .dup-page-btn, .dup-copy-btn { padding: 5px 10px; border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); white-space: nowrap; }
+.dup-action-btn:hover, .dup-page-btn:hover:not(:disabled), .dup-copy-btn:hover { background: var(--bg-hover); }
+.dup-action-keep { color: var(--color-success); }
+.dup-action-clean { color: var(--accent-primary); }
+.dup-page-btn:disabled, .dup-action-btn:disabled { opacity: .4; cursor: not-allowed; }
+.dup-expand-icon { color: var(--text-tertiary); flex: 0 0 14px; }
+.dup-instances { border-top: 1px solid var(--border-subtle); }
+.dup-instance { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; align-items: start; gap: 12px; padding: 14px; }
+.dup-instance + .dup-instance { border-top: 1px solid var(--border-subtle); }
+.dup-instance > input { margin-top: 4px; }
+.dup-inst-info { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.dup-inst-heading { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.dup-inst-name { font-weight: var(--font-medium); overflow-wrap: anywhere; }
+.dup-file-path, .dup-inst-name { -webkit-user-select: text; user-select: text; }
+.dup-file-path { display: block; overflow-wrap: anywhere; white-space: normal; line-height: 1.65; color: var(--text-secondary); }
+.dup-status, .dup-source-badge { padding: 2px 7px; border-radius: 4px; font-size: var(--text-xs); white-space: nowrap; }
+.dup-status.keep { color: var(--color-success); background: rgba(62, 207, 142, .1); }
+.dup-status.recycle { color: var(--color-error); background: rgba(239, 68, 68, .1); }
+.dup-status.archive, .dup-source-badge { color: var(--color-info); background: rgba(96, 165, 250, .1); }
+.dedup-pagination { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 12px 16px; border-top: 1px solid var(--border-subtle); }
+.dedup-no-match { padding: 24px; text-align: center; }
+@media (max-width: 700px) {
+  .dup-instance { grid-template-columns: 16px minmax(0, 1fr); }
+  .dup-copy-btn { grid-column: 2; justify-self: start; }
+  .action-bar { flex-wrap: wrap; }
 }
 
 /* ── Cleanup Modal ────────────────────────────────────────── */

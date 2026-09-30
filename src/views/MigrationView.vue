@@ -59,7 +59,7 @@
             {{ $t('common.back') }}
           </button>
           <button
-            v-if="preview && preview.operations.length > 0"
+            v-if="preview?.plan_id && (preview.operations.length > 0 || preview.cleanup_empty_dirs)"
             class="step-execute-btn"
             @click="handleExecute"
           >
@@ -181,6 +181,12 @@
         {{ $t('migration.previewDesc', { count: preview?.total_operations ?? 0, action: config.action === 'copy' ? $t('migration.actionCopy') : $t('migration.actionMove'), size: formatSize(preview?.total_size_bytes ?? 0) }) }}
       </p>
 
+      <p v-if="preview" class="text-sm text-secondary">{{ t('migration.diskSummary', { count: preview.total_files, skipped: preview.skipped }) }}</p>
+      <p v-if="preview?.cleanup_empty_dirs" class="text-sm text-secondary">{{ t('migration.emptyDirHint') }}</p>
+      <details v-if="preview?.warnings.length" class="preview-warnings">
+        <summary>{{ t('migration.scanWarnings', { count: preview.warnings.length }) }}</summary>
+        <p v-for="warning in preview.warnings" :key="warning" class="text-xs">{{ warning }}</p>
+      </details>
       <!-- Conflicts -->
       <div v-if="preview && preview.conflicts.length > 0" class="preview-warnings">
         <div class="warning-header">
@@ -208,10 +214,10 @@
         </div>
         <div
           v-for="op in preview.operations.slice(0, 50)"
-          :key="op.package_id"
+          :key="op.source"
           :class="['preview-row', { 'preview-conflict': op.conflict !== 'none' }]"
         >
-          <span class="preview-cell name">{{ op.package_id }}.var</span>
+          <span class="preview-cell name" :title="op.source">{{ fileName(op.source) }}</span>
           <span class="preview-cell type">{{ op.resource_type }}</span>
           <span class="preview-cell size">{{ formatSize(op.size_bytes) }}</span>
           <span class="preview-cell dest text-xs text-tertiary">{{ op.destination }}</span>
@@ -263,7 +269,7 @@
             <div class="exec-progress-fill" :style="{ width: `${migrationResult ? 100 : migrationProgressPercent}%` }" />
           </div>
           <div v-if="migrationProgress?.current_package_id && !migrationResult" class="exec-progress-file">
-            {{ migrationProgress.current_package_id }}.var
+            {{ migrationProgress.current_package_id }}
           </div>
         </div>
       </div>
@@ -287,6 +293,7 @@
           </div>
         </div>
 
+        <p class="text-sm text-secondary">{{ t('migration.removedDirectories', { count: migrationResult.removed_directories }) }}</p>
         <!-- Errors -->
         <div v-if="migrationResult.errors.length > 0" class="exec-errors glass-panel">
           <h4 class="exec-errors-title text-sm">{{ $t('migration.errors') }}</h4>
@@ -325,6 +332,11 @@ interface MigrationOperation {
 }
 
 interface MigrationPreview {
+  plan_id: string
+  total_files: number
+  skipped: number
+  warnings: string[]
+  cleanup_empty_dirs: boolean
   total_operations: number
   total_size_bytes: number
   operations: MigrationOperation[]
@@ -338,6 +350,7 @@ interface MigrationResult {
   total: number
   errors: string[]
   rollback_available: boolean
+  removed_directories: number
 }
 
 interface MigrationRollbackResult {
@@ -381,7 +394,7 @@ let unlistenMigrationProgress: (() => void) | null = null
 
 const config = ref({
   sourceDir: '',
-  targetKind: 'managed_library' as 'real_addon' | 'managed_library',
+  targetKind: 'real_addon' as 'real_addon' | 'managed_library',
   action: 'move' as 'copy' | 'move',
 })
 
@@ -393,6 +406,13 @@ const steps = computed(() => [
 ])
 
 const modes = computed(() => [
+  {
+    id: 'flatten',
+    title: t('migration.modeFlatten'),
+    description: t('migration.modeFlattenDesc'),
+    icon: 'M3 7h18M12 3v14m-5-5 5 5 5-5M4 21h16',
+    color: '#5b8def',
+  },
   {
     id: 'by_type',
     title: t('migration.modeByType'),
@@ -471,6 +491,7 @@ onUnmounted(() => {
 
 async function handlePreview() {
   if (!selectedMode.value) return
+  preview.value = null
   currentStep.value = 2
 
   const sourceDir = config.value.sourceDir || realAddonDir.value
@@ -486,13 +507,13 @@ async function handlePreview() {
         locale: locale.value,
       },
     })
-  } catch {
-    preview.value = { total_operations: 0, total_size_bytes: 0, operations: [], conflicts: ['Failed to compute preview'] }
+  } catch (err) {
+    preview.value = { plan_id: '', total_files: 0, skipped: 0, warnings: [], cleanup_empty_dirs: false, total_operations: 0, total_size_bytes: 0, operations: [], conflicts: [String(err)] }
   }
 }
 
 async function handleExecute() {
-  if (!preview.value || preview.value.operations.length === 0) return
+  if (!preview.value?.plan_id) return
   currentStep.value = 3
   migrationProgress.value = {
     task_id: '',
@@ -503,23 +524,26 @@ async function handleExecute() {
     current_package_id: null,
   }
 
-  // Simulate a short delay for UX
-  await new Promise(r => setTimeout(r, 600))
 
   try {
     migrationResult.value = await invoke<MigrationResult>('execute_migration', {
-      operations: preview.value.operations,
+      planId: preview.value.plan_id,
     })
     if (migrationResult.value.completed > 0 && config.value.targetKind === 'managed_library' && managedLibraryDir.value) {
-      await appStore.setManagedSettings(true, managedLibraryDir.value)
+      try {
+        await appStore.setManagedSettings(true, managedLibraryDir.value)
+      } catch (err) {
+        migrationResult.value.errors.push(t('migration.settingsSaveFailed', { error: String(err) }))
+      }
     }
-  } catch {
+  } catch (err) {
     migrationResult.value = {
       task_id: '',
       completed: 0,
       failed: 1,
       total: preview.value.operations.length,
-      errors: ['Migration execution failed'],
+      errors: [String(err)],
+      removed_directories: 0,
       rollback_available: false,
     }
   }
@@ -536,7 +560,7 @@ async function handleRollback() {
     migrationResult.value.completed = result.restored
     migrationResult.value.failed = result.failed
     migrationResult.value.total = result.restored + result.failed
-    migrationResult.value.rollback_available = false
+    migrationResult.value.rollback_available = result.failed > 0
   } catch (err: any) {
     migrationResult.value.errors = [String(err)]
   } finally {
@@ -586,6 +610,8 @@ function resetWizard() {
   migrationResult.value = null
   migrationProgress.value = null
 }
+
+function fileName(path: string) { return path.split(/[\\/]/).pop() || path }
 
 function formatSize(bytes: number): string {
   if (bytes === 0) return '0 B'

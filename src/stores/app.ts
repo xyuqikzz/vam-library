@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import i18n from '../i18n'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
@@ -59,6 +59,12 @@ export const useAppStore = defineStore('app', () => {
   const locale = ref<string>(localStorage.getItem('vamlibrary-locale') || 'zh-CN')
   const autoScan = ref(false)
   const theme = ref('dark')
+  const blurPreviews = ref(true)
+  // The CSS defaults to blurred even before settings finish loading. Use the
+  // document root so teleported dialogs and image lightboxes inherit the setting.
+  watch(blurPreviews, enabled => {
+    document.documentElement.dataset.previewBlur = enabled ? 'on' : 'off'
+  }, { immediate: true, flush: 'sync' })
   const managedEnabled = ref(false)
   const managedLibraryPath = ref<string | null>(null)
   const downloadTargetPolicy = ref<DownloadTargetPolicy>('auto')
@@ -124,26 +130,42 @@ export const useAppStore = defineStore('app', () => {
     }
   }
 
+  async function persistSettings() {
+    maxConcurrentDownloads.value = clampMaxConcurrentDownloads(maxConcurrentDownloads.value)
+    await invoke('save_settings', {
+      settings: {
+        vam_root_path: vamRootPath.value,
+        auto_scan: autoScan.value,
+        theme: theme.value,
+        blur_previews: blurPreviews.value,
+        managed_enabled: managedEnabled.value,
+        managed_library_path: managedLibraryPath.value,
+        download_target_policy: downloadTargetPolicy.value,
+        download_after_action: downloadAfterAction.value,
+        max_concurrent_downloads: maxConcurrentDownloads.value,
+        speed_limit_kb: speedLimitKb.value,
+        vam_instances: withCurrentInstanceSettings(vamInstances.value),
+        active_instance_id: activeInstanceId.value,
+        hub_auth_cookie: hubAuthCookie.value,
+        hub_logged_in: hubLoggedIn.value,
+      },
+    })
+  }
+
+  async function setBlurPreviews(enabled: boolean) {
+    const previous = blurPreviews.value
+    blurPreviews.value = enabled
+    try {
+      await persistSettings()
+    } catch (error) {
+      blurPreviews.value = previous
+      throw error
+    }
+  }
+
   async function saveSettings() {
     try {
-      maxConcurrentDownloads.value = clampMaxConcurrentDownloads(maxConcurrentDownloads.value)
-      await invoke('save_settings', {
-        settings: {
-          vam_root_path: vamRootPath.value,
-          auto_scan: autoScan.value,
-          theme: theme.value,
-          managed_enabled: managedEnabled.value,
-          managed_library_path: managedLibraryPath.value,
-          download_target_policy: downloadTargetPolicy.value,
-          download_after_action: downloadAfterAction.value,
-          max_concurrent_downloads: maxConcurrentDownloads.value,
-          speed_limit_kb: speedLimitKb.value,
-          vam_instances: withCurrentInstanceSettings(vamInstances.value),
-          active_instance_id: activeInstanceId.value,
-          hub_auth_cookie: hubAuthCookie.value,
-          hub_logged_in: hubLoggedIn.value,
-        },
-      })
+      await persistSettings()
       // Sync setting parameters dynamically to Tauri background Downloader
       await invoke('set_download_settings', {
         maxConcurrent: maxConcurrentDownloads.value,
@@ -160,6 +182,7 @@ export const useAppStore = defineStore('app', () => {
         vam_root_path: string | null
         auto_scan: boolean
         theme: string
+        blur_previews?: boolean
         managed_enabled?: boolean
         managed_library_path?: string | null
         download_target_policy?: DownloadTargetPolicy
@@ -175,6 +198,7 @@ export const useAppStore = defineStore('app', () => {
       vamRootPath.value = settings.vam_root_path
       autoScan.value = settings.auto_scan
       theme.value = settings.theme || 'dark'
+      blurPreviews.value = settings.blur_previews ?? true
       managedEnabled.value = settings.managed_enabled || false
       managedLibraryPath.value = settings.managed_library_path || null
       downloadTargetPolicy.value = settings.download_target_policy || 'auto'
@@ -334,6 +358,7 @@ export const useAppStore = defineStore('app', () => {
     locale,
     autoScan,
     theme,
+    blurPreviews,
     managedEnabled,
     managedLibraryPath,
     downloadTargetPolicy,
@@ -356,6 +381,7 @@ export const useAppStore = defineStore('app', () => {
     setVamRoot,
     setAutoScan,
     setTheme,
+    setBlurPreviews,
     startScan,
     setupScanListener,
     loadSettings,

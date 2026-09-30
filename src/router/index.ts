@@ -37,7 +37,7 @@ const router = createRouter({
           path: 'scenes',
           name: 'scenes',
           component: () => import('@/views/ScenesView.vue'),
-          meta: { title: 'Scenes' },
+          meta: { title: 'Favorites' },
         },
         {
           path: 'appearances',
@@ -60,9 +60,7 @@ const router = createRouter({
         },
         {
           path: 'on-demand',
-          name: 'on-demand',
-          component: () => import('@/views/OnDemandLaunchView.vue'),
-          meta: { title: 'On Demand Launch' },
+          redirect: '/ingestion',
         },
         {
           path: 'migration',
@@ -72,9 +70,13 @@ const router = createRouter({
         },
         {
           path: 'unpack',
-          name: 'unpack',
-          component: () => import('@/views/UnpackView.vue'),
-          meta: { title: 'Smart Unpack' },
+          redirect: '/ingestion',
+        },
+        {
+          path: 'ingestion',
+          name: 'ingestion',
+          component: () => import('@/views/IngestionView.vue'),
+          meta: { title: 'Smart Import' },
         },
         {
           path: 'vam-prefs',

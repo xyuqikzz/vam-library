@@ -16,6 +16,7 @@ export interface DownloadItem {
   speed_bytes_per_sec: number
   status: 'Pending' | 'Downloading' | 'Paused' | 'Completed' | 'Failed'
   error_msg: string | null
+  warning_msg?: string | null
   added_at: string
   final_path: string | null
   temp_path: string | null
@@ -33,6 +34,7 @@ export interface ProgressPayload {
   final_path?: string
   install_mode?: string
   indexed?: boolean
+  warning_msg?: string | null
 }
 
 export const useDownloadStore = defineStore('download', () => {
@@ -205,6 +207,7 @@ export const useDownloadStore = defineStore('download', () => {
           item.final_path = payload.final_path || item.final_path
           item.install_mode = payload.install_mode || item.install_mode
           item.indexed = Boolean(payload.indexed)
+          item.warning_msg = payload.warning_msg || null
         } else if (payload.status === 'downloading') {
           item.status = 'Downloading'
         }

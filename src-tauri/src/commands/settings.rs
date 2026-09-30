@@ -47,6 +47,8 @@ pub struct AppSettings {
     pub auto_scan: bool,
     /// UI 主题。
     pub theme: String,
+    /// 是否模糊所有资源预览图，旧配置默认开启。
+    pub blur_previews: bool,
     /// 是否已启用资源接管。
     pub managed_enabled: bool,
     /// 自定义托管库路径，空值时使用 VAMBoxLibrary/AddonPackages。
@@ -75,6 +77,7 @@ impl Default for AppSettings {
             vam_root_path: None,
             auto_scan: false,
             theme: "dark".to_string(),
+            blur_previews: true,
             managed_enabled: false,
             managed_library_path: None,
             download_target_policy: DownloadTargetPolicy::Auto,
@@ -347,5 +350,22 @@ fn sync_current_instance_state(settings: &mut AppSettings) {
         instance.managed_library_path = settings.managed_library_path.clone();
         instance.download_target_policy = settings.download_target_policy.clone();
         instance.download_after_action = settings.download_after_action.clone();
+    }
+}
+
+#[cfg(test)]
+mod preview_settings_tests {
+    use super::AppSettings;
+
+    #[test]
+    fn preview_blur_defaults_on_and_persists_explicit_off() {
+        assert!(AppSettings::default().blur_previews);
+        let legacy: AppSettings =
+            serde_json::from_str(r#"{"theme":"dark","auto_scan":false}"#).unwrap();
+        assert!(legacy.blur_previews);
+        let disabled: AppSettings = serde_json::from_str(r#"{"blur_previews":false}"#).unwrap();
+        let restored: AppSettings =
+            serde_json::from_str(&serde_json::to_string(&disabled).unwrap()).unwrap();
+        assert!(!restored.blur_previews);
     }
 }

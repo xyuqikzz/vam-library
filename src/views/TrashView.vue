@@ -1,26 +1,16 @@
 <template>
   <div class="trash-view animate-fadeIn">
-    <!-- Stat Cards -->
-    <section class="summary-grid stagger-children">
-      <StatCard
-        :title="$t('trash.statsTotal')"
-        :value="trashList.length"
-        :subtitle="$t('trash.statsTotalSub')"
-        :icon="icons.trash"
-        trend="neutral"
-        color="#8888a8"
-      />
-      <StatCard
-        :title="$t('trash.statsSize')"
-        :value="totalSize > 0 ? formatSize(totalSize) : '—'"
-        :subtitle="$t('trash.statsSizeSub')"
-        :icon="icons.space"
-        trend="neutral"
-        color="#6e6bf0"
-      />
-    </section>
-
-    <!-- Action Bar -->
+    <section class="trash-toolbar">
+      <dl class="summary-grid">
+        <div class="summary-item">
+          <dt>{{ $t('trash.statsTotal') }}</dt>
+          <dd>{{ trashList.length.toLocaleString() }}</dd>
+        </div>
+        <div class="summary-item">
+          <dt>{{ $t('trash.statsSize') }}</dt>
+          <dd>{{ formatSize(totalSize) }}</dd>
+        </div>
+      </dl>
     <div class="action-bar">
       <button
         class="refresh-btn"
@@ -45,6 +35,7 @@
         <span>{{ $t('trash.emptyBtn') }}</span>
       </button>
     </div>
+    </section>
 
     <!-- Trash Content -->
     <div v-if="trashList.length > 0" class="trash-content glass-panel">
@@ -60,7 +51,6 @@
           <thead>
             <tr>
               <th class="col-package">{{ $t('packages.package') }}</th>
-              <th class="col-path">{{ $t('trash.originalPath') }}</th>
               <th class="col-size">{{ $t('packages.size') }}</th>
               <th class="col-time">{{ $t('trash.deletedTime') }}</th>
               <th class="col-remaining">{{ $t('trash.remainingTime') }}</th>
@@ -71,18 +61,18 @@
             <tr v-for="item in trashList" :key="item.id" class="trash-row">
               <td class="col-package font-medium text-primary">
                 <div class="package-cell">
-                  <span class="type-dot-sm type-scene"></span>
-                  <span class="truncate" :title="item.package_id">{{ item.package_id }}.var</span>
+                  <span class="truncate package-name" :title="item.original_path.split(/[\\/]/).pop()">{{ item.original_path.split(/[\\/]/).pop() }}</span>
+                  <span class="truncate-path" :title="`${$t('trash.originalPath')}: ${item.original_path}`">{{ item.original_path }}</span>
                 </div>
-              </td>
-              <td class="col-path text-secondary text-xs">
-                <span class="truncate-path" :title="item.original_path">{{ item.original_path }}</span>
               </td>
               <td class="col-size font-numeric text-secondary text-sm">
                 {{ formatSize(item.size_bytes) }}
               </td>
               <td class="col-time text-secondary text-xs">
-                {{ formatDate(item.created_at) }}
+                <time :title="formatDate(item.created_at)">
+                  <span>{{ formatDate(item.created_at).split(' ')[0] }}</span>
+                  <span class="time-detail">{{ formatDate(item.created_at).split(' ')[1] }}</span>
+                </time>
               </td>
               <td class="col-remaining text-warning text-xs font-semibold">
                 {{ getRemainingTime(item.created_at) }}
@@ -92,7 +82,7 @@
                   <button
                     class="action-btn-mini restore"
                     :disabled="isOperating"
-                    :title="$t('deduplication.restoreLatest').split(' ')[0]"
+                    :title="$t('common.restore')"
                     @click="handleRestore(item)"
                   >
                     {{ $t('common.restore') || '恢复' }}
@@ -172,7 +162,6 @@ import { ref, computed, onMounted } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { useI18n } from 'vue-i18n'
 import { useNotification } from '@/composables/useNotification'
-import StatCard from '@/components/common/StatCard.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 
 interface CleanupTrashEntry {
@@ -347,18 +336,48 @@ const icons = {
 .trash-view {
   display: flex;
   flex-direction: column;
-  gap: var(--space-5);
+  gap: var(--space-4);
   height: 100%;
+  min-height: 0;
+  min-width: 0;
+}
+
+.trash-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-5);
+  flex-wrap: wrap;
+  flex-shrink: 0;
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
 }
 
 .summary-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: var(--space-5);
+  display: flex;
+  gap: var(--space-6);
+  margin: 0;
 }
 
-@media (max-width: 768px) {
-  .summary-grid { grid-template-columns: 1fr; }
+.summary-item + .summary-item {
+  border-left: 1px solid var(--border-subtle);
+  padding-left: var(--space-6);
+}
+
+.summary-item dt {
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  margin-bottom: var(--space-1);
+}
+
+.summary-item dd {
+  margin: 0;
+  font-size: var(--text-xl);
+  font-weight: var(--font-semibold);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
 }
 
 .action-bar {
@@ -374,6 +393,8 @@ const icons = {
   gap: var(--space-2);
   padding: var(--space-2) var(--space-4);
   height: 34px;
+  white-space: nowrap;
+  flex-shrink: 0;
   font-size: var(--text-sm);
   font-weight: var(--font-semibold);
   border-radius: var(--radius-md);
@@ -394,15 +415,13 @@ const icons = {
 }
 
 .empty-btn {
-  background: var(--color-error);
-  color: white;
-  border: none;
+  background: var(--color-error-bg);
+  color: var(--color-error);
+  border: 1px solid color-mix(in srgb, var(--color-error) 25%, transparent);
 }
 
 .empty-btn:hover:not(:disabled) {
-  opacity: 0.9;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(248, 113, 113, 0.3);
+  background: color-mix(in srgb, var(--color-error) 18%, transparent);
 }
 
 .empty-btn:disabled,
@@ -419,6 +438,8 @@ const icons = {
 
 .trash-content {
   flex: 1;
+  min-height: 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -431,23 +452,25 @@ const icons = {
   padding: var(--space-4) var(--space-5);
   border-bottom: 1px solid var(--border-subtle);
   flex-shrink: 0;
+  gap: var(--space-2);
+  flex-wrap: wrap;
 }
 
 .trash-header-title {
   font-size: var(--text-sm);
   font-weight: var(--font-semibold);
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  color: var(--text-primary);
 }
 
 .trash-header-info {
-  opacity: 0.8;
+  color: var(--text-secondary);
+  line-height: 1.6;
 }
 
 .trash-body {
   flex: 1;
-  overflow-y: auto;
+  min-height: 0;
+  overflow: auto;
 }
 
 .empty-body {
@@ -460,23 +483,35 @@ const icons = {
 /* ── Trash Table Styles ────────────────────────────────────── */
 .trash-table {
   width: 100%;
+  min-width: 720px;
+  table-layout: fixed;
   border-collapse: collapse;
   text-align: left;
 }
 
 .trash-table th,
 .trash-table td {
-  padding: var(--space-3) var(--space-5);
+  padding: var(--space-3) var(--space-3);
   border-bottom: 1px solid var(--border-subtle);
+  vertical-align: middle;
 }
+
+.trash-table .col-package { padding-left: var(--space-5); }
+.col-size { width: 88px; text-align: right; white-space: nowrap; }
+.col-time { width: 112px; white-space: nowrap; }
+.col-remaining { width: 150px; white-space: nowrap; }
+.col-actions { width: 148px; white-space: nowrap; }
+.trash-table .col-actions { padding-right: var(--space-5); }
+.col-time time { display: flex; flex-direction: column; gap: 2px; font-variant-numeric: tabular-nums; }
+.time-detail { color: var(--text-tertiary); }
+.trash-table td.col-remaining { color: var(--text-secondary); font-weight: var(--font-normal); }
 
 .trash-table th {
   font-size: var(--text-xs);
   font-weight: var(--font-semibold);
-  color: var(--text-tertiary);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  background: rgba(0, 0, 0, 0.15);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  background: var(--bg-surface);
   position: sticky;
   top: 0;
   z-index: 1;
@@ -492,9 +527,14 @@ const icons = {
 
 .package-cell {
   display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  max-width: 250px;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.package-name {
+  font-size: var(--text-sm);
+  line-height: 1.5;
 }
 
 .truncate {
@@ -505,7 +545,9 @@ const icons = {
 
 .truncate-path {
   display: block;
-  max-width: 320px;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  line-height: 1.5;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -514,9 +556,13 @@ const icons = {
 .action-buttons {
   display: flex;
   gap: var(--space-2);
+  justify-content: flex-end;
 }
 
 .action-btn-mini {
+  flex-shrink: 0;
+  white-space: nowrap;
+  min-height: 30px;
   padding: 4px 10px;
   border-radius: var(--radius-sm);
   font-size: var(--text-xs);
@@ -527,14 +573,13 @@ const icons = {
 }
 
 .action-btn-mini.restore {
-  background: rgba(62, 207, 142, 0.12);
-  color: var(--color-success);
-  border-color: rgba(62, 207, 142, 0.25);
+  background: var(--bg-subtle);
+  color: var(--text-primary);
+  border-color: var(--border-default);
 }
 
 .action-btn-mini.restore:hover:not(:disabled) {
-  background: rgba(62, 207, 142, 0.22);
-  transform: translateY(-1px);
+  background: var(--bg-hover);
 }
 
 .action-btn-mini.delete {

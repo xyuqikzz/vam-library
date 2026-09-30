@@ -1,6 +1,12 @@
 <template>
   <div class="scenes-view animate-fadeIn">
+    <div class="content-tabs">
+      <button :class="{ active: contentTab === 'files' }" :aria-pressed="contentTab === 'files'" :disabled="managerBusy" @click="contentTab = 'files'">{{ t('gameContent.scenes') }}</button>
+      <button :class="{ active: contentTab === 'packages' }" :aria-pressed="contentTab === 'packages'" :disabled="managerBusy" @click="contentTab = 'packages'">{{ t('gameContent.packageView') }}</button>
+    </div>
+    <GameContentManager v-show="contentTab === 'files'" kind="scene" @busy-change="managerBusy = $event" />
     <ResourceDisplay
+      v-if="contentTab === 'packages'"
       :packages="sortedScenes"
       :view-mode="viewMode"
       :result-count-label="t('scenes.scenesCount', { count: filteredScenes.length })"
@@ -16,12 +22,6 @@
           @click="handleScan"
         >
           <span>{{ isScanning ? t('toolbar.scanning') : t('packages.scan') }}</span>
-        </button>
-        <button class="filter-btn">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-            <path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
-          <span>{{ t('packages.filter') }}</span>
         </button>
         <div class="sort-dropdown">
           <select v-model="sortBy" class="sort-select">
@@ -51,6 +51,9 @@ import { storeToRefs } from 'pinia'
 import { useAppStore } from '@/stores/app'
 import { useLocalLibraryStore } from '@/stores/localLibrary'
 import ResourceDisplay from '@/components/ResourceDisplay.vue'
+import GameContentManager from '@/components/GameContentManager.vue'
+const contentTab = ref<'files' | 'packages'>('files')
+const managerBusy = ref(false)
 
 const { t } = useI18n()
 const router = useRouter()
@@ -114,11 +117,20 @@ function goToSettings() {
 </script>
 
 <style scoped>
+.content-tabs { display: flex; flex-shrink: 0; gap: 8px; margin-bottom: 12px; }
+.content-tabs button { padding: 7px 12px; border-radius: 7px; font-size: 13px; color: var(--text-secondary); }
+.content-tabs button.active { background: var(--bg-elevated); color: var(--text-primary); }
+.content-tabs button:focus-visible { outline: 2px solid var(--accent-primary); }
+.content-tabs button:disabled { opacity: .5; cursor: not-allowed; }
 .scenes-view {
+  display: flex;
+  flex-direction: column;
   height: 100%;
   position: relative;
   overflow: hidden;
 }
+.scenes-view > .game-content { flex: 1; min-height: 0; overflow: hidden; }
+.scenes-view > .resource-display { flex: 1; min-height: 0; height: auto; }
 
 .scan-btn-inline {
   display: inline-flex;
@@ -139,20 +151,6 @@ function goToSettings() {
 
 .scan-btn-inline:disabled { opacity: 0.5; cursor: not-allowed; }
 
-.filter-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-1) var(--space-3);
-  height: 30px;
-  border-radius: var(--radius-sm);
-  color: var(--text-secondary);
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-  transition: color var(--duration-fast) var(--ease), background var(--duration-fast) var(--ease);
-}
-
-.filter-btn:hover { color: var(--text-primary); background: var(--bg-hover); }
 
 .sort-select {
   height: 30px;

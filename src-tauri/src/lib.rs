@@ -22,6 +22,9 @@ pub fn run() {
         .manage(commands::scan::FileWatcherState {
             inner: std::sync::Mutex::new(None),
         })
+        .manage(commands::deduplication::DedupState::default())
+        .manage(commands::migration::MigrationState::default())
+        .manage(commands::ingestion::IngestionState::default())
         .setup(|app| {
             // Initialize database in the app data directory
             let app_data_dir = app.path().app_data_dir()?;
@@ -54,6 +57,15 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            commands::game_content::list_game_contents,
+            commands::game_content::get_game_content_detail,
+            commands::game_content::list_package_scene_contents,
+            commands::game_content::save_game_scene_appearance,
+            commands::game_content::get_game_content_image,
+            commands::game_content::copy_game_presets,
+            commands::game_content::set_game_scene_favorite,
+            commands::game_content::rename_game_preset,
+            commands::game_content::set_game_scene_name,
             commands::game_mods::get_scene_browser_mod_status,
             commands::game_mods::install_scene_browser_mod,
             commands::game_mods::uninstall_scene_browser_mod,
@@ -82,13 +94,14 @@ pub fn run() {
             commands::dependency::find_missing_dependencies,
             commands::deduplication::scan_for_duplicates,
             commands::deduplication::get_duplicate_groups,
-            commands::deduplication::preview_cleanup,
             commands::deduplication::execute_cleanup,
             commands::deduplication::list_cleanup_trash,
             commands::deduplication::restore_cleanup_trash_item,
             commands::deduplication::delete_cleanup_trash_item,
             commands::deduplication::empty_cleanup_trash,
             commands::migration::preview_migration,
+            commands::ingestion::preview_ingestion,
+            commands::ingestion::execute_ingestion,
             commands::migration::execute_migration,
             commands::migration::rollback_migration,
             commands::migration::rollback_all_migrations,

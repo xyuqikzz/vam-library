@@ -1,7 +1,7 @@
 /** Migration task definition */
 export interface MigrationTask {
   id: string;
-  mode: 'by_type' | 'by_creator' | 'by_scene' | 'custom';
+  mode: 'by_type' | 'by_creator' | 'by_scene' | 'custom' | 'flatten';
   source_dir: string;
   rules: MigrationRule[];
   operations: MigrationOperation[];

@@ -6,7 +6,7 @@
 
 **Languages / 语言:** [English](#english) · [中文](#中文)
 
-> ⚠️ **Status / 项目状态:** Early development (`v0.1.0`). Features and APIs may change. / 早期开发阶段（`v0.1.0`），功能与接口可能变动。
+> ⚠️ **Status / 项目状态:** Early development (`v0.1.1`). Features and APIs may change. / 早期开发阶段（`v0.1.1`），功能与接口可能变动。
 
 ---
 
@@ -14,11 +14,13 @@
 
 ### Overview
 
-VAM Library is a desktop application that helps you manage a local Virt-A-Mate library of `.var` packages. It scans and indexes your resources into a local SQLite database, then provides tools to browse, analyze dependencies, deduplicate, migrate, unpack, launch VAM on demand, and download/share content — all from a single bilingual (English / 中文) interface.
+VAM Library is a desktop application that helps you manage a local Virt-A-Mate library of `.var` packages. It scans and indexes your resources into a local SQLite database, then provides tools to browse, analyze dependencies, deduplicate, migrate, import, and download/share content — all from a single bilingual (English / 中文) interface.
 
 The app uses a Vue 3 frontend talking to a Rust backend via Tauri commands. All indexing data is stored locally; your real VAM files are only touched by the explicit move / copy / link / delete operations you trigger.
 
 ### Features
+
+- **Presets and game favorites** — The Presets page offers Appearance (default), Clothing, Hair, Morph, Skin, Plugin, Animation and Pose tabs, listing individual VAR and local `.vap` files with thumbnails and read-only character, clothing, hair, morph and JSON details. Copy all indexed VAR presets of the selected type (or one preset) into `Custom/Atom/Person/<type directory>/VAM Library/<package>/<original subfolders>`. Animation uses `AnimationPresets`; each type is isolated for listing, copying and package view. Existing identical files are skipped; different contents are reported without overwriting. Package-local asset references are qualified to the source VAR, which must remain available with its dependencies. The Copy to local presets button asks for confirmation and explains the selected-type scope before writing. Local preset names omit the Preset_ prefix in the UI; renaming xxx writes Preset_xxx.vap together with its thumbnails and favorite/hidden markers; external references to their old filenames are not rewritten. The Scenes page reads native `.json.fav` markers, supports adding/removing favorites, searching and per-instance display names, and includes orphan favorites for removal. Display names apply only in this app. Refresh or return to the app to pick up changes made in the game; reopen the game browser to refresh its view. The original package views remain available in both pages.
 
 - **In-game scene browser mod** — Install/uninstall the bundled BepInEx mod from Settings. Adds author A–Z grouping and physical `AddonPackages` folder navigation to VaM's scene browser. Targets the recorded VaM 1.22.0.13 / BepInEx build; see [mod instructions](mods/SceneBrowser/README.md).
 
@@ -29,8 +31,7 @@ The app uses a Vue 3 frontend talking to a Rust backend via Tauri commands. All 
 - **Dependency completion** — Inspect the dependency graph, per-package dependency relations, reverse dependencies, and find missing dependencies.
 - **Deduplication** — Scan for duplicate resources, review duplicate groups, preview cleanup, and execute cleanup safely into an in-app recycle bin.
 - **Migration** — Preview and execute reorganization of resource files (by type / author / scene / custom rules), with rollback of individual or all migrations, and scene dependency collection.
-- **On-demand launch** — Define launch plans that map selected main packages plus their recursive dependencies into the run directory to reduce VAM's load footprint; migrate/restore the library and launch VAM directly or via config.
-- **Smart unpack** — Analyze archives and unpack their contents into the library.
+- **Smart import** — Recursively preview and move `.var` packages from a selected folder into the game's `AddonPackages`. Compare source and installed packages by creator/name, keep the highest numeric version, and break version ties by modification time closest to now (exact ties keep the installed copy). Choose flat, type, creator, scene or a custom relative folder. Duplicates and superseded versions go to the recycle bin; successful groups are indexed immediately. Non-VAR files stay in place. Corrupt winning packages and managed mappings are reported and skipped. Scenes pinned to an older version may require restoring that dependency from the recycle bin.
 - **Online Hub** — Browse the VaM Hub, view package info, check login status, and queue Hub files for download.
 - **Download center** — A background download queue with pause / resume / cancel / retry, completed-item cleanup, configurable download settings, and automatic Hub dependency resolution.
 - **One-click sharing** — Preview and export selected resources (and their dependencies) as a ZIP, or export the list of installed packages.
@@ -130,14 +131,28 @@ npm run tauri:build
 1. On first launch, open **Settings** and select your VAM installation root directory.
 2. Run a **scan** — the app indexes resources under `AddonPackages` and related folders into the local database.
 3. Browse and inspect resources in the Packages, Scenes, Appearances and Dependency views.
-4. Use Deduplication, Migration, On-demand launch, Smart unpack, Download or Share as needed.
+4. Use Deduplication, Migration, Smart import, Download or Share as needed.
+
+### Recursive deduplication and flattening
+
+- Scan all regular files directly from disk, including unindexed packages. Group VAR files by creator and resource name; keep the highest numeric version, then the most recently modified copy.
+- Preserve explicitly referenced versions from `meta.json` and archive older versions under `依赖旧版本/`. `latest` references do not pin old versions. If dependency metadata cannot be read, retain all versions until repaired; only confirmed same-version duplicates are eligible, and malformed-package groups are kept intact.
+- Other files require both matching names and SHA-256 contents. Cleanup uses the recycle bin and its existing **24-hour automatic purge** policy. Archived dependencies are not recycled.
+- Deduplicate first, then use **Flatten to root → real AddonPackages → Move**. All regular files are included; the dependency archive remains a separate folder. Conflicting VAR names stay in place; other name collisions receive numeric suffixes.
+- Only empty source subfolders are removed after moves. Copies keep source folders. Links, known managed mappings and internal download directories are excluded. Execution revalidates its saved preview; migrations and dependency archives are recorded for rollback.
+
+### Download failures and saved-file warnings
+
+- Temporary connection failures and HTTP 408/429/500/502/503/504 responses receive up to three attempts with bounded backoff; 401/403/404 produce actionable errors. Partial files survive connection failures, and resume responses must match the requested byte range.
+- A download is validated as a complete ZIP with readable entries and CRC checks. Invalid `meta.json` does not delete an otherwise intact archive: the download completes with a persistent warning and a basic index without dependency metadata. This does not repair the author's metadata or guarantee that VaM can load it.
+- Database indexing failure preserves the downloaded file. **Retry indexing** reuses that file without downloading it again. Existing installed files are not silently overwritten.
 
 ### Data & file safety
 
 - The local SQLite index caches scan results, dependency relations, tags, migration records and download state.
 - Clearing local data only wipes the app database — it never deletes your real VAM resource files.
 - Deletions and deduplication cleanups go to the VAM Library recycle bin first; expired trash is purged automatically per app policy.
-- Migration, on-demand launch, unpack and download operations move/copy/link real files — always confirm the preview before executing.
+- Migration, smart import and download operations move/copy real files — always confirm the preview before executing.
 
 ### Contributing
 
@@ -158,7 +173,7 @@ Released under the [MIT License](./LICENSE). Copyright (c) 2026 xyuqikzz.
 
 ### 项目简介
 
-VAM Library 是一个用于管理本地 Virt-A-Mate 资源库（`.var` 资源包）的桌面应用。它会扫描并将资源索引到本地 SQLite 数据库，然后提供浏览、依赖分析、去重、迁移、解包、按需启动、下载与分享等一系列功能——全部集成在一个中英双语界面中。
+VAM Library 是一个用于管理本地 Virt-A-Mate 资源库（`.var` 资源包）的桌面应用。它会扫描并将资源索引到本地 SQLite 数据库，然后提供浏览、依赖分析、去重、迁移、智能入库、下载与分享等一系列功能——全部集成在一个中英双语界面中。
 
 应用采用 Vue 3 前端 + Rust 后端，通过 Tauri 命令通信。所有索引数据保存在本地；只有你主动触发的移动 / 复制 / 链接 / 删除操作才会动到你真实的 VAM 文件。
 
@@ -173,8 +188,7 @@ VAM Library 是一个用于管理本地 Virt-A-Mate 资源库（`.var` 资源包
 - **依赖补全** — 查看依赖关系图、单包依赖关系、反向依赖，并查找缺失的依赖。
 - **去重分析** — 扫描重复资源，查看重复组，预览清理方案，并将清理项安全地放入应用回收站。
 - **资源迁移** — 按类型 / 作者 / 场景 / 自定义规则预览并执行文件重组，支持单次或全部迁移回滚，以及场景依赖收集。
-- **按需启动** — 定义启动方案，将选定主包及其递归依赖映射到运行目录，减少 VAM 启动时的加载范围；可迁移 / 恢复资源库，并直接或通过配置启动 VAM。
-- **智能解包** — 分析压缩包并将其内容解包到资源库。
+- **智能入库** — 递归预览所选文件夹内的 `.var` 包并移动到游戏 `AddonPackages`。按作者及包名同时比较来源和已安装文件，保留最高数字版本；同版本保留修改时间最接近当前时间的文件，完全相同时保留已安装文件。支持平铺、按类型、按作者、按场景和自定义相对子目录。重复包与旧版本进入回收站，已完成的资源组立即同步索引，普通文件保留原处。损坏的候选保留包及托管映射会报告并跳过。固定引用旧版本的场景可能需要从回收站恢复对应依赖。
 - **在线 Hub** — 浏览 VaM Hub、查看包信息、查看登录状态，并将 Hub 文件加入下载队列。
 - **下载中心** — 后台下载队列，支持暂停 / 继续 / 取消 / 重试、清理已完成项、可配置下载设置，以及自动解析 Hub 依赖。
 - **一键分享** — 预览并导出选定资源（及其依赖）为 ZIP，或导出已安装包列表。
@@ -183,6 +197,24 @@ VAM Library 是一个用于管理本地 Virt-A-Mate 资源库（`.var` 资源包
 - **多实例设置** — 保存多个 VAM 实例目录以及相关下载、托管配置、Hub 认证 Cookie，并可选择清空本地数据库。
 - **实时文件监听** — 可选的文件系统监听器，让索引与磁盘变更保持同步。
 - **中英双语界面** — 支持简体中文（`zh-CN`）与英文（`en-US`），选择会本地保存（默认中文）。
+
+### 预设与游戏收藏
+
+- **预设**：顶部依次切换外观预设（默认）、服装预设、头发预设、变形预设、皮肤预设、插件预设、动画预设、姿势预设。逐个查看 VAR 内和游戏本地预设、缩略图及完整只读内容。支持单个复制和一键复制当前类型的全部已索引预设；资源包视图也只显示包含当前类型预设的包。未索引的资源包请先扫描。
+- **复制目标**：`游戏目录/Custom/Atom/Person/<类型目录>/VAM Library/<资源包>/<原有子目录>`，类型目录依次是 `Appearance`、`Clothing`、`Hair`、`Morphs`、`Skin`、`Plugins`、`AnimationPresets`、`Pose`。只复制当前选中的类型，已有本地预设无需复制。预览图一并复制，同名同内容跳过、同名不同内容报告冲突；保留原 VAR，复制后的包内引用仍依赖原包及其依赖，游戏中必须启用这些包。
+- **复制确认与改名**：点击“复制为本地预设”后，弹窗说明将复制资源包文件夹中当前类型的全部已索引预设，不受搜索和来源筛选影响，确认后才执行。复制后选择“游戏本地文件”，名称只需填写 `xxx`，保存为 `Preset_xxx.vap`，不重复添加 `Preset_`；缩略图和收藏/隐藏标记同步改名。其他文件引用旧名称的路径不自动修改，VAR 内文件不直接改名。
+- **收藏夹**：读取游戏真实收藏，默认显示已收藏场景；关闭“只看收藏”可浏览全部场景并添加收藏。支持搜索、添加/移除收藏和编辑软件内显示名称。工具栏等高对齐，列表与详情独立滚动，分页固定在底部；切换资源包视图会保留筛选和图片缓存。移除收藏保留场景原文件；缺失或未索引资源的收藏仍可移除。显示名称按游戏实例隔离，清空即可恢复原名，不改动游戏场景名。
+- 切回软件只刷新文件列表和收藏状态，复用已加载的缩略图（包括无预览图的结果）；手动刷新或重新扫描会更新图片。打开详情保持卡片尺寸不变。游戏中的修改可通过“刷新”或切回软件读取；软件修改收藏后，重新打开游戏场景浏览器刷新。测试覆盖复制引用、冲突、改名及标记迁移、收藏往返、失效收藏、路径越界、目录链接和实例隔离。
+
+```powershell
+cargo test --manifest-path src-tauri/Cargo.toml game_content
+# Optional compatibility checks: game files are read-only; copied outputs use temporary fixtures.
+$env:VAM_CONTENT_TEST_ROOT = '<VaM root>'
+$env:VAM_CONTENT_TEST_DB = '<app data>/com.vamlibrary.app/vamlibrary.db'
+cargo test --manifest-path src-tauri/Cargo.toml game_content -- --include-ignored
+```
+
+- **提取场景角色**：在任意资源列表中点击资源包，展开右侧详情面板的“提取场景角色”，选择包内场景和直接保存的 Person 角色。直接读取所选 VAR，无需依赖资源类型标签或内容索引。填写名称后保存为 `Custom/Atom/Person/Appearance/VAM Library/Extracted/Preset_<名称>.vap`，可点击“查看外观预设”定位结果。保留已保存的基础模型、皮肤、变形、服装、头发及相关材质/物理参数，排除场景位置、控制器动作、动画和插件；同名不覆盖，场景和 VAR 保持不变。VAR 内引用会转换为来源包引用，仍需保留并启用原包及依赖。提取面板显示所选场景的默认预览图，保存时以预设同名复制 JPG/PNG/JPEG 缩略图（保留原格式）；没有预览图时仍可保存预设。该图是场景预览，不是角色独立截图。插件运行时修改或子场景内角色需先在游戏内保存到场景。保存前检查场景是否改变，避免导出旧选择。
 
 ### 技术栈
 
@@ -274,14 +306,30 @@ npm run tauri:build
 1. 首次启动后，在**设置**页选择你的 VAM 安装根目录。
 2. 执行**扫描**，应用会索引 `AddonPackages` 等目录中的资源到本地数据库。
 3. 在包管理、场景、外观、依赖分析等页面查看资源状态。
-4. 根据需要进行去重、迁移、按需启动、智能解包、下载或分享。
+4. 根据需要进行去重、迁移、智能入库、下载或分享。
+
+### 全目录去重与平铺迁移
+
+- 去重直接递归扫描所选目录中的所有普通文件，无需先入库。`.var` 按作者与资源名分组，保留最高数字版本；版本相同保留修改时间最新的一份。
+- `meta.json` 中明确引用的旧版本保留并集中到资源根目录的 `依赖旧版本/`；`latest` 引用不固定旧版本。依赖无法读取时显示异常，暂时保留各版本，只清理可确认的同版本副本；异常包所在分组全部保留。
+- 其他文件仅在同名且 SHA-256 内容摘要相同时去重。清理文件进入回收站，沿用 **24 小时自动清理**策略；归档旧版本不会进入回收站。
+- 推荐先确认去重页的“回收 / 归档”清单，再选择迁移的“平铺到根目录”、真实目录及移动。迁移覆盖未索引包、文档、图片等全部普通文件；平铺保留 `依赖旧版本/` 目录。
+- 预览检查磁盘目标和批次内同名冲突：VAR 不改名、不覆盖，冲突项留在原位置并提示先去重；其他同名文件添加序号，保留双方。
+- 移动后仅清理源目录的空子目录；复制不清理目录。根目录、非空目录、链接、下载暂存目录及已知托管映射不会被清理。
+- 执行使用后端保存的快照，并重新核对文件大小和修改时间；目录变化后需要重新扫描。迁移和旧版本归档均记录回滚信息，回滚不覆盖已有文件，并拒绝已变化的目标。
+
+### 下载失败与文件保留
+
+- 连接超时、临时网络错误以及 HTTP 408/429/500/502/503/504 最多尝试三次；401/403/404 直接提示登录、权限或地址问题。连接失败保留临时下载，续传前核对返回的字节范围。
+- 下载完成后检查 ZIP 结构和各文件 CRC。仅 `meta.json` 格式异常时保留完整文件，显示持续警告并建立不含依赖元数据的基础索引，不再误删或反复下载；这不等于修复了资源作者的元数据，也不保证 VaM 能正常加载。
+- 数据库入库失败仍保留文件，可以使用“重试入库”复用已保存的文件，不重新下载。已有资源文件不会被静默覆盖。
 
 ### 数据与文件安全说明
 
 - 本地 SQLite 索引用于缓存扫描结果、依赖关系、标签、迁移记录和下载状态。
 - 清空本地数据只会清除应用数据库，不会删除真实的 VAM 资源文件。
 - 删除和去重清理会优先进入 VAM Library 回收站，回收站内资源会按应用策略自动清理。
-- 资源迁移、按需启动、解包和下载操作会涉及真实文件的移动、复制或链接映射，执行前请确认预览内容。
+- 资源迁移、智能入库和下载操作会涉及真实文件的移动或复制，执行前请确认预览内容。
 
 ### 参与开发
 

@@ -154,17 +154,20 @@
 
       <div v-else class="statistics-content">
         <section class="stats-card glass-panel">
-          <h2 class="section-title">作者 TOP 20</h2>
+          <h2 class="section-title analysis-title">作者 TOP 20</h2>
+          <p class="section-description">按资源包数量排序，条形长度相对榜首；占比基于全部资源包。</p>
           <div class="rank-list">
+            <div class="rank-row chart-head" aria-hidden="true">
+              <span>#</span><span>作者</span><span>数量对比</span><span>包数</span><span>占比</span>
+            </div>
             <div v-for="(item, index) in authorTopRows" :key="item.creator" class="rank-row">
               <span class="rank-index">{{ index + 1 }}</span>
               <span class="rank-name" :title="item.creator">{{ item.creator }}</span>
-              <div class="rank-track">
-                <div class="rank-fill" :class="{ top: index === 0 }" :style="{ width: `${item.percent}%` }">
-                  <span>{{ item.count }}</span>
-                </div>
+              <div class="rank-track" aria-hidden="true">
+                <div class="rank-fill" :style="{ width: `${item.count / authorTopRows[0].count * 100}%` }" />
               </div>
-              <span class="rank-percent">{{ item.percent.toFixed(1) }}%</span>
+              <span class="rank-count">{{ formatNumber(item.count) }}</span>
+              <span class="rank-percent">{{ formatPercent(item.percent / 100) }}</span>
             </div>
           </div>
         </section>
@@ -172,14 +175,16 @@
         <section class="stats-card glass-panel">
           <h2 class="section-title">文件大小分布</h2>
           <div class="size-list">
+            <div class="size-row chart-head" aria-hidden="true">
+              <span>大小区间</span><span>资源包占比</span><span>包数</span><span>占比</span>
+            </div>
             <div v-for="item in sizeDistributionRows" :key="item.label" class="size-row">
               <span class="size-label">{{ item.label }}</span>
-              <div class="size-track">
-                <div class="size-fill" :style="{ width: `${item.percent}%` }">
-                  <span>{{ item.percent.toFixed(0) }}%</span>
-                </div>
+              <div class="size-track" aria-hidden="true">
+                <div class="size-fill" :style="{ width: `${item.percent}%` }" />
               </div>
-              <span class="size-count">{{ item.count }}</span>
+              <span class="size-count">{{ formatNumber(item.count) }}</span>
+              <span class="size-percent">{{ formatPercent(item.percent / 100) }}</span>
             </div>
           </div>
         </section>
@@ -333,7 +338,7 @@ const sizeDistributionRows = computed(() => {
     { label: '50-100MB', min: 50 * mb, max: 100 * mb },
     { label: '100-500MB', min: 100 * mb, max: 500 * mb },
     { label: '500MB-1GB', min: 500 * mb, max: gb },
-    { label: '>1GB', min: gb, max: Number.POSITIVE_INFINITY },
+    { label: '≥1GB', min: gb, max: Number.POSITIVE_INFINITY },
   ]
 
   return bins.map((bin) => {
@@ -408,6 +413,7 @@ function formatSize(bytes: number): string {
 
 function formatPercent(value: number): string {
   if (!Number.isFinite(value) || value <= 0) return '0%'
+  if (value < 0.001) return '<0.1%'
   return `${(value * 100).toFixed(1)}%`
 }
 </script>
@@ -430,18 +436,8 @@ function formatPercent(value: number): string {
 .statistics-title {
   margin: 0;
   color: var(--text-primary);
-  font-size: var(--text-3xl);
+  font-size: var(--text-xl);
   font-weight: var(--font-bold);
-}
-
-.statistics-title::after {
-  content: '';
-  display: block;
-  width: 92px;
-  height: 10px;
-  margin-top: -8px;
-  border-radius: var(--radius-full);
-  background: linear-gradient(90deg, rgba(67, 198, 232, 0.8), rgba(67, 198, 232, 0));
 }
 
 .statistics-subtitle {
@@ -519,6 +515,16 @@ function formatPercent(value: number): string {
   color: var(--text-primary);
   font-size: var(--text-lg);
   font-weight: var(--font-semibold);
+}
+
+.analysis-title {
+  margin-bottom: var(--space-1);
+}
+
+.section-description {
+  margin: 0 0 var(--space-4);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
 }
 
 .summary-grid {
@@ -735,7 +741,7 @@ function formatPercent(value: number): string {
 
 .category-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
   gap: var(--space-2);
 }
 
@@ -772,8 +778,9 @@ function formatPercent(value: number): string {
 }
 
 .category-percent,
-.rank-percent {
-  color: var(--text-tertiary);
+.rank-percent,
+.size-percent {
+  color: var(--text-secondary);
   font-size: var(--text-xs);
   text-align: right;
   font-variant-numeric: tabular-nums;
@@ -783,18 +790,43 @@ function formatPercent(value: number): string {
 .size-list {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-1);
 }
 
 .rank-row {
   display: grid;
-  grid-template-columns: 36px 180px minmax(0, 1fr) 64px;
+  grid-template-columns: 28px minmax(100px, 180px) minmax(48px, 1fr) 72px 64px;
   align-items: center;
   gap: var(--space-3);
 }
 
+.rank-row,
+.size-row {
+  min-height: 30px;
+  border-radius: var(--radius-sm);
+  transition: background var(--duration-fast) var(--ease);
+}
+
+.rank-row:not(.chart-head):hover,
+.size-row:not(.chart-head):hover {
+  background: var(--bg-hover);
+}
+
+.chart-head {
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  border-bottom: 1px solid var(--border-subtle);
+  border-radius: 0;
+  margin-bottom: var(--space-1);
+}
+
+.chart-head span:nth-last-child(-n + 2),
+.rank-row.chart-head span:first-child {
+  text-align: right;
+}
+
 .rank-index {
-  color: #f5a623;
+  color: var(--text-secondary);
   font-size: var(--text-sm);
   text-align: right;
   font-variant-numeric: tabular-nums;
@@ -809,54 +841,36 @@ function formatPercent(value: number): string {
   white-space: nowrap;
 }
 
-.rank-track {
-  height: 14px;
+.rank-track,
+.size-track {
+  height: 8px;
 }
 
-.rank-fill {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  min-width: 20px;
-  padding-right: var(--space-2);
-  background: linear-gradient(90deg, rgba(67, 198, 232, 0.25), #43c6e8);
-  color: white;
-  font-size: 10px;
-  font-variant-numeric: tabular-nums;
-}
-
-.rank-fill.top {
-  background: linear-gradient(90deg, #b57d15, #ffcf26);
+.rank-fill,
+.size-fill {
+  background: var(--accent-secondary);
 }
 
 .size-row {
   display: grid;
-  grid-template-columns: 90px minmax(0, 1fr) 48px;
+  grid-template-columns: 104px minmax(48px, 1fr) 72px 64px;
   align-items: center;
   gap: var(--space-3);
 }
 
 .size-label,
-.size-count {
+.size-count,
+.rank-count {
   color: var(--text-secondary);
   font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
 }
 
-.size-count {
+.size-count,
+.rank-count {
+  color: var(--text-primary);
   text-align: right;
-}
-
-.size-fill {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  min-width: 18px;
-  padding-right: var(--space-2);
-  background: #2785ee;
-  color: white;
-  font-size: 10px;
-  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .loading-panel,
@@ -893,11 +907,26 @@ function formatPercent(value: number): string {
   }
 
   .rank-row {
-    grid-template-columns: 28px 120px minmax(0, 1fr) 52px;
+    grid-template-columns: 24px minmax(80px, 120px) minmax(32px, 1fr) 64px 56px;
   }
 }
 
 @media (max-width: 760px) {
+  .rank-row {
+    grid-template-columns: 24px minmax(0, 1fr) 64px 56px;
+  }
+
+  .size-row {
+    grid-template-columns: minmax(0, 1fr) 64px 56px;
+  }
+
+  .rank-track,
+  .size-track,
+  .rank-row.chart-head span:nth-child(3),
+  .size-row.chart-head span:nth-child(2) {
+    display: none;
+  }
+
   .statistics-header {
     flex-direction: column;
   }

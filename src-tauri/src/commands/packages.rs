@@ -1544,7 +1544,7 @@ fn guess_mime_from_ext(filename: &str) -> &'static str {
 }
 
 /// 简单的 base64 编码（避免额外依赖）
-fn base64(data: &[u8]) -> std::string::String {
+pub(super) fn base64(data: &[u8]) -> std::string::String {
     const CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut result = String::with_capacity((data.len() + 2) / 3 * 4);
 
