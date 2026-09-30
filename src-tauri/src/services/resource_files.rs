@@ -366,7 +366,10 @@ pub mod tests {
                 SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
             ));
             fs::create_dir_all(&path).unwrap();
-            Self(path)
+            // Windows CI may expose TEMP through an 8.3 alias (RUNNER~1).
+            // Seed fixtures and DB rows with the same canonical root used by
+            // maintenance plans, so identity checks compare the intended paths.
+            Self(canonical_dir(&path).unwrap())
         }
         pub fn write(&self, name: &str, content: &[u8]) -> PathBuf {
             let path = self.0.join(name);
