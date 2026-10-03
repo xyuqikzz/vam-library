@@ -183,29 +183,36 @@
           <h4 class="detail-title text-sm" :title="getVarFileName(selectedPackage)">{{ getVarFileName(selectedPackage) }}</h4>
         </div>
         <div class="detail-body">
-          <!-- Elegant action bar above the thumbnail cover image -->
-          <div class="detail-actions-bar">
-            <button class="action-bar-btn share" @click="openShareModal" :title="$t('share.btn')">
-              <span>{{ $t('share.btn') }}</span>
-            </button>
-            <button
-              v-if="showCompleteDependencyButton"
-              class="action-bar-btn complete-deps"
-              :disabled="dependencyCompletionLoading"
-              title="补齐缺失依赖"
-              @click="completeSelectedPackageDependencies"
-            >
-              <span>{{ dependencyCompletionLoading ? '查询中...' : '补齐依赖' }}</span>
-            </button>
-            <button v-if="props.showQuickDelete" class="action-bar-btn delete" :disabled="deleteLoading || extractingCharacter" @click="quickDeleteSelected(true)" :title="$t('common.delete')">
-              <span>{{ $t('common.delete') }}</span>
-            </button>
-            <button class="action-bar-btn open-location" @click="openPackageFolder" :title="$t('packages.openLocation')">
-              <span>{{ $t('packages.openLocation') }}</span>
-            </button>
-          </div>
-
-          <PackageSceneExtractor :key="selectedPackage.id" :package-id="selectedPackage.id" @busy-change="extractingCharacter = $event" />
+          <PackageSceneExtractor :key="selectedPackage.id" :package-id="selectedPackage.id" @busy-change="extractingCharacter = $event">
+            <template #actions="{ launch, extract, disabled, expanded, launching, panel }">
+              <div class="detail-actions-bar">
+                <button class="action-bar-btn share" @click="openShareModal" :title="$t('share.btn')">
+                  <span>{{ $t('share.btn') }}</span>
+                </button>
+                <button
+                  v-if="showCompleteDependencyButton"
+                  class="action-bar-btn complete-deps"
+                  :disabled="dependencyCompletionLoading"
+                  title="补齐缺失依赖"
+                  @click="completeSelectedPackageDependencies"
+                >
+                  <span>{{ dependencyCompletionLoading ? '查询中...' : '补齐依赖' }}</span>
+                </button>
+                <button v-if="props.showQuickDelete" class="action-bar-btn delete" :disabled="deleteLoading || extractingCharacter" @click="quickDeleteSelected(true)" :title="$t('common.delete')">
+                  <span>{{ $t('common.delete') }}</span>
+                </button>
+                <button class="action-bar-btn open-location" @click="openPackageFolder" :title="$t('packages.openLocation')">
+                  <span>{{ $t('packages.openLocation') }}</span>
+                </button>
+                <button class="action-bar-btn launch-scene" :disabled="disabled || deleteLoading" @click="launch" :title="$t('gameContent.launchScene')">
+                  <span>{{ $t(launching ? 'gameContent.launchingScene' : 'gameContent.launchScene') }}</span>
+                </button>
+                <button class="action-bar-btn extract-preset" :disabled="disabled || deleteLoading" :aria-expanded="expanded" :aria-controls="panel" @click="extract" :title="$t('gameContent.extractPreset')">
+                  <span>{{ $t('gameContent.extractPreset') }}</span>
+                </button>
+              </div>
+            </template>
+          </PackageSceneExtractor>
 
           <div class="detail-thumb">
             <img data-resource-preview v-if="detailThumb" :src="detailThumb" :alt="getVarFileName(selectedPackage)" class="detail-thumb-img" />
@@ -1812,6 +1819,18 @@ function resourceTypeLabel(type: string): string {
 
 .action-bar-btn:active:not(:disabled) {
   transform: translateY(0);
+}
+
+.action-bar-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.action-bar-btn.launch-scene,
+.action-bar-btn.extract-preset[aria-expanded="true"] {
+  background: var(--accent-muted);
+  color: var(--accent-primary);
+  border-color: var(--accent-primary);
 }
 
 .action-bar-btn.share {

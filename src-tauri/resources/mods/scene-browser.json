@@ -1,10 +1,22 @@
 {
-  "version": "1.0.2",
+  "version": "1.0.8",
   "gameVersion": "1.22.0.13",
   "files": [
     {
       "sha256": "b368d7a6bf3c2a51861741d26c13a0e92e687db55c99c6285320717d7e4978db",
       "path": "VaM_Data/Managed/Assembly-CSharp.dll"
+    },
+    {
+      "sha256": "40b3d590f95191f3e33e5d00e534fa40f823d9b1bb2a9afe05f139c4e0a3af8d",
+      "path": "VaM_Data/Managed/ICSharpCode.SharpZipLib.dll"
+    },
+    {
+      "sha256": "2d37a873fac3a3a44a77c0f3df41a42a7aaff87affab2585ddcea6d6275b0e7e",
+      "path": "VaM_Data/Managed/System.dll"
+    },
+    {
+      "sha256": "b6490cd764126df5582f3c8c3aadab726b8ed293926c73d3842380c48589be88",
+      "path": "Mono/EmbedRuntime/MonoPosixHelper.dll"
     },
     {
       "sha256": "3de63e90e4aa683dcfcfeaa0cfa36b5d72f07a21be5ff9bb1743e8a2a48218f2",

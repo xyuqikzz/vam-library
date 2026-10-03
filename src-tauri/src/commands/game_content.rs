@@ -6,7 +6,7 @@ use sha2::{Digest, Sha256};
 use std::{
     collections::{BTreeMap, HashSet},
     fs::{self, File, OpenOptions},
-    io::{Read, Write},
+    io::{BufReader, Read, Write},
     path::{Path, PathBuf},
     sync::Mutex,
 };
@@ -24,7 +24,6 @@ const PRESET_TYPES: &[(&str, &str)] = &[
     ("pose", "Custom/Atom/Person/Pose/"),
 ];
 const SCENE: &str = "Saves/scene/";
-const LIMIT: u64 = 32 * 1024 * 1024;
 static CONTENT_LOCK: Mutex<()> = Mutex::new(());
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -309,6 +308,44 @@ pub async fn list_package_scene_contents(
         .await
         .map_err(|e| e.to_string())?
 }
+fn scene_launch_path(ctx: &Context, sources: &[PackageSource], source: &ContentRef) -> Result<String, String> {
+    source.validate()?;
+    if !is_content(&source.path, "scene") { return Err("请选择场景 JSON 文件".into()); }
+    if let Some(id) = &source.package_id {
+        let package = source_package(sources, source)?;
+        let mut archive = zip::ZipArchive::new(File::open(&package.file).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+        archive.by_name(&source.path).map_err(|_| "场景文件已不存在，请刷新资源包".to_string())?;
+        let addon = fs::canonicalize(ctx.root.join("AddonPackages")).map_err(|e| e.to_string())?;
+        // Managed libraries can be activated through file links. Verify that the
+        // exact archive is exposed to this game, rather than enabling a plan here.
+        let active = package.file.starts_with(&addon) || walkdir::WalkDir::new(&addon).follow_links(false).into_iter().filter_map(Result::ok).any(|entry| {
+            entry.file_name().to_string_lossy().eq_ignore_ascii_case(&format!("{id}.var"))
+                && fs::canonicalize(entry.path()).ok().as_ref() == Some(&package.file)
+        });
+        if !active { return Err("此资源包尚未启用，请先在按需启动中启用该包及其依赖，再启动场景".into()); }
+        if !package.file.file_name().unwrap_or_default().to_string_lossy().eq_ignore_ascii_case(&format!("{id}.var")) {
+            return Err("资源包文件名与 UID 不一致，请重新扫描".into());
+        }
+        Ok(format!("{id}:/{}", source.path))
+    } else {
+        if !safe_path(&ctx.root, &source.path)?.is_file() { return Err("场景文件已不存在，请刷新".into()); }
+        Ok(source.path.clone())
+    }
+}
+
+#[tauri::command]
+pub async fn launch_game_scene(app: tauri::AppHandle, db: State<'_, Database>, vam_root: String, source: ContentRef, mode: String) -> Result<(), String> {
+    let ctx = context(&app, &vam_root)?;
+    let sources = packages(&db, &ctx, Some(&source))?;
+    let (root, directory, path) = tauri::async_runtime::spawn_blocking(move || {
+        let directory = super::game_mods::scene_launch_directory(&ctx.root)?;
+        safe_path(&ctx.root, "BepInEx/plugins/VamLibrary.SceneBrowser/scene-launch")?;
+        let path = scene_launch_path(&ctx, &sources, &source)?;
+        Ok::<_, String>((ctx.root, directory, path))
+    }).await.map_err(|e| e.to_string())??;
+    crate::services::scene_launch::launch(root, directory, path, mode).await
+}
+
 fn favorite_path(root: &Path, source: &ContentRef) -> Result<PathBuf, String> {
     source.validate()?;
     safe_path(
@@ -448,24 +485,14 @@ fn catalog(
         directory: prefix.trim_end_matches('/').into(),
     })
 }
-fn bounded_read(reader: impl Read, size: u64) -> Result<Vec<u8>, String> {
-    if size > LIMIT {
-        return Err("文件超过 32 MiB 安全读取上限".into());
-    }
+fn read_bytes(mut reader: impl Read) -> Result<Vec<u8>, String> {
     let mut bytes = vec![];
-    reader
-        .take(LIMIT + 1)
-        .read_to_end(&mut bytes)
-        .map_err(|e| e.to_string())?;
-    if bytes.len() as u64 > LIMIT {
-        return Err("文件过大".into());
-    }
+    reader.read_to_end(&mut bytes).map_err(|e| e.to_string())?;
     Ok(bytes)
 }
 fn zip_read(zip: &mut zip::ZipArchive<File>, path: &str) -> Result<Vec<u8>, String> {
     let entry = zip.by_name(path).map_err(|e| format!("{path}: {e}"))?;
-    let size = entry.size();
-    bounded_read(entry, size)
+    read_bytes(entry)
 }
 fn source_package<'a>(
     packages: &'a [PackageSource],
@@ -481,16 +508,25 @@ fn read_content(
     packages: &[PackageSource],
     source: &ContentRef,
 ) -> Result<Vec<u8>, String> {
+    with_content_reader(ctx, packages, source, |reader| read_bytes(reader))
+}
+fn with_content_reader<T>(
+    ctx: &Context,
+    packages: &[PackageSource],
+    source: &ContentRef,
+    read: impl FnOnce(&mut dyn Read) -> Result<T, String>,
+) -> Result<T, String> {
     source.validate()?;
     if source.package_id.is_some() {
         let p = source_package(packages, source)?;
         let mut zip = zip::ZipArchive::new(File::open(&p.file).map_err(|e| e.to_string())?)
             .map_err(|e| e.to_string())?;
-        zip_read(&mut zip, &source.path)
+        let mut entry = zip.by_name(&source.path).map_err(|e| e.to_string())?;
+        read(&mut entry)
     } else {
-        let file = File::open(safe_path(&ctx.root, &source.path)?).map_err(|e| e.to_string())?;
-        let size = file.metadata().map_err(|e| e.to_string())?.len();
-        bounded_read(file, size)
+        let mut file =
+            File::open(safe_path(&ctx.root, &source.path)?).map_err(|e| e.to_string())?;
+        read(&mut file)
     }
 }
 fn parse_json(bytes: &[u8]) -> Result<Value, String> {
@@ -530,8 +566,7 @@ fn preview_file(
                 continue;
             }
             let file = File::open(path).map_err(|e| e.to_string())?;
-            let size = file.metadata().map_err(|e| e.to_string())?.len();
-            bounded_read(file, size)?
+            read_bytes(file)?
         };
         return Ok(Some((path, bytes)));
     }
@@ -613,6 +648,181 @@ fn content_revision(bytes: &[u8]) -> String {
     hex::encode(Sha256::digest(bytes))
 }
 
+fn appearance_item_ids(geometry: &Value) -> Vec<&str> {
+    ["clothing", "hair"]
+        .into_iter()
+        .filter_map(|key| geometry[key].as_array())
+        .flatten()
+        .filter_map(|item| {
+            item["internalId"].as_str().or_else(|| {
+                item["id"]
+                    .as_str()
+                    .filter(|id| !id.contains('/') && !id.contains('\\'))
+            })
+        })
+        .filter(|id| !id.is_empty())
+        .collect()
+}
+
+fn is_appearance_storable(id: &str, item_ids: &[&str]) -> bool {
+    matches!(
+        id,
+        "geometry"
+            | "BendFix"
+            | "FemaleAnatomy"
+            | "MaleAnatomy"
+            | "BreastControl"
+            | "GluteControl"
+            | "BreastInOut"
+            | "LowerPhysicsMesh"
+            | "BreastPhysicsMesh"
+            | "EyelidControl"
+            | "AutoJawMouthMorph"
+            | "AutoExpressions"
+            | "FemaleEyelashes"
+            | "MaleEyelashes"
+            | "irises"
+            | "sclera"
+            | "lacrimals"
+            | "SoftBodyPhysicsEnabler"
+            | "rescaleObject"
+            | "skin"
+            | "textures"
+            | "teeth"
+            | "tongue"
+            | "mouth"
+            | "genitals"
+    ) || (!id.starts_with("plugin#")
+        && item_ids.iter().any(|prefix| {
+            id.strip_prefix(prefix).is_some_and(|suffix| {
+                matches!(suffix, "Sim" | "ItemControl" | "WrapControl")
+                    || suffix.starts_with("Material")
+                    || suffix.ends_with("ScalpMaterial")
+            })
+        }))
+}
+
+// Parse one storable at a time so scene-wide animation/plugin data never forms
+// a full Value tree. IDs may occur after payloads; RawValue handles either order.
+// Retain possible wearable modules until geometry resolves their exact IDs.
+fn parse_scene_for_extraction(reader: impl Read) -> Result<(Value, String), String> {
+    use serde::de::{self, IgnoredAny, MapAccess, SeqAccess, Visitor};
+    use serde::Deserializer;
+    use serde_json::value::RawValue;
+    use std::fmt;
+
+    #[derive(Deserialize)]
+    struct Atom {
+        #[serde(default)]
+        id: Value,
+        #[serde(default, rename = "type")]
+        kind: Value,
+        #[serde(default, deserialize_with = "read_storables")]
+        storables: Vec<Value>,
+    }
+    #[derive(Deserialize)]
+    struct Storable {
+        #[serde(default)]
+        id: Value,
+    }
+    fn read_storables<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<Value>, D::Error> {
+        struct Storables;
+        impl<'de> Visitor<'de> for Storables {
+            type Value = Vec<Value>;
+            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                f.write_str("a storables array")
+            }
+            fn visit_unit<E: de::Error>(self) -> Result<Self::Value, E> {
+                Ok(vec![])
+            }
+            fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
+                let mut selected = Vec::new();
+                while let Some(raw) = seq.next_element::<Box<RawValue>>()? {
+                    let header: Storable =
+                        serde_json::from_str(raw.get()).map_err(de::Error::custom)?;
+                    let Some(id) = header.id.as_str() else {
+                        continue;
+                    };
+                    let wearable = !id.starts_with("plugin#")
+                        && (id.ends_with("Sim")
+                            || id.ends_with("ItemControl")
+                            || id.ends_with("WrapControl")
+                            || id.contains("Material"));
+                    if is_appearance_storable(id, &[]) || wearable {
+                        selected.push(serde_json::from_str(raw.get()).map_err(de::Error::custom)?);
+                    }
+                }
+                Ok(selected)
+            }
+        }
+        d.deserialize_any(Storables)
+    }
+    struct Scene;
+    impl<'de> Visitor<'de> for Scene {
+        type Value = Value;
+        fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            f.write_str("a scene JSON object")
+        }
+        fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Value, A::Error> {
+            let mut atoms = Vec::new();
+            while let Some(key) = map.next_key::<String>()? {
+                if key == "atoms" {
+                    let items: Option<Vec<Atom>> = map.next_value()?;
+                    atoms = items
+                        .unwrap_or_default()
+                        .into_iter()
+                        .map(|atom| {
+                            let mut value = serde_json::json!({"id": atom.id, "type": atom.kind});
+                            if value["type"] == "Person" {
+                                value["storables"] = Value::Array(atom.storables);
+                            }
+                            value
+                        })
+                        .collect();
+                } else {
+                    map.next_value::<IgnoredAny>()?;
+                }
+            }
+            Ok(serde_json::json!({"atoms": atoms}))
+        }
+    }
+    struct HashedReader<R> {
+        reader: R,
+        hash: Sha256,
+    }
+    impl<R: Read> Read for HashedReader<R> {
+        fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+            let count = self.reader.read(buffer)?;
+            self.hash.update(&buffer[..count]);
+            Ok(count)
+        }
+    }
+    let mut reader = BufReader::new(HashedReader {
+        reader,
+        hash: Sha256::new(),
+    });
+    // Hash the original bytes, including a BOM and trailing whitespace, to keep
+    // the existing stale-selection check compatible with ordinary content reads.
+    let mut prefix = Vec::new();
+    reader
+        .by_ref()
+        .take(3)
+        .read_to_end(&mut prefix)
+        .map_err(|e| e.to_string())?;
+    if prefix == [0xef, 0xbb, 0xbf] {
+        prefix.clear();
+    }
+    let input = std::io::Cursor::new(prefix).chain(&mut reader);
+    let mut deserializer = serde_json::Deserializer::from_reader(input);
+    let scene = (&mut deserializer)
+        .deserialize_map(Scene)
+        .map_err(|e| format!("无效预设/场景 JSON: {e}"))?;
+    deserializer
+        .end()
+        .map_err(|e| format!("无效预设/场景 JSON: {e}"))?;
+    Ok((scene, hex::encode(reader.into_inner().hash.finalize())))
+}
+
 // Appearance preset storables observed in VaM 1.22. Clothing/hair storables use
 // the geometry item's internalId, not its package-qualified resource path.
 fn appearance_from_atom(atom: &Value) -> Result<Value, String> {
@@ -629,62 +839,14 @@ fn appearance_from_atom(atom: &Value) -> Result<Value, String> {
     if geometry["character"].as_str().is_none_or(|s| s.is_empty()) {
         return Err("角色缺少基础模型，无法离线生成完整外观预设".into());
     }
-    let item_ids: Vec<&str> = ["clothing", "hair"]
-        .into_iter()
-        .filter_map(|key| geometry[key].as_array())
-        .flatten()
-        .filter_map(|item| {
-            item["internalId"].as_str().or_else(|| {
-                item["id"]
-                    .as_str()
-                    .filter(|id| !id.contains('/') && !id.contains('\\'))
-            })
-        })
-        .filter(|id| !id.is_empty())
-        .collect();
+    let item_ids = appearance_item_ids(geometry);
     let mut output = Vec::new();
     let mut ids = HashSet::new();
     for storable in storables {
         let Some(id) = storable["id"].as_str() else {
             continue;
         };
-        let fixed = matches!(
-            id,
-            "geometry"
-                | "BendFix"
-                | "FemaleAnatomy"
-                | "MaleAnatomy"
-                | "BreastControl"
-                | "GluteControl"
-                | "BreastInOut"
-                | "LowerPhysicsMesh"
-                | "BreastPhysicsMesh"
-                | "EyelidControl"
-                | "AutoJawMouthMorph"
-                | "AutoExpressions"
-                | "FemaleEyelashes"
-                | "MaleEyelashes"
-                | "irises"
-                | "sclera"
-                | "lacrimals"
-                | "SoftBodyPhysicsEnabler"
-                | "rescaleObject"
-                | "skin"
-                | "textures"
-                | "teeth"
-                | "tongue"
-                | "mouth"
-                | "genitals"
-        );
-        let wearable = !id.starts_with("plugin#")
-            && item_ids.iter().any(|prefix| {
-                id.strip_prefix(prefix).is_some_and(|suffix| {
-                    matches!(suffix, "Sim" | "ItemControl" | "WrapControl")
-                        || suffix.starts_with("Material")
-                        || suffix.ends_with("ScalpMaterial")
-                })
-            });
-        if !fixed && !wearable {
+        if !is_appearance_storable(id, &item_ids) {
             continue;
         }
         if !ids.insert(id) {
@@ -835,24 +997,62 @@ fn rebase_local_refs(value: &mut Value, root: &Path, parent: &str) -> Result<(),
     Ok(())
 }
 
-fn save_scene_appearance(
+fn appearance_output_directory(ctx: &Context, output_dir: Option<&str>) -> Result<PathBuf, String> {
+    let directory = match output_dir {
+        Some(value) if value.trim().is_empty() => return Err("请选择保存目录".into()),
+        Some(value) => PathBuf::from(value.trim()),
+        None => ctx.root.join(APPEARANCE),
+    };
+    if !directory.is_absolute() {
+        return Err("保存目录必须是完整的绝对路径".into());
+    }
+    for part in directory.components() {
+        match part {
+            std::path::Component::ParentDir => return Err("保存目录不能包含 ..".into()),
+            std::path::Component::Normal(name) => component(name.to_str().ok_or("无效目录名称")?)?,
+            #[cfg(windows)]
+            std::path::Component::Prefix(prefix) => {
+                if !matches!(
+                    prefix.kind(),
+                    std::path::Prefix::Disk(_)
+                        | std::path::Prefix::VerbatimDisk(_)
+                        | std::path::Prefix::UNC(_, _)
+                        | std::path::Prefix::VerbatimUNC(_, _)
+                ) {
+                    return Err("不支持的保存目录路径".into());
+                }
+            }
+            _ => {}
+        }
+    }
+    crate::services::resource_files::ensure_no_links(&directory)?;
+    if directory.exists() && !directory.is_dir() {
+        return Err("保存位置不是文件夹".into());
+    }
+    Ok(directory)
+}
+
+fn save_scene_appearance_to(
     ctx: &Context,
     packages: &[PackageSource],
     source: &ContentRef,
     revision: &str,
     atom_index: usize,
     name: &str,
+    output_dir: Option<&str>,
 ) -> Result<String, String> {
     source.validate()?;
     if !is_content(&source.path, "scene") {
         return Err("请选择场景文件".into());
     }
     let filename = preset_filename(name)?;
-    let bytes = read_content(ctx, packages, source)?;
-    if content_revision(&bytes) != revision {
+    let directory = appearance_output_directory(ctx, output_dir)?;
+    let (scene, current_revision) = with_content_reader(ctx, packages, source, |reader| {
+        parse_scene_for_extraction(reader)
+    })?;
+    if current_revision != revision {
         return Err("场景已改变，请重新选择场景后再保存角色".into());
     }
-    let scene = parse_json(&bytes)?;
     let atom = scene["atoms"]
         .as_array()
         .and_then(|atoms| atoms.get(atom_index))
@@ -868,14 +1068,13 @@ fn save_scene_appearance(
     }
     // Also handle scene-relative loose assets referenced by a VAR.
     rebase_local_refs(&mut preset, &ctx.root, parent)?;
-    let destination = format!("{APPEARANCE}VAM Library/Extracted/{filename}");
-    let target = safe_path(&ctx.root, &destination)?;
+    let target = safe_path(&directory, &filename)?;
     if target.exists()
-        || ctx.root.join(format!("{destination}.fav")).exists()
-        || ctx.root.join(format!("{destination}.hide")).exists()
-        || image_candidates(&destination)
+        || directory.join(format!("{filename}.fav")).exists()
+        || directory.join(format!("{filename}.hide")).exists()
+        || image_candidates(&filename)
             .iter()
-            .any(|p| ctx.root.join(p).exists())
+            .any(|p| directory.join(p).exists())
     {
         return Err("该名称的预设、预览图或标记已存在，请换一个名称（原文件保留）".into());
     }
@@ -888,9 +1087,9 @@ fn save_scene_appearance(
     });
     if let Some((path, _)) = &thumbnail {
         safe_path(
-            &ctx.root,
+            &directory,
             &path
-                .strip_prefix(&ctx.root)
+                .strip_prefix(&directory)
                 .map_err(|e| e.to_string())?
                 .to_string_lossy()
                 .replace('\\', "/"),
@@ -904,7 +1103,11 @@ fn save_scene_appearance(
             return Err(format!("预览图保存失败: {e}; 预设回退结果: {cleanup:?}"));
         }
     }
-    Ok(destination)
+    let canonical = fs::canonicalize(&target).map_err(|e| e.to_string())?;
+    Ok(match canonical.strip_prefix(&ctx.root) {
+        Ok(relative) => relative.to_string_lossy().replace('\\', "/"),
+        Err(_) => target.to_string_lossy().into_owned(),
+    })
 }
 
 #[tauri::command]
@@ -916,12 +1119,21 @@ pub async fn save_game_scene_appearance(
     revision: String,
     atom_index: usize,
     name: String,
+    output_dir: Option<String>,
 ) -> Result<String, String> {
     let ctx = context(&app, &vam_root)?;
     let sources = packages(&db, &ctx, Some(&source))?;
     tauri::async_runtime::spawn_blocking(move || {
         let _guard = CONTENT_LOCK.lock().map_err(|e| e.to_string())?;
-        save_scene_appearance(&ctx, &sources, &source, &revision, atom_index, &name)
+        save_scene_appearance_to(
+            &ctx,
+            &sources,
+            &source,
+            &revision,
+            atom_index,
+            &name,
+            output_dir.as_deref(),
+        )
     })
     .await
     .map_err(|e| e.to_string())?
@@ -1185,21 +1397,46 @@ pub async fn list_game_contents(
         for item in &mut result.items {
             item.alias = aliases.get(&item.key).cloned();
         }
+        crate::services::scene_browser_index::schedule_sync(&app);
         Ok(result)
     })
     .await
     .map_err(|e| e.to_string())?
 }
+fn scene_extraction_detail(
+    ctx: &Context,
+    sources: &[PackageSource],
+    source: &ContentRef,
+) -> Result<ContentDetail, String> {
+    if !is_content(&source.path, "scene") {
+        return Err("请选择场景文件".into());
+    }
+    let (scene, revision) = with_content_reader(ctx, sources, source, |reader| {
+        parse_scene_for_extraction(reader)
+    })?;
+    Ok(ContentDetail {
+        revision,
+        characters: scene_characters(&scene),
+        // The extraction panel only needs character summaries, not the scene JSON.
+        json: Value::Null,
+        image: preview(ctx, sources, source)?,
+    })
+}
+
 #[tauri::command]
 pub async fn get_game_content_detail(
     app: tauri::AppHandle,
     db: State<'_, Database>,
     vam_root: String,
     source: ContentRef,
+    summary_only: Option<bool>,
 ) -> Result<ContentDetail, String> {
     let ctx = context(&app, &vam_root)?;
     let sources = packages(&db, &ctx, Some(&source))?;
     tauri::async_runtime::spawn_blocking(move || {
+        if summary_only.unwrap_or(false) && is_content(&source.path, "scene") {
+            return scene_extraction_detail(&ctx, &sources, &source);
+        }
         let bytes = read_content(&ctx, &sources, &source)?;
         let json = parse_json(&bytes)?;
         Ok(ContentDetail {
@@ -1314,6 +1551,16 @@ pub async fn set_game_scene_name(
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn save_scene_appearance(
+        ctx: &Context,
+        packages: &[PackageSource],
+        source: &ContentRef,
+        revision: &str,
+        atom_index: usize,
+        name: &str,
+    ) -> Result<String, String> {
+        save_scene_appearance_to(ctx, packages, source, revision, atom_index, name, None)
+    }
     use serde_json::json;
     use std::sync::atomic::{AtomicU64, Ordering};
     static SEQUENCE: AtomicU64 = AtomicU64::new(0);
@@ -1433,6 +1680,40 @@ mod tests {
         assert!(package_scenes(&f.ctx, &empty).is_err());
     }
 
+    #[test]
+    fn scene_launch_paths_validate_files_versions_and_active_instance() {
+        let f = Fixture::new();
+        let source = local("Saves/scene/中文 场景.json");
+        f.put(&source.path, b"{}");
+        assert_eq!(scene_launch_path(&f.ctx, &[], &source).unwrap(), source.path);
+        assert!(scene_launch_path(&f.ctx, &[], &local("Saves/scene/Missing.json")).is_err());
+        assert!(scene_launch_path(&f.ctx, &[], &local("Saves/scene/../Other.json")).is_err());
+        assert!(scene_launch_path(&f.ctx, &[], &local("Custom/Atom/Person/Appearance/A.vap")).is_err());
+        let package = f.package("Author.Scene.2", &[("Saves/scene/中文 场景.json", b"{}")]);
+        let source = ContentRef { package_id: Some(package.id.clone()), path: "Saves/scene/中文 场景.json".into() };
+        assert_eq!(scene_launch_path(&f.ctx, &[package.clone()], &source).unwrap(), "Author.Scene.2:/Saves/scene/中文 场景.json");
+        assert!(scene_launch_path(&f.ctx, &[], &source).is_err());
+        let mut missing = source.clone();
+        missing.path = "Saves/scene/Missing.json".into();
+        assert!(scene_launch_path(&f.ctx, &[package.clone()], &missing).is_err());
+        let managed = f.ctx.root.join("VAMBoxLibrary/AddonPackages");
+        fs::create_dir_all(&managed).unwrap();
+        let managed_file = managed.join("Author.Scene.2.var");
+        fs::rename(&package.file, &managed_file).unwrap();
+        let managed_package = PackageSource { file: managed_file.clone(), ..package };
+        assert!(scene_launch_path(&f.ctx, &[managed_package.clone()], &source).unwrap_err().contains("尚未启用"));
+        // Hard links have a distinct canonical path and cannot prove the source
+        // identity. The on-demand manager uses symlinks, covered below on Windows.
+        #[cfg(windows)] {
+            use std::os::windows::process::CommandExt;
+            let link = f.ctx.root.join("AddonPackages/Author.Scene.2.var");
+            let status = std::process::Command::new("cmd.exe").args(["/C", "mklink"]).arg(&link).arg(&managed_file).creation_flags(0x08000000).output().unwrap();
+            if status.status.success() {
+                assert!(scene_launch_path(&f.ctx, &[managed_package], &source).is_ok());
+            }
+        }
+    }
+
     fn scene_fixture() -> Value {
         json!({"atoms": [
             {"id":"Light", "type":"InvisibleLight", "storables":[]},
@@ -1457,6 +1738,109 @@ mod tests {
             {"id":"Bob", "type":"Person", "storables":[{"id":"geometry", "character":"Male Custom"}]},
             {"id":"Incomplete", "type":"Person", "storables":[]}
         ]})
+    }
+
+    #[test]
+    fn extracted_presets_use_default_selected_subfolder_or_external_directory() {
+        let f = Fixture::new();
+        let outside = Fixture::new();
+        let source = local("Saves/scene/Export.json");
+        let bytes = serde_json::to_vec(&scene_fixture()).unwrap();
+        let revision = content_revision(&bytes);
+        f.put(&source.path, &bytes);
+        f.put("Saves/scene/Export.jpg", b"scene preview");
+        let default =
+            save_scene_appearance_to(&f.ctx, &[], &source, &revision, 2, "Default", None).unwrap();
+        assert_eq!(default, format!("{APPEARANCE}Preset_Default.vap"));
+        let subfolder = f.ctx.root.join(APPEARANCE).join("My looks");
+        let saved = save_scene_appearance_to(
+            &f.ctx,
+            &[],
+            &source,
+            &revision,
+            2,
+            "Sub",
+            Some(subfolder.to_str().unwrap()),
+        )
+        .unwrap();
+        assert_eq!(saved, format!("{APPEARANCE}My looks/Preset_Sub.vap"));
+        let custom = outside.ctx.root.join("Chosen folder/New folder");
+        let saved = save_scene_appearance_to(
+            &f.ctx,
+            &[],
+            &source,
+            &revision,
+            2,
+            "External",
+            Some(custom.to_str().unwrap()),
+        )
+        .unwrap();
+        assert_eq!(Path::new(&saved), custom.join("Preset_External.vap"));
+        assert_eq!(
+            fs::read(custom.join("Preset_External.jpg")).unwrap(),
+            b"scene preview"
+        );
+        let original = fs::read(&saved).unwrap();
+        assert!(save_scene_appearance_to(
+            &f.ctx,
+            &[],
+            &source,
+            &revision,
+            2,
+            "External",
+            Some(custom.to_str().unwrap())
+        )
+        .is_err());
+        assert_eq!(fs::read(&saved).unwrap(), original);
+        assert_eq!(fs::read(f.ctx.root.join(&source.path)).unwrap(), bytes);
+    }
+
+    #[test]
+    fn output_directory_rejects_invalid_paths_and_thumbnail_conflicts() {
+        let f = Fixture::new();
+        let source = local("Saves/scene/Export.json");
+        let bytes = serde_json::to_vec(&scene_fixture()).unwrap();
+        f.put(&source.path, &bytes);
+        f.put("not-a-folder", b"file");
+        for directory in [
+            String::new(),
+            "relative/path".into(),
+            "C:relative".into(),
+            // Preserve the user's literal traversal; joining a verbatim Windows
+            // path would resolve it before the validator sees it.
+            format!(
+                "{}{s}..{s}escape",
+                f.ctx.root.display(),
+                s = std::path::MAIN_SEPARATOR
+            ),
+            f.ctx
+                .root
+                .join("not-a-folder")
+                .to_string_lossy()
+                .into_owned(),
+        ] {
+            assert!(
+                appearance_output_directory(&f.ctx, Some(&directory)).is_err(),
+                "{directory}"
+            );
+        }
+        let custom = f.ctx.root.join("Custom destination");
+        f.put("Custom destination/Preset_Collision.png", b"keep");
+        assert!(save_scene_appearance_to(
+            &f.ctx,
+            &[],
+            &source,
+            &content_revision(&bytes),
+            2,
+            "Collision",
+            Some(custom.to_str().unwrap())
+        )
+        .is_err());
+        assert!(!custom.join("Preset_Collision.vap").exists());
+        assert_eq!(
+            fs::read(custom.join("Preset_Collision.png")).unwrap(),
+            b"keep"
+        );
     }
 
     #[test]
@@ -1581,6 +1965,208 @@ mod tests {
     }
 
     #[test]
+    fn selective_scene_parsing_preserves_appearance_and_atom_indices() {
+        let scene = scene_fixture();
+        let bytes = serde_json::to_vec(&scene).unwrap();
+        let projected = parse_scene_for_extraction(&bytes[..]).unwrap().0;
+        assert_eq!(
+            serde_json::to_value(scene_characters(&projected)).unwrap(),
+            serde_json::to_value(scene_characters(&scene)).unwrap()
+        );
+        for index in [1, 2] {
+            assert_eq!(
+                appearance_from_atom(&projected["atoms"][index]).unwrap(),
+                appearance_from_atom(&scene["atoms"][index]).unwrap()
+            );
+        }
+        let escaped = String::from_utf8(bytes)
+            .unwrap()
+            .replace("geometry", "ge\\u006fmetry");
+        let mut bom = vec![0xef, 0xbb, 0xbf];
+        bom.extend_from_slice(escaped.as_bytes());
+        assert_eq!(parse_scene_for_extraction(&bom[..]).unwrap().0, projected);
+        assert!(parse_scene_for_extraction(&b"[]"[..]).is_err());
+        assert!(parse_scene_for_extraction(&b"{\"atoms\":[] } trailing"[..]).is_err());
+        let duplicate = br#"{"atoms":[{"type":"Person","storables":[{"id":"geometry","character":"Female"},{"id":"geometry","character":"Male"}]}]}"#;
+        let projected = parse_scene_for_extraction(&duplicate[..]).unwrap().0;
+        assert!(scene_characters(&projected)[0]
+            .error
+            .as_ref()
+            .unwrap()
+            .contains("重复模块"));
+    }
+
+    #[test]
+    fn large_local_and_packaged_scenes_extract_without_returning_animation_data() {
+        let f = Fixture::new();
+        // Put the storable ID after its large payload to exercise field-order independence.
+        let mut bytes =
+            br#"{"atoms":[{"id":"Light","type":"InvisibleLight"},{"storables":[{"keyframes":""#
+                .to_vec();
+        bytes.resize(bytes.len() + 33 * 1024 * 1024, b'x');
+        bytes.extend_from_slice(br#"","id":"hipAnimation"},{"id":"geometry","character":"Female","clothing":[{"id":"Clothes.Top.1:/Custom/top.vam","internalId":"Top"}]},{"id":"TopMaterial","texture":"Clothes.Top.1:/Custom/top.png"}],"type":"Person","id":"Alice"}]}"#);
+        let path = "Saves/scene/Large.json";
+        f.put(path, &bytes);
+        let package = f.package("Author.Large.1", &[(path, &bytes)]);
+        let packages = [package.clone()];
+        let sources = [
+            local(path),
+            ContentRef {
+                package_id: Some(package.id),
+                path: path.into(),
+            },
+        ];
+        for (index, source) in sources.iter().enumerate() {
+            assert_eq!(
+                read_content(&f.ctx, &packages, source).unwrap().len(),
+                bytes.len()
+            );
+            let detail = scene_extraction_detail(&f.ctx, &packages, source).unwrap();
+            assert_eq!(detail.revision, content_revision(&bytes));
+            assert!(detail.json.is_null());
+            assert!(serde_json::to_vec(&detail).unwrap().len() < 1024);
+            assert_eq!(detail.characters.len(), 1);
+            assert_eq!(detail.characters[0].index, 1);
+            assert!(detail.characters[0].error.is_none());
+            let target = save_scene_appearance(
+                &f.ctx,
+                &packages,
+                source,
+                &detail.revision,
+                1,
+                &format!("Large{index}"),
+            )
+            .unwrap();
+            let output = parse_json(&fs::read(f.ctx.root.join(target)).unwrap()).unwrap();
+            let storables = output["storables"].as_array().unwrap();
+            assert_eq!(storables.len(), 2);
+            assert_eq!(storables[0]["character"], "Female");
+            assert_eq!(storables[1]["id"], "TopMaterial");
+        }
+        assert_eq!(fs::read(f.ctx.root.join(path)).unwrap(), bytes);
+    }
+
+    #[test]
+    fn scene_extraction_hashes_chunked_input_and_propagates_io_errors() {
+        struct Chunked<'a> {
+            bytes: &'a [u8],
+            fail_at_end: bool,
+        }
+        impl Read for Chunked<'_> {
+            fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+                if self.bytes.is_empty() && self.fail_at_end {
+                    return Err(std::io::Error::other("injected read failure"));
+                }
+                let len = buffer.len().min(1);
+                self.bytes.read(&mut buffer[..len])
+            }
+        }
+        let bytes = b"\xef\xbb\xbf{\"atoms\":[]} \r\n";
+        let (scene, revision) = parse_scene_for_extraction(Chunked {
+            bytes,
+            fail_at_end: false,
+        })
+        .unwrap();
+        assert_eq!(scene, json!({"atoms":[]}));
+        assert_eq!(revision, content_revision(bytes));
+        assert!(parse_scene_for_extraction(Chunked {
+            bytes,
+            fail_at_end: true
+        })
+        .unwrap_err()
+        .contains("injected read failure"));
+    }
+
+    #[test]
+    fn appearance_data_and_previews_have_no_fixed_size_limit() {
+        let f = Fixture::new();
+        let mut bytes = br#"{"atoms":[{"type":"Person","storables":[{"id":"geometry","character":"Female"},{"id":"skin","payload":""#.to_vec();
+        bytes.resize(bytes.len() + 33 * 1024 * 1024, b'x');
+        bytes.extend_from_slice(br#""}]}]}"#);
+        let (scene, _) = parse_scene_for_extraction(&bytes[..]).unwrap();
+        assert_eq!(
+            scene["atoms"][0]["storables"][1]["payload"]
+                .as_str()
+                .unwrap()
+                .len(),
+            33 * 1024 * 1024
+        );
+        let source = local("Saves/scene/LargePreview.json");
+        f.put(&source.path, br#"{"atoms":[]}"#);
+        f.put("Saves/scene/LargePreview.jpg", &bytes);
+        assert_eq!(
+            preview_file(&f.ctx, &[], &source).unwrap().unwrap().1.len(),
+            bytes.len()
+        );
+    }
+
+    #[test]
+    #[ignore = "reads a user-selected large VAR scene; writes only to a temporary fixture"]
+    fn real_large_scene_extraction_compatibility() {
+        let file = PathBuf::from(std::env::var("VAM_CONTENT_TEST_PACKAGE").unwrap());
+        let path = std::env::var("VAM_CONTENT_TEST_SCENE").unwrap();
+        let hash_archive = || {
+            let mut reader = File::open(&file).unwrap();
+            let mut hash = Sha256::new();
+            let mut buffer = [0u8; 64 * 1024];
+            loop {
+                let count = reader.read(&mut buffer).unwrap();
+                if count == 0 {
+                    break;
+                }
+                hash.update(&buffer[..count]);
+            }
+            hash.finalize()
+        };
+        let before = hash_archive();
+        let f = Fixture::new();
+        let package = PackageSource {
+            id: file.file_stem().unwrap().to_str().unwrap().into(),
+            file: file.clone(),
+            entries: vec![path.clone()],
+        };
+        let source = ContentRef {
+            package_id: Some(package.id.clone()),
+            path,
+        };
+        let packages = [package];
+        let detail = scene_extraction_detail(&f.ctx, &packages, &source).unwrap();
+        assert!(detail.json.is_null());
+        let person = detail
+            .characters
+            .iter()
+            .find(|p| p.error.is_none())
+            .expect("extractable character");
+        let target = save_scene_appearance(
+            &f.ctx,
+            &packages,
+            &source,
+            &detail.revision,
+            person.index,
+            "LargeSceneCharacter",
+        )
+        .unwrap();
+        let output = fs::read(f.ctx.root.join(target)).unwrap();
+        let preset = parse_json(&output).unwrap();
+        assert_eq!(preset["setUnlistedParamsToDefault"], "true");
+        assert_eq!(
+            preset["storables"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|s| s["id"] == "geometry")
+                .unwrap()["character"],
+            person.character
+        );
+        assert_eq!(
+            hash_archive(),
+            before,
+            "source archive must remain unchanged"
+        );
+        eprintln!("Large scene: {} character(s), {} byte summary, {} byte preset; source SHA-256 unchanged.", detail.characters.len(), serde_json::to_vec(&detail).unwrap().len(), output.len());
+    }
+
+    #[test]
     fn extracted_previews_keep_format_and_absent_or_unreadable_images_do_not_leave_partial_presets()
     {
         let f = Fixture::new();
@@ -1599,19 +2185,29 @@ mod tests {
         f.put(&source.path, &bytes);
         let target = save_scene_appearance(&f.ctx, &[], &source, &revision, 2, "NoImage").unwrap();
         assert!(preview(&f.ctx, &[], &local(&target)).unwrap().is_none());
-        let bad = local("Saves/scene/Oversized.json");
-        f.put(&bad.path, &bytes);
-        File::create(f.ctx.root.join("Saves/scene/Oversized.jpg"))
-            .unwrap()
-            .set_len(LIMIT + 1)
-            .unwrap();
-        assert!(save_scene_appearance(&f.ctx, &[], &bad, &revision, 2, "BadImage").is_err());
+        let scene_path = "Saves/scene/UnreadablePreview.json";
+        let image_path = "Saves/scene/UnreadablePreview.jpg";
+        let package = f.package(
+            "Author.BadPreview.1",
+            &[(scene_path, &bytes), (image_path, b"preview")],
+        );
+        let image_offset = {
+            let mut zip = zip::ZipArchive::new(File::open(&package.file).unwrap()).unwrap();
+            let entry = zip.by_name(image_path).unwrap();
+            entry.data_start() as usize
+        };
+        let mut archive = fs::read(&package.file).unwrap();
+        archive[image_offset] ^= 0xff;
+        fs::write(&package.file, archive).unwrap();
+        let bad = ContentRef {
+            package_id: Some(package.id.clone()),
+            path: scene_path.into(),
+        };
+        assert!(save_scene_appearance(&f.ctx, &[package], &bad, &revision, 2, "BadImage").is_err());
         assert!(!f
             .ctx
             .root
-            .join(format!(
-                "{APPEARANCE}VAM Library/Extracted/Preset_BadImage.vap"
-            ))
+            .join(format!("{APPEARANCE}Preset_BadImage.vap"))
             .exists());
     }
 
@@ -1633,7 +2229,7 @@ mod tests {
         }
         assert!(!f.ctx.root.join(APPEARANCE).exists());
         f.put(
-            "Custom/Atom/Person/Appearance/VAM Library/Extracted/Preset_Alice.png",
+            "Custom/Atom/Person/Appearance/Preset_Alice.png",
             b"existing preview",
         );
         assert!(
@@ -1641,10 +2237,7 @@ mod tests {
                 .unwrap_err()
                 .contains("已存在")
         );
-        f.put(
-            "Custom/Atom/Person/Appearance/VAM Library/Extracted/Preset_Hidden.vap.hide",
-            b"",
-        );
+        f.put("Custom/Atom/Person/Appearance/Preset_Hidden.vap.hide", b"");
         assert!(
             save_scene_appearance(&f.ctx, &[], &source, &revision, 2, "Hidden")
                 .unwrap_err()
@@ -1888,7 +2481,7 @@ mod tests {
         assert!(package.file.is_file());
         assert!(set_favorite(&f.ctx, &[], &local("Saves/scene/missing.json"), true).is_err());
         let large = f.ctx.root.join("Saves/scene/Large.json");
-        File::create(&large).unwrap().set_len(LIMIT + 1).unwrap();
+        File::create(&large).unwrap().set_len(33 * 1024 * 1024).unwrap();
         set_favorite(&f.ctx, &[], &local("Saves/scene/Large.json"), true).unwrap();
         assert!(large.with_extension("json.fav").is_file());
     }
@@ -1952,7 +2545,7 @@ mod tests {
         );
     }
     #[test]
-    fn rejects_traversal_absolute_paths_and_oversized_reads() {
+    fn rejects_traversal_absolute_paths_and_invalid_json() {
         let f = Fixture::new();
         for path in [
             "../escape",
@@ -1968,7 +2561,6 @@ mod tests {
             path: "Saves/scene/a.json".into(),
         };
         assert!(favorite_path(&f.ctx.root, &source).is_err());
-        assert!(bounded_read(&b"small"[..], LIMIT + 1).is_err());
         assert!(parse_json(b"[]").is_err());
     }
     #[test]
@@ -2019,6 +2611,10 @@ mod tests {
             String::from_utf8_lossy(&result.stderr)
         );
         assert!(safe_path(&f.ctx.root, "Saves/scene/test.json.fav").is_err());
+        assert!(
+            appearance_output_directory(&f.ctx, Some(link.join("Export").to_str().unwrap()))
+                .is_err()
+        );
         fs::remove_dir(&link).unwrap();
     }
     #[test]

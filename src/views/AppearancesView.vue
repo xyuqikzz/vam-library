@@ -63,6 +63,7 @@ import { useLocalLibraryStore } from '@/stores/localLibrary'
 import ResourceDisplay from '@/components/ResourceDisplay.vue'
 import GameContentManager from '@/components/GameContentManager.vue'
 import { presetKinds, type PresetKind } from '@/types/presets'
+import { compareDisplayNames } from '@/utils/nameSort'
 const contentTab = ref<'files' | 'packages'>('files')
 const presetKind = ref<PresetKind>('appearance')
 const presetPackageIds = ref(new Set<string>())
@@ -116,7 +117,7 @@ const sortedPresets = computed(() => {
       break
     case 'name':
     default:
-      sorted.sort((a, b) => a.creator.localeCompare(b.creator) || a.name.localeCompare(b.name))
+      sorted.sort((a, b) => compareDisplayNames(a.name, b.name) || a.creator.localeCompare(b.creator))
       break
   }
   return sorted

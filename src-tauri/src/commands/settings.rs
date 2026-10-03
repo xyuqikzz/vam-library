@@ -128,6 +128,7 @@ pub async fn save_settings(
 
     std::fs::write(&path, contents).map_err(|e| format!("写入设置文件失败: {}", e))?;
 
+    crate::services::scene_browser_index::schedule_sync(&app_handle);
     Ok(())
 }
 
@@ -154,6 +155,7 @@ pub async fn save_vam_instances(
     let contents =
         serde_json::to_string_pretty(&settings).map_err(|e| format!("序列化设置失败: {}", e))?;
     std::fs::write(&path, contents).map_err(|e| format!("写入设置文件失败: {}", e))?;
+    crate::services::scene_browser_index::schedule_sync(&app_handle);
     Ok(settings)
 }
 
@@ -191,7 +193,10 @@ pub async fn get_install_context(app_handle: tauri::AppHandle) -> Result<Install
 }
 
 #[tauri::command]
-pub async fn clear_local_database(db: State<'_, Database>) -> Result<(), String> {
+pub async fn clear_local_database(
+    app_handle: tauri::AppHandle,
+    db: State<'_, Database>,
+) -> Result<(), String> {
     db.with_conn(|conn| {
         conn.execute_batch(
             "
@@ -222,6 +227,7 @@ pub async fn clear_local_database(db: State<'_, Database>) -> Result<(), String>
     })
     .map_err(|e| e.to_string())?;
 
+    crate::services::scene_browser_index::schedule_sync(&app_handle);
     Ok(())
 }
 

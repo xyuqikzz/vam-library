@@ -4,5 +4,7 @@ pub mod install_context;
 pub mod resource_dedup;
 pub mod resource_files;
 pub mod scanner;
+pub mod scene_browser_index;
+pub mod scene_launch;
 pub mod var_parser;
 pub mod watcher;

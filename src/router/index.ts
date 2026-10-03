@@ -76,7 +76,7 @@ const router = createRouter({
           path: 'ingestion',
           name: 'ingestion',
           component: () => import('@/views/IngestionView.vue'),
-          meta: { title: 'Smart Import' },
+          meta: { title: 'Quick Import' },
         },
         {
           path: 'vam-prefs',

@@ -289,8 +289,11 @@ pub async fn quick_delete_package(
 /// List all packages as summaries for the package list view.
 /// 返回包含依赖数、被依赖数 and 入库时间 的摘要
 #[tauri::command]
-pub async fn list_packages(db: State<'_, Database>) -> Result<Vec<VarPackageSummary>, String> {
-    db.with_conn(|conn| {
+pub async fn list_packages(
+    app_handle: AppHandle,
+    db: State<'_, Database>,
+) -> Result<Vec<VarPackageSummary>, String> {
+    let result = db.with_conn(|conn| {
         let mut stmt = conn
             .prepare(
                 "SELECT p.id, p.creator, p.name, p.version, p.file_path, p.size_bytes, p.resource_types,
@@ -368,7 +371,9 @@ pub async fn list_packages(db: State<'_, Database>) -> Result<Vec<VarPackageSumm
 
         Ok(packages)
     })
-    .map_err(|e| e.to_string())
+    .map_err(|e| e.to_string())?;
+    crate::services::scene_browser_index::schedule_sync(&app_handle);
+    Ok(result)
 }
 
 #[tauri::command]

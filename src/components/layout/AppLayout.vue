@@ -45,6 +45,7 @@
     <div class="bg-gradient-overlay" aria-hidden="true" />
     <!-- Toast notifications -->
     <Toast ref="toastEl" />
+    <ExternalImportPrompt :ready="startupReady" />
   </div>
 </template>
 
@@ -59,6 +60,7 @@ import { useI18n } from 'vue-i18n'
 import AppSidebar from './AppSidebar.vue'
 import AppToolbar from './AppToolbar.vue'
 import Toast from '@/components/common/Toast.vue'
+import ExternalImportPrompt from '@/components/ExternalImportPrompt.vue'
 
 const appStore = useAppStore()
 const localLibraryStore = useLocalLibraryStore()
@@ -67,6 +69,7 @@ const { t } = useI18n()
 
 const toastEl = ref<InstanceType<typeof Toast> | null>(null)
 const startupError = ref<string | null>(null)
+const startupReady = ref(false)
 
 const router = useRouter()
 const scrollPositions = ref(new Map<string, {
@@ -174,6 +177,7 @@ async function bootstrapApp() {
   await appStore.setupScanListener()
   await localLibraryStore.startListeners()
   await appStore.loadSettings()
+  startupReady.value = true
 
   window.requestAnimationFrame(() => {
     window.requestAnimationFrame(() => {

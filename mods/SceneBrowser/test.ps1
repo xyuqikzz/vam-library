@@ -3,7 +3,7 @@ $ErrorActionPreference = 'Stop'
 $compiler = Join-Path $env:WINDIR 'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
 $output = Join-Path ([IO.Path]::GetTempPath()) ('VamBrowserRules-' + [guid]::NewGuid() + '.exe')
 try {
-    & $compiler /nologo /target:exe "/out:$output" (Join-Path $PSScriptRoot 'BrowserRules.cs') (Join-Path $PSScriptRoot 'tests/BrowserRulesTests.cs')
+    & $compiler /nologo /target:exe "/out:$output" (Join-Path $PSScriptRoot 'BrowserRules.cs') (Join-Path $PSScriptRoot 'ImportTimeIndex.cs') (Join-Path $PSScriptRoot 'SceneLaunchRequest.cs') (Join-Path $PSScriptRoot 'tests/BrowserRulesTests.cs')
     if ($LASTEXITCODE -ne 0) { throw 'Test compilation failed' }
     & $output
     if ($LASTEXITCODE -ne 0) { throw 'Browser rules tests failed' }
@@ -27,6 +27,14 @@ try {
         if (-not ($browser.Fields | Where-Object Name -EQ $name)) { throw "Missing field: $name" }
     }
     Write-Output 'PASS: 15 game binary contract checks'
+    $controller = $assembly.MainModule.GetType('SuperController')
+    foreach ($name in @('Start','Load','RescanPackages','get_isLoading','get_LoadedSceneName')) {
+        $methods = @($controller.Methods | Where-Object Name -EQ $name)
+        if ($methods.Count -ne 1) { throw "Missing or ambiguous scene launch API: $name" }
+    }
+    $load = $controller.Methods | Where-Object Name -EQ 'Load'
+    if (-not $load.IsPublic -or $load.Parameters.Count -ne 1 -or $load.Parameters[0].ParameterType.FullName -ne 'System.String') { throw 'Scene load contract changed' }
+    Write-Output 'PASS: scene launch lifecycle and load API contracts'
 } finally { $assembly.Dispose() }
 
 $plugin = [Mono.Cecil.AssemblyDefinition]::ReadAssembly((Join-Path $PSScriptRoot '../../src-tauri/resources/mods/VamLibrary.SceneBrowser.dll'))

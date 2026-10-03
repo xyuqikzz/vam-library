@@ -45,6 +45,14 @@ namespace VamLibrary.SceneBrowser
             return result;
         }
 
+        public static int CompareImported(long? timeA, long? timeB, string authorA, string nameA, string pathA,
+                                          string authorB, string nameB, string pathB)
+        {
+            int result = timeB.HasValue.CompareTo(timeA.HasValue);
+            if (result == 0 && timeA.HasValue) result = timeB.Value.CompareTo(timeA.Value);
+            return result != 0 ? result : Compare(authorA, nameA, pathA, authorB, nameB, pathB);
+        }
+
         public static string PackageFolder(string root, string packagePath)
         {
             if (string.IsNullOrEmpty(packagePath)) return null;

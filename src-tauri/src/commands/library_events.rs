@@ -22,6 +22,7 @@ pub fn emit_library_index_changed(
     changed_package_ids: Vec<String>,
     changed_paths: Vec<String>,
 ) {
+    crate::services::scene_browser_index::schedule_sync(app_handle);
     let payload = LibraryIndexChangedPayload {
         revision: LIBRARY_REVISION.fetch_add(1, Ordering::SeqCst),
         reason: reason.to_string(),

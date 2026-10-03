@@ -1,6 +1,7 @@
 pub mod deduplication;
 pub mod dependency;
 pub mod download;
+pub mod external_import;
 pub mod game_mods;
 pub mod game_content;
 pub mod hub;

@@ -6,6 +6,7 @@ import { useRoute } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 import { useLocalLibraryStore } from '@/stores/localLibrary'
 import type { GameContentKind } from '@/types/presets'
+import { compareDisplayNames } from '@/utils/nameSort'
 
 interface ContentRef { packageId: string | null; path: string }
 interface Item { source: ContentRef; key: string; name: string; alias: string | null; favorite: boolean; available: boolean }
@@ -60,7 +61,9 @@ const filtered = computed(() => {
   return items.value.filter(i => (!favoritesOnly.value || i.favorite)
     && (filter.value === 'all' || (filter.value === 'local' ? !i.source.packageId : !!i.source.packageId))
     && terms.every(q => `${i.name} ${i.alias || ''} ${i.source.packageId || ''} ${i.source.path}`.toLocaleLowerCase().includes(q)))
-    .sort((a, b) => (a.alias || a.name).localeCompare(b.alias || b.name))
+    .sort((a, b) => isScene.value
+      ? (a.alias || a.name).localeCompare(b.alias || b.name)
+      : compareDisplayNames(a.alias || a.name, b.alias || b.name))
 })
 const pages = computed(() => Math.max(1, Math.ceil(filtered.value.length / pageSize)))
 const visible = computed(() => filtered.value.slice((page.value - 1) * pageSize, page.value * pageSize))
@@ -323,6 +326,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 button.primary { background: var(--accent-primary); color: white; border-color: transparent; white-space: nowrap; }
 .content-toolbar { flex-wrap: wrap; gap: 8px; }
 .content-toolbar > input, .content-toolbar > select, .content-toolbar > button { height: 34px; padding: 0 12px; }
+/* The toolbar touches an overflow-hidden edge, so draw focus inside the controls. */
+.content-toolbar > input:focus, .content-toolbar > select:focus { outline: none; border-color: var(--accent-primary); box-shadow: inset 0 0 0 1px var(--accent-primary); }
 .content-toolbar input { flex: 1 1 180px; min-width: 140px; }
 .content-toolbar select { flex: 0 0 140px; }
 .content-toolbar button { flex: 0 0 auto; white-space: nowrap; }

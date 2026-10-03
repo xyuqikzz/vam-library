@@ -14,7 +14,9 @@ use tauri::{Emitter, Manager};
 
 #[derive(Clone, Deserialize)]
 pub struct IngestionConfig {
+    #[serde(default)]
     source_dir: String,
+    source_files: Option<Vec<String>>,
     mode: MigrationMode,
     custom_folder: String,
     locale: Option<String>,
@@ -46,6 +48,7 @@ pub struct IngestionPreview {
 
 struct IngestionPlan {
     preview: IngestionPreview,
+    source_paths: Option<Vec<String>>,
     source_files: Vec<DiskFile>,
     target_files: Vec<DiskFile>,
     excluded: HashSet<String>,
@@ -79,6 +82,67 @@ fn inventory(
             .extension()
             .is_some_and(|e| e.eq_ignore_ascii_case("var"))
     });
+    Ok((entries, warnings))
+}
+
+fn within(path: &Path, root: &Path) -> bool {
+    let path = files::path_key(&path.to_string_lossy());
+    let root = files::path_key(&root.to_string_lossy());
+    path == root || path.starts_with(&(root.trim_end_matches('/').to_string() + "/"))
+}
+
+fn selected_inventory(
+    paths: &[String],
+    target: &Path,
+    trash: &Path,
+    excluded: &HashSet<String>,
+) -> Result<(Vec<DiskFile>, Vec<String>), String> {
+    if paths.is_empty() {
+        return Err("没有选择 VAR 文件".into());
+    }
+    let mut seen = HashSet::new();
+    let mut entries = vec![];
+    let mut warnings = vec![];
+    for value in paths {
+        let path = Path::new(value);
+        if !path.is_absolute()
+            || path
+                .components()
+                .any(|c| matches!(c, std::path::Component::ParentDir))
+            || !path
+                .extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("var"))
+        {
+            return Err(format!("必须选择绝对路径的 VAR 文件: {}", value));
+        }
+        files::ensure_no_links(path)?;
+        let path = files::canonical_dir(path.parent().ok_or("无效文件路径")?)?
+            .join(path.file_name().ok_or("无效文件名")?);
+        if !seen.insert(files::path_key(&path.to_string_lossy())) {
+            continue;
+        }
+        let internal = path.ancestors().skip(1).any(|p| {
+            p.file_name().is_some_and(|name| {
+                matches!(
+                    name.to_string_lossy().to_lowercase().as_str(),
+                    ".trash" | ".downloads" | ".vamboxlibrary-downloads"
+                )
+            })
+        });
+        if within(&path, target)
+            || within(&path, trash)
+            || internal
+            || excluded.iter().any(|p| within(&path, Path::new(p)))
+        {
+            warnings.push(format!(
+                "已跳过游戏内资源、回收站、托管映射或内部目录: {}",
+                path.display()
+            ));
+            continue;
+        }
+        entries.push(files::fingerprint(&path)?);
+    }
+    entries.sort_by(|a, b| a.path.cmp(&b.path));
     Ok((entries, warnings))
 }
 
@@ -138,35 +202,45 @@ fn build_plan(
     trash: PathBuf,
     excluded: HashSet<String>,
 ) -> Result<IngestionPlan, String> {
-    let source = files::canonical_dir(Path::new(&config.source_dir))?;
+    let source = if config.source_files.is_some() {
+        None
+    } else {
+        Some(files::canonical_dir(Path::new(&config.source_dir))?)
+    };
     let target = target_root(target)?;
-    let source_key = files::path_key(&source.to_string_lossy());
-    let target_key = files::path_key(&target.to_string_lossy());
-    if source_key == target_key
-        || source_key.starts_with(&(target_key.clone() + "/"))
-        || target_key.starts_with(&(source_key + "/"))
-    {
-        return Err("来源与游戏资源目录不能相同或互相包含".into());
-    }
     let trash = target_root(&trash)?;
-    let trash_key = files::path_key(&trash.to_string_lossy());
-    let source_key = files::path_key(&source.to_string_lossy());
-    if source_key == trash_key
-        || source_key.starts_with(&(trash_key.clone() + "/"))
-        || trash_key.starts_with(&(source_key + "/"))
-    {
-        return Err("来源不能是回收站，也不能包含回收站；请使用回收站恢复功能".into());
+    if let Some(source) = &source {
+        for (root, error) in [
+            (&target, "来源与游戏资源目录不能相同或互相包含"),
+            (
+                &trash,
+                "来源不能是回收站，也不能包含回收站；请使用回收站恢复功能",
+            ),
+        ] {
+            if within(source, root) || within(root, source) {
+                return Err(error.into());
+            }
+        }
     }
     let custom = if config.mode == MigrationMode::Custom {
         custom_folder(&config.custom_folder)?
     } else {
         PathBuf::new()
     };
-    let (source_files, mut warnings) = inventory(&source, &excluded)?;
+    let (source_files, mut warnings) = if let Some(paths) = &config.source_files {
+        selected_inventory(paths, &target, &trash, &excluded)?
+    } else {
+        inventory(source.as_ref().unwrap(), &excluded)?
+    };
+    let selected_skipped = if config.source_files.is_some() {
+        warnings.len()
+    } else {
+        0
+    };
     let (target_files, target_warnings) = inventory(&target, &excluded)?;
     warnings.extend(target_warnings);
     let mut families: BTreeMap<String, Vec<(DiskFile, bool, u64)>> = BTreeMap::new();
-    let mut skipped = 0;
+    let mut skipped = selected_skipped;
     for file in &source_files {
         if let Some(name) = files::package_name(Path::new(&file.path)) {
             families
@@ -267,9 +341,11 @@ fn build_plan(
             "ing_{}",
             chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
         ),
-        source_dir: source.to_string_lossy().into_owned(),
+        source_dir: source
+            .map(|p| p.to_string_lossy().into_owned())
+            .unwrap_or_default(),
         target_dir: target.to_string_lossy().into_owned(),
-        total_files: source_files.len(),
+        total_files: source_files.len() + selected_skipped,
         move_count: groups.iter().filter(|g| g.incoming).count(),
         retire_count: groups.iter().map(|g| g.retired.len()).sum(),
         skipped,
@@ -278,6 +354,7 @@ fn build_plan(
     };
     Ok(IngestionPlan {
         preview,
+        source_paths: config.source_files.clone(),
         source_files,
         target_files,
         excluded,
@@ -286,9 +363,17 @@ fn build_plan(
 }
 
 fn validate_plan(plan: &IngestionPlan) -> Result<(), String> {
-    files::canonical_dir(Path::new(&plan.preview.source_dir))?;
     target_root(Path::new(&plan.preview.target_dir))?;
-    let (source, _) = inventory(Path::new(&plan.preview.source_dir), &plan.excluded)?;
+    let (source, _) = if let Some(paths) = &plan.source_paths {
+        selected_inventory(
+            paths,
+            Path::new(&plan.preview.target_dir),
+            &plan.trash,
+            &plan.excluded,
+        )?
+    } else {
+        inventory(Path::new(&plan.preview.source_dir), &plan.excluded)?
+    };
     let (target, _) = inventory(Path::new(&plan.preview.target_dir), &plan.excluded)?;
     if source != plan.source_files || target != plan.target_files {
         return Err("来源或游戏资源目录已变化，请重新预览".into());
@@ -345,6 +430,13 @@ fn execute_group(
             files::update_index_path(&tx, &group.source, &group.destination)?;
         }
         files::index_parsed_package(&tx, &pkg)?;
+        if group.incoming {
+            // Maintenance reindexing preserves scan_time; an actual import must
+            // advance it even when replacing the same package ID and version.
+            let imported_at = chrono::Utc::now().to_rfc3339();
+            tx.execute("UPDATE packages SET scan_time=?1 WHERE id=?2", rusqlite::params![imported_at,pkg.id])?;
+            tx.execute("UPDATE physical_packages SET scan_time=?1 WHERE file_path=?2", rusqlite::params![imported_at,pkg.file_path])?;
+        }
         tx.commit()?;
         Ok(())
     });
@@ -491,6 +583,7 @@ mod tests {
     fn config(source: &TestDir) -> IngestionConfig {
         IngestionConfig {
             source_dir: source.0.to_string_lossy().into_owned(),
+            source_files: None,
             mode: MigrationMode::Flatten,
             custom_folder: "Favorites/Scenes".into(),
             locale: Some("zh-CN".into()),
@@ -505,6 +598,146 @@ mod tests {
             HashSet::new(),
         )
         .unwrap()
+    }
+
+    fn selected_plan(paths: Vec<PathBuf>, mode: MigrationMode, game: &TestDir) -> IngestionPlan {
+        build_plan(
+            &IngestionConfig {
+                source_dir: String::new(),
+                source_files: Some(
+                    paths
+                        .into_iter()
+                        .map(|p| p.to_string_lossy().into_owned())
+                        .collect(),
+                ),
+                mode,
+                custom_folder: String::new(),
+                locale: Some("zh-CN".into()),
+            },
+            &game.0.join("AddonPackages"),
+            game.0.join("VAMBoxLibrary/.trash"),
+            HashSet::new(),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn selected_files_import_only_dropped_packages_from_multiple_folders() {
+        let source = TestDir::new();
+        let game = TestDir::new();
+        let data = TestDir::new();
+        let first = var(
+            &source,
+            "中文 folder/A.Scene.1.var",
+            100,
+            "Saves/scene/one.json",
+        );
+        let second = var(
+            &source,
+            "elsewhere/B.Asset.1.var",
+            100,
+            "Custom/Assets/one.assetbundle",
+        );
+        let neighbor = var(
+            &source,
+            "中文 folder/A.Scene.9.var",
+            100,
+            "Saves/scene/other.json",
+        );
+        let p = selected_plan(
+            vec![first.clone(), second.clone(), first.clone()],
+            MigrationMode::Flatten,
+            &game,
+        );
+        assert_eq!(p.preview.total_files, 2);
+        assert_eq!(p.preview.move_count, 2);
+        assert_eq!(p.preview.retire_count, 0);
+        assert!(first.exists() && second.exists()); // Preview has no file side effects.
+        validate_plan(&p).unwrap();
+        let db = Database::new(&data.0.join("test.db")).unwrap();
+        for (i, group) in p.preview.groups.iter().enumerate() {
+            execute_group(&db, &p, group, i).unwrap();
+        }
+        assert!(!first.exists() && !second.exists());
+        assert!(neighbor.exists());
+        assert!(game.0.join("AddonPackages/A.Scene.1.var").is_file());
+        assert!(game.0.join("AddonPackages/B.Asset.1.var").is_file());
+        db.with_conn(|conn| {
+            assert_eq!(
+                conn.query_row("SELECT count(*) FROM packages", [], |r| r.get::<_, i64>(0))?,
+                2
+            );
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn selected_files_use_primary_type_and_validate_only_selected_sources() {
+        let source = TestDir::new();
+        let game = TestDir::new();
+        let scene = var(&source, "A.Scene.1.var", 100, "Saves/scene/one.json");
+        let clothing = var(
+            &source,
+            "nested/B.Clothing.1.var",
+            100,
+            "Custom/Clothing/Female/one.vam",
+        );
+        let p = selected_plan(vec![scene.clone(), clothing], MigrationMode::ByType, &game);
+        assert!(p
+            .preview
+            .groups
+            .iter()
+            .any(|g| Path::new(&g.destination) == game.0.join("AddonPackages/场景/A.Scene.1.var")));
+        assert!(p.preview.groups.iter().any(
+            |g| Path::new(&g.destination) == game.0.join("AddonPackages/服装/B.Clothing.1.var")
+        ));
+        var(&source, "Unrelated.Asset.1.var", 100, "Custom/a.txt");
+        validate_plan(&p).unwrap();
+        fs::remove_file(scene).unwrap();
+        assert!(validate_plan(&p).is_err());
+    }
+
+    #[test]
+    fn selected_import_skips_installed_and_internal_files_and_reuses_duplicate_policy() {
+        let source = TestDir::new();
+        let game = TestDir::new();
+        let incoming = var(&source, "A.Asset.1.var", 100, "Custom/one.txt");
+        let installed = var(&game, "AddonPackages/A.Asset.2.var", 200, "Custom/two.txt");
+        let trash = var(
+            &game,
+            "VAMBoxLibrary/.trash/B.Asset.1.var",
+            100,
+            "Custom/trash.txt",
+        );
+        let p = selected_plan(
+            vec![incoming.clone(), installed.clone(), trash.clone()],
+            MigrationMode::Flatten,
+            &game,
+        );
+        assert_eq!(p.preview.total_files, 3);
+        assert_eq!(p.preview.skipped, 2);
+        assert_eq!(p.preview.move_count, 0);
+        assert_eq!(p.preview.retire_count, 1);
+        assert_eq!(Path::new(&p.preview.groups[0].source), installed);
+        assert_eq!(Path::new(&p.preview.groups[0].retired[0].path), incoming);
+        assert!(trash.exists());
+    }
+
+    #[test]
+    fn selected_import_rejects_empty_missing_and_non_var_sources() {
+        let source = TestDir::new();
+        let game = TestDir::new();
+        let target = game.0.join("AddonPackages");
+        let trash = game.0.join("VAMBoxLibrary/.trash");
+        for paths in [
+            vec![],
+            vec!["relative.var".into()],
+            vec![source.0.join("missing.var").to_string_lossy().into_owned()],
+            vec![source.0.join("notes.txt").to_string_lossy().into_owned()],
+        ] {
+            assert!(selected_inventory(&paths, &target, &trash, &HashSet::new()).is_err());
+        }
     }
 
     #[test]
@@ -571,7 +804,7 @@ mod tests {
     }
 
     #[test]
-    fn equal_version_replaces_older_installed_copy_and_preserves_tags() {
+    fn equal_version_replaces_older_installed_copy_and_updates_import_time_preserving_tags() {
         let source = TestDir::new();
         let game = TestDir::new();
         let data = TestDir::new();
@@ -581,6 +814,10 @@ mod tests {
         let db = Database::new(&data.0.join("test.db")).unwrap();
         db.with_conn(|conn| {
             files::index_package(conn, &installed)?;
+            conn.execute_batch(
+                "UPDATE packages SET scan_time='2000-01-01T00:00:00Z';
+                 UPDATE physical_packages SET scan_time='2000-01-01T00:00:00Z';",
+            )?;
             conn.execute(
                 "INSERT INTO package_tags (package_id,tag) VALUES ('A.Asset.1','favorite')",
                 [],
@@ -589,13 +826,34 @@ mod tests {
         })
         .unwrap();
         let p = plan(&source, &game);
+        let started = chrono::Utc::now();
         execute_group(&db, &p, &p.preview.groups[0], 0).unwrap();
+        let finished = chrono::Utc::now();
         assert_eq!(fs::read(&installed).unwrap(), bytes);
         assert_eq!(
             files::fingerprint(&installed).unwrap().modified,
             "200000000000"
         );
         db.with_conn(|conn| {
+            let (imported, physical): (String, String) = conn.query_row(
+                "SELECT p.scan_time, pp.scan_time FROM packages p
+                 JOIN physical_packages pp ON pp.file_path=p.file_path WHERE p.id='A.Asset.1'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )?;
+            let time = chrono::DateTime::parse_from_rfc3339(&imported).unwrap();
+            assert!(time >= started && time <= finished);
+            assert_eq!(physical, imported);
+            // A later maintenance reindex must retain the successful reimport time.
+            files::index_package(conn, Path::new(&p.preview.groups[0].destination))?;
+            assert_eq!(
+                conn.query_row(
+                    "SELECT scan_time FROM packages WHERE id='A.Asset.1'",
+                    [],
+                    |r| r.get::<_, String>(0)
+                )?,
+                imported
+            );
             assert_eq!(
                 conn.query_row("SELECT count(*) FROM package_tags", [], |r| r
                     .get::<_, i64>(0))?,
@@ -627,9 +885,30 @@ mod tests {
         assert_eq!(p.preview.move_count, 0);
         assert_eq!(Path::new(&p.preview.groups[0].destination), installed);
         let db = Database::new(&data.0.join("test.db")).unwrap();
+        db.with_conn(|conn| {
+            files::index_package(conn, Path::new(&p.preview.groups[0].source))?;
+            conn.execute_batch(
+                "UPDATE packages SET scan_time='2000-01-01T00:00:00Z';
+                 UPDATE physical_packages SET scan_time='2000-01-01T00:00:00Z';",
+            )?;
+            Ok(())
+        })
+        .unwrap();
         execute_group(&db, &p, &p.preview.groups[0], 0).unwrap();
         assert!(!incoming.exists());
         assert!(installed.exists());
+        db.with_conn(|conn| {
+            let (imported, physical): (String, String) = conn.query_row(
+                "SELECT p.scan_time, pp.scan_time FROM packages p
+                 JOIN physical_packages pp ON pp.file_path=p.file_path WHERE p.id='A.Asset.1'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )?;
+            assert_eq!(imported, "2000-01-01T00:00:00Z");
+            assert_eq!(physical, imported);
+            Ok(())
+        })
+        .unwrap();
     }
 
     #[test]
@@ -728,6 +1007,51 @@ mod tests {
         assert_eq!(fs::read(&installed).unwrap(), old);
         assert_eq!(fs::read(&incoming).unwrap(), new);
         db.with_conn(|conn| {
+            assert_eq!(
+                conn.query_row("SELECT count(*) FROM cleanup_trash", [], |r| r
+                    .get::<_, i64>(0))?,
+                0
+            );
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn failed_import_time_update_rolls_back_files_and_index() {
+        let source = TestDir::new();
+        let game = TestDir::new();
+        let data = TestDir::new();
+        let incoming = var(&source, "A.Asset.1.var", 200, "Custom/new.txt");
+        let installed = var(&game, "AddonPackages/A.Asset.1.var", 100, "Custom/old.txt");
+        let old = fs::read(&installed).unwrap();
+        let new = fs::read(&incoming).unwrap();
+        let p = plan(&source, &game);
+        let db = Database::new(&data.0.join("test.db")).unwrap();
+        db.with_conn(|conn| {
+            files::index_package(conn, &installed)?;
+            conn.execute_batch(
+                "UPDATE packages SET scan_time='2000-01-01T00:00:00Z';
+                 UPDATE physical_packages SET scan_time='2000-01-01T00:00:00Z';
+                 CREATE TRIGGER fail_import_time BEFORE UPDATE OF scan_time ON physical_packages
+                 BEGIN SELECT RAISE(ABORT, 'injected timestamp failure'); END;",
+            )?;
+            Ok(())
+        })
+        .unwrap();
+        let error = execute_group(&db, &p, &p.preview.groups[0], 0).unwrap_err();
+        assert!(error.contains("injected timestamp failure"));
+        assert_eq!(fs::read(&installed).unwrap(), old);
+        assert_eq!(fs::read(&incoming).unwrap(), new);
+        db.with_conn(|conn| {
+            let (imported, physical): (String, String) = conn.query_row(
+                "SELECT p.scan_time, pp.scan_time FROM packages p
+                 JOIN physical_packages pp ON pp.file_path=p.file_path WHERE p.id='A.Asset.1'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )?;
+            assert_eq!(imported, "2000-01-01T00:00:00Z");
+            assert_eq!(physical, imported);
             assert_eq!(
                 conn.query_row("SELECT count(*) FROM cleanup_trash", [], |r| r
                     .get::<_, i64>(0))?,

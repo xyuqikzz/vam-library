@@ -382,7 +382,7 @@ const appStore = useAppStore()
 const { vamRootPath, installContext } = storeToRefs(appStore)
 
 const currentStep = ref(0)
-const selectedMode = ref<string | null>(null)
+const selectedMode = ref<string | null>('by_type')
 const preview = ref<MigrationPreview | null>(null)
 const migrationResult = ref<MigrationResult | null>(null)
 const isRollingBack = ref(false)
@@ -605,7 +605,7 @@ async function handleRestoreAll() {
 
 function resetWizard() {
   currentStep.value = 0
-  selectedMode.value = null
+  selectedMode.value = 'by_type'
   preview.value = null
   migrationResult.value = null
   migrationProgress.value = null

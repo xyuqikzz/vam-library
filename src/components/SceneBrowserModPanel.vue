@@ -2,8 +2,6 @@
   <GlassPanel :title="t('sceneBrowserMod.title')">
     <div class="mod-panel">
       <p>{{ t('sceneBrowserMod.description') }}</p>
-      <p class="muted">{{ t('sceneBrowserMod.usage') }}</p>
-      <p class="muted">{{ t('sceneBrowserMod.requirements') }}</p>
       <p v-if="!app.vamRootPath">{{ t('sceneBrowserMod.noGame') }}</p>
       <p v-if="error" role="alert">{{ error }}</p>
       <template v-if="status">
@@ -82,13 +80,13 @@ async function change(action: 'install' | 'uninstall') {
     if (id === request) busy.value = false
   }
 }
+
 watch(() => app.vamRootPath, refresh, { immediate: true })
 </script>
 
 <style scoped>
 .mod-panel { display: grid; gap: 12px; }
 p { margin: 0; line-height: 1.6; }
-.muted { color: var(--text-secondary); font-size: 13px; }
 .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 button { padding: 8px 16px; border: 1px solid var(--border-subtle); border-radius: 6px; background: var(--bg-surface); color: var(--text-primary); cursor: pointer; }
 button:disabled { opacity: .45; cursor: default; }

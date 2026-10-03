@@ -6,7 +6,7 @@
 
 **Languages / 语言:** [English](#english) · [中文](#中文)
 
-> ⚠️ **Status / 项目状态:** Early development (`v0.1.1`). Features and APIs may change. / 早期开发阶段（`v0.1.1`），功能与接口可能变动。
+> ⚠️ **Status / 项目状态:** Early development (`v0.1.2`). Features and APIs may change. / 早期开发阶段（`v0.1.2`），功能与接口可能变动。
 
 ---
 
@@ -25,13 +25,14 @@ The app uses a Vue 3 frontend talking to a Rust backend via Tauri commands. All 
 - **In-game scene browser mod** — Install/uninstall the bundled BepInEx mod from Settings. Adds author A–Z grouping and physical `AddonPackages` folder navigation to VaM's scene browser. Targets the recorded VaM 1.22.0.13 / BepInEx build; see [mod instructions](mods/SceneBrowser/README.md).
 
 - **Dashboard** — Overview of total packages, library size, recent additions, library health, and detection of corrupted packages.
-- **Package management** — Browse indexed `.var` packages with search, folder/tag filtering, thumbnails and scene previews; quick-delete packages, manage tags, and open packages or paths in the system file explorer.
+- **Package management** — Browse indexed `.var` packages with search, folder/tag filtering, thumbnails and scene previews; select a scene in package details and launch directly into it through the bundled scene browser mod (1.0.4+), with desktop/OpenVR modes and support for an already running game. Quick-delete packages, manage tags, and open packages or paths in the system file explorer.
 - **Scenes & Appearances** — Dedicated views to browse scenes and appearance presets contained in your library.
 - **Statistics** — Aggregated statistics about your resource library.
 - **Dependency completion** — Inspect the dependency graph, per-package dependency relations, reverse dependencies, and find missing dependencies.
 - **Deduplication** — Scan for duplicate resources, review duplicate groups, preview cleanup, and execute cleanup safely into an in-app recycle bin.
 - **Migration** — Preview and execute reorganization of resource files (by type / author / scene / custom rules), with rollback of individual or all migrations, and scene dependency collection.
-- **Smart import** — Recursively preview and move `.var` packages from a selected folder into the game's `AddonPackages`. Compare source and installed packages by creator/name, keep the highest numeric version, and break version ties by modification time closest to now (exact ties keep the installed copy). Choose flat, type, creator, scene or a custom relative folder. Duplicates and superseded versions go to the recycle bin; successful groups are indexed immediately. Non-VAR files stay in place. Corrupt winning packages and managed mappings are reported and skipped. Scenes pinned to an older version may require restoring that dependency from the recycle bin.
+- **Quick import** — Recursively preview and move `.var` packages from a selected folder into the game's `AddonPackages`. Compare source and installed packages by creator/name, keep the highest numeric version, and break version ties by modification time closest to now (exact ties keep the installed copy). Choose flat, type, creator, scene or a custom relative folder. Duplicates and superseded versions go to the recycle bin; successful groups are indexed immediately. Non-VAR files stay in place. Corrupt winning packages and managed mappings are reported and skipped. Scenes pinned to an older version may require restoring that dependency from the recycle bin.
+- **Drop VAR files onto the EXE** — Drop one or more `.var` files onto the application executable or its shortcut, including while the app is running. Confirm whether to import, choose the `AddonPackages` root or folders by resource type, then review the import preview before confirming the move. Only the dropped files are selected; neighboring files are untouched. Cancel preserves the originals. Configure the game directory first if prompted.
 - **Online Hub** — Browse the VaM Hub, view package info, check login status, and queue Hub files for download.
 - **Download center** — A background download queue with pause / resume / cancel / retry, completed-item cleanup, configurable download settings, and automatic Hub dependency resolution.
 - **One-click sharing** — Preview and export selected resources (and their dependencies) as a ZIP, or export the list of installed packages.
@@ -131,7 +132,7 @@ npm run tauri:build
 1. On first launch, open **Settings** and select your VAM installation root directory.
 2. Run a **scan** — the app indexes resources under `AddonPackages` and related folders into the local database.
 3. Browse and inspect resources in the Packages, Scenes, Appearances and Dependency views.
-4. Use Deduplication, Migration, Smart import, Download or Share as needed.
+4. Use Deduplication, Migration, Quick import, Download or Share as needed.
 
 ### Recursive deduplication and flattening
 
@@ -152,7 +153,7 @@ npm run tauri:build
 - The local SQLite index caches scan results, dependency relations, tags, migration records and download state.
 - Clearing local data only wipes the app database — it never deletes your real VAM resource files.
 - Deletions and deduplication cleanups go to the VAM Library recycle bin first; expired trash is purged automatically per app policy.
-- Migration, smart import and download operations move/copy real files — always confirm the preview before executing.
+- Migration, quick import and download operations move/copy real files — always confirm the preview before executing.
 
 ### Contributing
 
@@ -173,22 +174,23 @@ Released under the [MIT License](./LICENSE). Copyright (c) 2026 xyuqikzz.
 
 ### 项目简介
 
-VAM Library 是一个用于管理本地 Virt-A-Mate 资源库（`.var` 资源包）的桌面应用。它会扫描并将资源索引到本地 SQLite 数据库，然后提供浏览、依赖分析、去重、迁移、智能入库、下载与分享等一系列功能——全部集成在一个中英双语界面中。
+VAM Library 是一个用于管理本地 Virt-A-Mate 资源库（`.var` 资源包）的桌面应用。它会扫描并将资源索引到本地 SQLite 数据库，然后提供浏览、依赖分析、去重、迁移、快捷入库、下载与分享等一系列功能——全部集成在一个中英双语界面中。
 
 应用采用 Vue 3 前端 + Rust 后端，通过 Tauri 命令通信。所有索引数据保存在本地；只有你主动触发的移动 / 复制 / 链接 / 删除操作才会动到你真实的 VAM 文件。
 
 ### 主要功能
 
-- **游戏内场景浏览模组** — 在设置中安装 / 卸载内置 BepInEx 模组，在游戏场景预览中加入作者 A–Z 分组排序及真实 `AddonPackages` 文件夹浏览。适配清单中记录的 VaM 1.22.0.13 / BepInEx 构建，详见[模组说明](mods/SceneBrowser/README.md)。
+- **vam管理增强插件** — 在设置中安装 / 更新 / 卸载，支持 VAR 原生解压、作者排序、`AddonPackages` 文件夹浏览、入库时间排序与场景启动联动。入库、扫描和刷新资源时自动同步入库时间。详见[插件说明](mods/SceneBrowser/README.md)。
 
 - **仪表盘** — 总览包数量、资源体积、最近新增、库健康状态，并检测损坏的资源包。
-- **包管理** — 浏览已索引的 `.var` 包，支持搜索、文件夹 / 标签筛选、缩略图与场景预览；可快速删除、管理标签，并在系统文件管理器中打开包或路径。
+- **包管理** — 浏览已索引的 `.var` 包，支持搜索、文件夹 / 标签筛选、缩略图与场景预览；在包详情中选择场景，点击「启动场景」，通过内置 vam管理增强插件（1.0.4+）打开游戏并加载场景。支持桌面 / OpenVR 模式，游戏已运行时直接加载。可快速删除、管理标签，并在系统文件管理器中打开包或路径。
 - **场景与外观** — 专门的视图用于浏览库中的场景与外观预设。
 - **统计** — 资源库的聚合统计信息。
 - **依赖补全** — 查看依赖关系图、单包依赖关系、反向依赖，并查找缺失的依赖。
 - **去重分析** — 扫描重复资源，查看重复组，预览清理方案，并将清理项安全地放入应用回收站。
 - **资源迁移** — 按类型 / 作者 / 场景 / 自定义规则预览并执行文件重组，支持单次或全部迁移回滚，以及场景依赖收集。
-- **智能入库** — 递归预览所选文件夹内的 `.var` 包并移动到游戏 `AddonPackages`。按作者及包名同时比较来源和已安装文件，保留最高数字版本；同版本保留修改时间最接近当前时间的文件，完全相同时保留已安装文件。支持平铺、按类型、按作者、按场景和自定义相对子目录。重复包与旧版本进入回收站，已完成的资源组立即同步索引，普通文件保留原处。损坏的候选保留包及托管映射会报告并跳过。固定引用旧版本的场景可能需要从回收站恢复对应依赖。
+- **快捷入库** — 递归预览所选文件夹内的 `.var` 包并移动到游戏 `AddonPackages`。按作者及包名同时比较来源和已安装文件，保留最高数字版本；同版本保留修改时间最接近当前时间的文件，完全相同时保留已安装文件。支持平铺、按类型、按作者、按场景和自定义相对子目录。重复包与旧版本进入回收站，已完成的资源组立即同步索引，普通文件保留原处。损坏的候选保留包及托管映射会报告并跳过。固定引用旧版本的场景可能需要从回收站恢复对应依赖。
+- **拖拽 VAR 到 EXE 入库** — 将一个或多个 `.var` 文件拖到软件 EXE 或其快捷方式上，软件已运行时也能接收。弹窗询问是否入库，并提供 `AddonPackages` 根目录和按资源类型分类两种选择；查看入库预览后再确认移动。仅选中拖入的文件，不扫描同目录的其他文件；取消保留原文件。未配置游戏目录时可先进入设置。
 - **在线 Hub** — 浏览 VaM Hub、查看包信息、查看登录状态，并将 Hub 文件加入下载队列。
 - **下载中心** — 后台下载队列，支持暂停 / 继续 / 取消 / 重试、清理已完成项、可配置下载设置，以及自动解析 Hub 依赖。
 - **一键分享** — 预览并导出选定资源（及其依赖）为 ZIP，或导出已安装包列表。
@@ -211,10 +213,14 @@ cargo test --manifest-path src-tauri/Cargo.toml game_content
 # Optional compatibility checks: game files are read-only; copied outputs use temporary fixtures.
 $env:VAM_CONTENT_TEST_ROOT = '<VaM root>'
 $env:VAM_CONTENT_TEST_DB = '<app data>/com.vamlibrary.app/vamlibrary.db'
-cargo test --manifest-path src-tauri/Cargo.toml game_content -- --include-ignored
+cargo test --manifest-path src-tauri/Cargo.toml game_content -- --include-ignored --skip real_large_scene_extraction_compatibility
+# Optional large-scene extraction check, also writing only to a temporary fixture.
+$env:VAM_CONTENT_TEST_PACKAGE = '<full path to a VAR package>'
+$env:VAM_CONTENT_TEST_SCENE = 'Saves/scene/<scene>.json'
+cargo test --manifest-path src-tauri/Cargo.toml real_large_scene_extraction_compatibility -- --ignored
 ```
 
-- **提取场景角色**：在任意资源列表中点击资源包，展开右侧详情面板的“提取场景角色”，选择包内场景和直接保存的 Person 角色。直接读取所选 VAR，无需依赖资源类型标签或内容索引。填写名称后保存为 `Custom/Atom/Person/Appearance/VAM Library/Extracted/Preset_<名称>.vap`，可点击“查看外观预设”定位结果。保留已保存的基础模型、皮肤、变形、服装、头发及相关材质/物理参数，排除场景位置、控制器动作、动画和插件；同名不覆盖，场景和 VAR 保持不变。VAR 内引用会转换为来源包引用，仍需保留并启用原包及依赖。提取面板显示所选场景的默认预览图，保存时以预设同名复制 JPG/PNG/JPEG 缩略图（保留原格式）；没有预览图时仍可保存预设。该图是场景预览，不是角色独立截图。插件运行时修改或子场景内角色需先在游戏内保存到场景。保存前检查场景是否改变，避免导出旧选择。
+- **提取场景角色**：在任意资源列表中点击资源包，展开右侧详情面板的“提取场景角色”，选择包内场景和直接保存的 Person 角色。直接读取所选 VAR，无需依赖资源类型标签或内容索引。填写名称并选择保存目录，默认直接保存为 `Custom/Atom/Person/Appearance/Preset_<名称>.vap`。支持手动编辑完整路径、浏览选择文件夹、恢复默认目录；成功保存后按游戏实例记住目录。预设与缩略图写入同一目录。位于当前游戏外观目录内时，可点击“查看外观预设”定位；保存到其他目录时显示实际路径，需手动加载。保留已保存的基础模型、皮肤、变形、服装、头发及相关材质/物理参数，排除场景位置、控制器动作、动画和插件；同名不覆盖，场景和 VAR 保持不变。VAR 内引用会转换为来源包引用，仍需保留并启用原包及依赖。提取面板显示所选场景的默认预览图，保存时以预设同名复制 JPG/PNG/JPEG 缩略图（保留原格式）；没有预览图时仍可保存预设。该图是场景预览，不是角色独立截图。插件运行时修改或子场景内角色需先在游戏内保存到场景。保存前检查场景是否改变，避免导出旧选择。
 
 ### 技术栈
 
@@ -306,7 +312,7 @@ npm run tauri:build
 1. 首次启动后，在**设置**页选择你的 VAM 安装根目录。
 2. 执行**扫描**，应用会索引 `AddonPackages` 等目录中的资源到本地数据库。
 3. 在包管理、场景、外观、依赖分析等页面查看资源状态。
-4. 根据需要进行去重、迁移、智能入库、下载或分享。
+4. 根据需要进行去重、迁移、快捷入库、下载或分享。
 
 ### 全目录去重与平铺迁移
 
@@ -329,7 +335,7 @@ npm run tauri:build
 - 本地 SQLite 索引用于缓存扫描结果、依赖关系、标签、迁移记录和下载状态。
 - 清空本地数据只会清除应用数据库，不会删除真实的 VAM 资源文件。
 - 删除和去重清理会优先进入 VAM Library 回收站，回收站内资源会按应用策略自动清理。
-- 资源迁移、智能入库和下载操作会涉及真实文件的移动或复制，执行前请确认预览内容。
+- 资源迁移、快捷入库和下载操作会涉及真实文件的移动或复制，执行前请确认预览内容。
 
 ### 参与开发
 

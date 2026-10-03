@@ -9,7 +9,9 @@ use tauri::Manager;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+        .manage(commands::external_import::ExternalImportState::from_startup_args())
+        .plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
+            commands::external_import::receive_launch(app, args, &cwd);
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.unminimize();
                 let _ = window.show();
@@ -42,6 +44,7 @@ pub fn run() {
 
             // Store database as managed state
             app.manage(database);
+            services::scene_browser_index::schedule_sync(app.handle());
 
             // Initialize background downloader manager
             let downloader = std::sync::Arc::new(services::downloader::DownloadManager::new(
@@ -60,6 +63,7 @@ pub fn run() {
             commands::game_content::list_game_contents,
             commands::game_content::get_game_content_detail,
             commands::game_content::list_package_scene_contents,
+            commands::game_content::launch_game_scene,
             commands::game_content::save_game_scene_appearance,
             commands::game_content::get_game_content_image,
             commands::game_content::copy_game_presets,
@@ -102,6 +106,7 @@ pub fn run() {
             commands::migration::preview_migration,
             commands::ingestion::preview_ingestion,
             commands::ingestion::execute_ingestion,
+            commands::external_import::take_external_import_requests,
             commands::migration::execute_migration,
             commands::migration::rollback_migration,
             commands::migration::rollback_all_migrations,

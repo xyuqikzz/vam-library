@@ -10,10 +10,16 @@ use std::{
 const PAYLOAD: &[u8] = include_bytes!("../../resources/mods/VamLibrary.SceneBrowser.dll");
 const MANIFEST: &str = include_str!("../../resources/mods/scene-browser.json");
 const TARGET: &str = "BepInEx/plugins/VamLibrary.SceneBrowser/VamLibrary.SceneBrowser.dll";
-// Only the exact released 1.0.0/1.0.1 payloads may be upgraded in place.
+// Only the exact released payloads may be upgraded in place.
 const PREVIOUS_SHA256: &[&str] = &[
     "ee1a3178f538047be8f1a2e7b9e6134ad32820eaf9983e9550a33f8469040e40",
     "51e6ef72ee53f657347706990a515c0d88ea260e7b772a6cc1679fd2bcf4aea8",
+    "4900b9c7e4c87e5fd58d2a2b9c0b974952f0fa0dff8fbb667b5cf9d106c08b04",
+    "32257830cec3e6e507bd33fcd9c71b259798d51eef471c227be2a973d791a5b0",
+    "8289dbe2e8a0d582f8b74e1d0a66b4c1fb346f728168344bf04e51418f3da984",
+    "8916ec27265e27563a1012c9bb7504b039c6a0a0f4a475d996054c71ad5fa44e",
+    "b4043bd7d4da33c89f5d1f64d1c7ea57d763439b28c5ba6e7e52be66d94c4fad",
+    "ebc0e87863aee1a539e8ad773d3d9c2a8fa8159c94326474b4844ef3b8e879d4",
 ];
 static MOD_LOCK: Mutex<()> = Mutex::new(());
 
@@ -79,6 +85,33 @@ fn checked_root(root: &str) -> Result<PathBuf, String> {
         return Err("请选择包含 VaM.exe 和 AddonPackages 的游戏根目录".into());
     }
     Ok(root)
+}
+
+pub(crate) fn owned_mod_directory(root: &Path) -> Result<Option<PathBuf>, String> {
+    let target = safe_target(root)?;
+    let bytes = match fs::read(&target) {
+        Ok(bytes) => bytes,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error.to_string()),
+    };
+    if bytes != PAYLOAD && !PREVIOUS_SHA256.contains(&hash(&bytes).as_str()) {
+        return Ok(None);
+    }
+    Ok(target.parent().map(Path::to_path_buf))
+}
+
+pub(crate) fn scene_launch_directory(root: &Path) -> Result<PathBuf, String> {
+    let status = inspect(root)?;
+    if !status.installed {
+        return Err("请先退出 VaM，在设置中安装或更新 vam管理增强插件，再启动场景".into());
+    }
+    if !status.compatible {
+        return Err(status.reason.unwrap_or_default());
+    }
+    Ok(safe_target(root)?
+        .parent()
+        .ok_or("无效模组路径")?
+        .join("scene-launch"))
 }
 
 fn inspect(root: &Path) -> Result<ModStatus, String> {
@@ -243,12 +276,17 @@ pub async fn get_scene_browser_mod_status(vam_root: String) -> Result<ModStatus,
 }
 
 #[tauri::command]
-pub async fn install_scene_browser_mod(vam_root: String) -> Result<ModStatus, String> {
+pub async fn install_scene_browser_mod(
+    app_handle: tauri::AppHandle,
+    vam_root: String,
+) -> Result<ModStatus, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let _guard = MOD_LOCK.lock().map_err(|e| e.to_string())?;
         let root = checked_root(&vam_root)?;
         ensure_game_stopped()?;
-        install(&root)
+        let result = install(&root)?;
+        crate::services::scene_browser_index::schedule_sync(&app_handle);
+        Ok(result)
     })
     .await
     .map_err(|e| e.to_string())?
@@ -355,6 +393,47 @@ mod tests {
         assert!(!uninstall(&root).unwrap().installed);
         let previous =
             include_bytes!("../../../mods/SceneBrowser/tests/fixtures/SceneBrowser-1.0.1.dll");
+        assert!(PREVIOUS_SHA256.contains(&hash(previous).as_str()));
+        fs::write(root.join(TARGET), previous).unwrap();
+        assert!(inspect(&root).unwrap().update_available);
+        assert!(install(&root).unwrap().installed);
+        assert_eq!(fs::read(root.join(TARGET)).unwrap(), PAYLOAD);
+        assert!(!uninstall(&root).unwrap().installed);
+        let previous =
+            include_bytes!("../../../mods/SceneBrowser/tests/fixtures/SceneBrowser-1.0.2.dll");
+        assert!(PREVIOUS_SHA256.contains(&hash(previous).as_str()));
+        fs::write(root.join(TARGET), previous).unwrap();
+        assert!(owned_mod_directory(&root).unwrap().is_some());
+        assert!(inspect(&root).unwrap().update_available);
+        assert!(install(&root).unwrap().installed);
+        assert_eq!(fs::read(root.join(TARGET)).unwrap(), PAYLOAD);
+        assert!(!uninstall(&root).unwrap().installed);
+        let previous =
+            include_bytes!("../../../mods/SceneBrowser/tests/fixtures/SceneBrowser-1.0.4.dll");
+        assert!(PREVIOUS_SHA256.contains(&hash(previous).as_str()));
+        fs::write(root.join(TARGET), previous).unwrap();
+        assert!(inspect(&root).unwrap().update_available);
+        assert!(install(&root).unwrap().installed);
+        assert_eq!(fs::read(root.join(TARGET)).unwrap(), PAYLOAD);
+        assert!(!uninstall(&root).unwrap().installed);
+        let previous =
+            include_bytes!("../../../mods/SceneBrowser/tests/fixtures/SceneBrowser-1.0.5.dll");
+        assert!(PREVIOUS_SHA256.contains(&hash(previous).as_str()));
+        fs::write(root.join(TARGET), previous).unwrap();
+        assert!(inspect(&root).unwrap().update_available);
+        assert!(install(&root).unwrap().installed);
+        assert_eq!(fs::read(root.join(TARGET)).unwrap(), PAYLOAD);
+        assert!(!uninstall(&root).unwrap().installed);
+        let previous =
+            include_bytes!("../../../mods/SceneBrowser/tests/fixtures/SceneBrowser-1.0.6.dll");
+        assert!(PREVIOUS_SHA256.contains(&hash(previous).as_str()));
+        fs::write(root.join(TARGET), previous).unwrap();
+        assert!(inspect(&root).unwrap().update_available);
+        assert!(install(&root).unwrap().installed);
+        assert_eq!(fs::read(root.join(TARGET)).unwrap(), PAYLOAD);
+        assert!(!uninstall(&root).unwrap().installed);
+        let previous =
+            include_bytes!("../../../mods/SceneBrowser/tests/fixtures/SceneBrowser-1.0.7.dll");
         assert!(PREVIOUS_SHA256.contains(&hash(previous).as_str()));
         fs::write(root.join(TARGET), previous).unwrap();
         assert!(inspect(&root).unwrap().update_available);
