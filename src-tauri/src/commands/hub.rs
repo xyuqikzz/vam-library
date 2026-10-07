@@ -26,14 +26,6 @@ fn get_hub_cache() -> &'static Mutex<HashMap<String, CacheEntry>> {
     HUB_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-#[derive(Serialize)]
-struct HubApiRequest {
-    source: String,
-    action: String,
-    latest_image: String,
-    package_name: String,
-}
-
 #[derive(Deserialize, Debug, Serialize, Clone)]
 pub struct HubFile {
     pub filename: Option<String>,

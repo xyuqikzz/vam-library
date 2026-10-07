@@ -37,16 +37,6 @@ pub struct ShareProgress {
     pub percentage: f64,
 }
 
-#[derive(Debug, Clone)]
-struct InstalledPackage {
-    id: String,
-    creator: String,
-    name: String,
-    version: i32,
-    size_bytes: u64,
-    file_path: String,
-}
-
 fn parse_package_id(package_id: &str) -> (String, String, i32) {
     let trimmed = package_id.trim();
     let parts: Vec<&str> = trimmed.split('.').collect();
@@ -184,29 +174,21 @@ pub async fn get_share_preview(
         let mut excluded_count = 0;
         let mut dependencies: Vec<ShareDependencyNode> = Vec::new();
 
-        for pkg in &installed_packages {
-            if selected.contains(&pkg.id) {
-                let mut keep = true;
-                if let Some(ref map) = exclude_map {
-                    let (creator, name, version) = parse_package_id(&pkg.id);
-                    if let Some(&exclude_version) = map.get(&(creator, name)) {
-                        if version <= exclude_version {
-                            keep = false;
-                            excluded_count += 1;
-                        }
-                    }
-                }
-                if keep {
-                    dependencies.push(ShareDependencyNode {
-                        id: pkg.id.clone(),
-                        creator: pkg.creator.clone(),
-                        name: pkg.name.clone(),
-                        version: pkg.version,
-                        size_bytes: pkg.size_bytes,
-                        file_path: pkg.file_path.clone(),
-                    });
+        for pkg in installed_packages {
+            if !selected.contains(&pkg.id) {
+                continue;
+            }
+            if let Some(ref map) = exclude_map {
+                let (creator, name, version) = parse_package_id(&pkg.id);
+                if map
+                    .get(&(creator, name))
+                    .is_some_and(|&excluded| version <= excluded)
+                {
+                    excluded_count += 1;
+                    continue;
                 }
             }
+            dependencies.push(pkg);
         }
         dependencies.sort_by(|a, b| a.id.cmp(&b.id));
 
@@ -227,12 +209,12 @@ pub async fn get_share_preview(
     .map_err(|e| e.to_string())
 }
 
-fn load_installed_packages(conn: &rusqlite::Connection) -> rusqlite::Result<Vec<InstalledPackage>> {
+fn load_installed_packages(conn: &rusqlite::Connection) -> rusqlite::Result<Vec<ShareDependencyNode>> {
     let mut stmt =
         conn.prepare("SELECT id, creator, name, version, size_bytes, file_path FROM packages")?;
     let packages = stmt
         .query_map([], |row| {
-            Ok(InstalledPackage {
+            Ok(ShareDependencyNode {
                 id: row.get(0)?,
                 creator: row.get(1)?,
                 name: row.get(2)?,
@@ -255,7 +237,7 @@ fn load_dependency_pairs(conn: &rusqlite::Connection) -> rusqlite::Result<Vec<(S
 
 fn resolve_installed_dependency_id(
     depends_on_id: &str,
-    installed_packages: &[InstalledPackage],
+    installed_packages: &[ShareDependencyNode],
 ) -> Option<String> {
     if let Some(pkg) = installed_packages
         .iter()
@@ -264,44 +246,17 @@ fn resolve_installed_dependency_id(
         return Some(pkg.id.clone());
     }
 
-    let parts: Vec<&str> = depends_on_id.split('.').collect();
-    if parts.len() < 2 {
-        return None;
-    }
-
-    let creator = parts[0];
-    let (name, required_version) = if parts.len() >= 3 {
-        let version_part = parts.last().copied().unwrap_or_default();
-        (
-            parts[1..parts.len() - 1].join("."),
-            parse_required_version(version_part),
-        )
-    } else {
-        (parts[1].to_string(), None)
-    };
-
-    let candidates = installed_packages.iter().filter(|pkg| {
-        pkg.creator.eq_ignore_ascii_case(creator) && pkg.name.eq_ignore_ascii_case(&name)
-    });
-
-    if let Some(required) = required_version {
-        candidates
-            .filter(|pkg| pkg.version >= required)
-            .max_by_key(|pkg| pkg.version)
-            .map(|pkg| pkg.id.clone())
-    } else {
-        candidates
-            .max_by_key(|pkg| pkg.version)
-            .map(|pkg| pkg.id.clone())
-    }
-}
-
-fn parse_required_version(version_part: &str) -> Option<i32> {
-    if version_part.eq_ignore_ascii_case("latest") {
-        None
-    } else {
-        version_part.parse::<i32>().ok()
-    }
+    let (creator, name, required_version) =
+        crate::services::dependencies::parse_dependency_parts(depends_on_id)?;
+    installed_packages
+        .iter()
+        .filter(|pkg| {
+            pkg.creator.eq_ignore_ascii_case(&creator)
+                && pkg.name.eq_ignore_ascii_case(&name)
+                && required_version.map_or(true, |required| pkg.version >= required)
+        })
+        .max_by_key(|pkg| pkg.version)
+        .map(|pkg| pkg.id.clone())
 }
 
 /// Helper function to perform zipping in a background thread
@@ -411,4 +366,39 @@ pub async fn export_share_zip(
     });
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dependency_selection_retains_share_metadata_and_version_rules() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        conn.execute_batch("CREATE TABLE packages (id TEXT, creator TEXT, name TEXT, version INTEGER, size_bytes INTEGER, file_path TEXT);
+            INSERT INTO packages VALUES ('Author.Sub.Package.1', 'Author', 'Sub.Package', 1, 123, 'one.var');
+            INSERT INTO packages VALUES ('Author.Sub.Package.10', 'Author', 'Sub.Package', 10, 456, 'ten.var');").unwrap();
+        let packages = load_installed_packages(&conn).unwrap();
+        for (id, expected) in [
+            ("author.sub.package.1", Some("Author.Sub.Package.1")),
+            ("Author.Sub.Package.2", Some("Author.Sub.Package.10")),
+            ("Author.Sub.Package.latest", Some("Author.Sub.Package.10")),
+            ("Author.Sub.Package.11", None),
+            ("Missing.Package.latest", None),
+        ] {
+            assert_eq!(
+                resolve_installed_dependency_id(id, &packages).as_deref(),
+                expected,
+                "{id}"
+            );
+        }
+        let serialized = serde_json::to_value(&packages[0]).unwrap();
+        assert_eq!(
+            serialized,
+            serde_json::json!({
+                "id": "Author.Sub.Package.1", "creator": "Author", "name": "Sub.Package",
+                "version": 1, "size_bytes": 123, "file_path": "one.var",
+            })
+        );
+    }
 }

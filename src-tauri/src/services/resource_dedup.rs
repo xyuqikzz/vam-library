@@ -138,12 +138,12 @@ pub fn scan(root: &Path, excluded: HashSet<String>) -> Result<DedupSnapshot, Str
         if members.len() < 2 {
             continue;
         }
-        members.sort_by(|a, b| {
-            let av = files::package_name(Path::new(&a.path)).unwrap().version;
-            let bv = files::package_name(Path::new(&b.path)).unwrap().version;
-            bv.cmp(&av)
-                .then_with(|| modified_number(b).cmp(&modified_number(a)))
-                .then_with(|| a.path.cmp(&b.path))
+        members.sort_by_cached_key(|file| {
+            (
+                std::cmp::Reverse(files::package_name(Path::new(&file.path)).unwrap().version),
+                std::cmp::Reverse(modified_number(file)),
+                file.path.as_str(),
+            )
         });
         let highest = files::package_name(Path::new(&members[0].path))
             .unwrap()
@@ -204,10 +204,8 @@ pub fn scan(root: &Path, excluded: HashSet<String>) -> Result<DedupSnapshot, Str
             if members.len() < 2 {
                 continue;
             }
-            members.sort_by(|a, b| {
-                modified_number(b)
-                    .cmp(&modified_number(a))
-                    .then_with(|| a.path.cmp(&b.path))
+            members.sort_by_cached_key(|file| {
+                (std::cmp::Reverse(modified_number(file)), file.path.as_str())
             });
             let instances = members
                 .into_iter()

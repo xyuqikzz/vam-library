@@ -1,4 +1,6 @@
 use serde::{Deserialize, Serialize};
+use std::io::Write;
+use std::path::Path;
 use tauri::State;
 
 use crate::services::install_context::{
@@ -95,21 +97,7 @@ impl Default for AppSettings {
 /// 读取设置；旧版 settings.json 缺少字段时自动补默认值。
 #[tauri::command]
 pub async fn get_settings(app_handle: tauri::AppHandle) -> Result<AppSettings, String> {
-    let path = settings_file_path(&app_handle)?;
-
-    if !path.exists() {
-        return Ok(AppSettings::default());
-    }
-
-    let contents =
-        std::fs::read_to_string(&path).map_err(|e| format!("读取设置文件失败: {}", e))?;
-
-    let settings: AppSettings =
-        serde_json::from_str(&contents).map_err(|e| format!("解析设置文件失败: {}", e))?;
-
-    let mut settings = settings;
-    normalize_settings(&mut settings);
-    Ok(settings)
+    read_settings_file(&settings_file_path(&app_handle)?)
 }
 
 /// 保存设置。
@@ -123,10 +111,7 @@ pub async fn save_settings(
     sync_current_instance_state(&mut settings);
     sync_active_instance(&mut settings);
 
-    let contents =
-        serde_json::to_string_pretty(&settings).map_err(|e| format!("序列化设置失败: {}", e))?;
-
-    std::fs::write(&path, contents).map_err(|e| format!("写入设置文件失败: {}", e))?;
+    write_settings_file(&path, &settings)?;
 
     crate::services::scene_browser_index::schedule_sync(&app_handle);
     Ok(())
@@ -139,22 +124,14 @@ pub async fn save_vam_instances(
     active_instance_id: Option<String>,
 ) -> Result<AppSettings, String> {
     let path = settings_file_path(&app_handle)?;
-    let mut settings = if path.exists() {
-        let contents =
-            std::fs::read_to_string(&path).map_err(|e| format!("读取设置文件失败: {}", e))?;
-        serde_json::from_str::<AppSettings>(&contents).unwrap_or_default()
-    } else {
-        AppSettings::default()
-    };
+    let mut settings = read_settings_file(&path)?;
 
     settings.vam_instances = dedupe_instances(instances);
     settings.active_instance_id = active_instance_id;
     normalize_settings(&mut settings);
     sync_active_instance(&mut settings);
 
-    let contents =
-        serde_json::to_string_pretty(&settings).map_err(|e| format!("序列化设置失败: {}", e))?;
-    std::fs::write(&path, contents).map_err(|e| format!("写入设置文件失败: {}", e))?;
+    write_settings_file(&path, &settings)?;
     crate::services::scene_browser_index::schedule_sync(&app_handle);
     Ok(settings)
 }
@@ -165,13 +142,7 @@ pub async fn save_hub_auth_cookie(
     cookie: Option<String>,
 ) -> Result<AppSettings, String> {
     let path = settings_file_path(&app_handle)?;
-    let mut settings = if path.exists() {
-        let contents =
-            std::fs::read_to_string(&path).map_err(|e| format!("读取设置文件失败: {}", e))?;
-        serde_json::from_str::<AppSettings>(&contents).unwrap_or_default()
-    } else {
-        AppSettings::default()
-    };
+    let mut settings = read_settings_file(&path)?;
 
     let normalized = cookie
         .map(|value| value.trim().to_string())
@@ -180,9 +151,7 @@ pub async fn save_hub_auth_cookie(
     settings.hub_auth_cookie = normalized;
     normalize_settings(&mut settings);
 
-    let contents =
-        serde_json::to_string_pretty(&settings).map_err(|e| format!("序列化设置失败: {}", e))?;
-    std::fs::write(&path, contents).map_err(|e| format!("写入设置文件失败: {}", e))?;
+    write_settings_file(&path, &settings)?;
     Ok(settings)
 }
 
@@ -236,42 +205,67 @@ pub fn mark_managed_enabled(
     library_path: Option<String>,
 ) -> Result<(), String> {
     let path = settings_file_path(app_handle)?;
-    let mut settings = if path.exists() {
-        let contents =
-            std::fs::read_to_string(&path).map_err(|e| format!("读取设置文件失败: {}", e))?;
-        serde_json::from_str::<AppSettings>(&contents).unwrap_or_default()
-    } else {
-        AppSettings::default()
-    };
+    let mut settings = read_settings_file(&path)?;
 
     settings.managed_enabled = true;
     settings.managed_library_path = library_path;
     normalize_settings(&mut settings);
 
-    let contents =
-        serde_json::to_string_pretty(&settings).map_err(|e| format!("序列化设置失败: {}", e))?;
-    std::fs::write(&path, contents).map_err(|e| format!("写入设置文件失败: {}", e))?;
+    write_settings_file(&path, &settings)?;
     Ok(())
 }
 
 pub fn mark_managed_disabled(app_handle: &tauri::AppHandle) -> Result<(), String> {
     let path = settings_file_path(app_handle)?;
-    let mut settings = if path.exists() {
-        let contents =
-            std::fs::read_to_string(&path).map_err(|e| format!("读取设置文件失败: {}", e))?;
-        serde_json::from_str::<AppSettings>(&contents).unwrap_or_default()
-    } else {
-        AppSettings::default()
-    };
+    let mut settings = read_settings_file(&path)?;
 
     settings.managed_enabled = false;
     settings.managed_library_path = None;
     normalize_settings(&mut settings);
 
-    let contents =
-        serde_json::to_string_pretty(&settings).map_err(|e| format!("序列化设置失败: {}", e))?;
-    std::fs::write(&path, contents).map_err(|e| format!("写入设置文件失败: {}", e))?;
+    write_settings_file(&path, &settings)?;
     Ok(())
+}
+
+fn read_settings_file(path: &Path) -> Result<AppSettings, String> {
+    let contents = match std::fs::read_to_string(path) {
+        Ok(contents) => contents,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(AppSettings::default())
+        }
+        Err(error) => return Err(format!("读取设置文件失败: {}", error)),
+    };
+    let mut settings: AppSettings =
+        serde_json::from_str(&contents).map_err(|error| format!("解析设置文件失败: {}", error))?;
+    normalize_settings(&mut settings);
+    Ok(settings)
+}
+
+pub(crate) fn write_settings_file(path: &Path, settings: &impl Serialize) -> Result<(), String> {
+    static SEQUENCE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let contents = serde_json::to_vec_pretty(settings)
+        .map_err(|error| format!("序列化设置失败: {}", error))?;
+    let temp = path.with_file_name(format!(
+        ".settings-{}-{}.tmp",
+        std::process::id(),
+        SEQUENCE.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    ));
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temp)
+        .map_err(|error| format!("创建临时设置文件失败: {}", error))?;
+    // Readers see one complete settings snapshot; failure leaves the previous file intact.
+    let result = (|| {
+        file.write_all(&contents)?;
+        file.sync_all()?;
+        drop(file);
+        std::fs::rename(&temp, path)
+    })();
+    if result.is_err() {
+        let _ = std::fs::remove_file(&temp);
+    }
+    result.map_err(|error| format!("写入设置文件失败: {}", error))
 }
 
 fn normalize_settings(settings: &mut AppSettings) {
@@ -279,6 +273,7 @@ fn normalize_settings(settings: &mut AppSettings) {
         .max_concurrent_downloads
         .clamp(MIN_CONCURRENT_DOWNLOADS, MAX_CONCURRENT_DOWNLOADS);
 }
+
 
 fn normalize_instance_root_path(path: &str) -> String {
     path.trim()
@@ -373,5 +368,43 @@ mod preview_settings_tests {
         let restored: AppSettings =
             serde_json::from_str(&serde_json::to_string(&disabled).unwrap()).unwrap();
         assert!(!restored.blur_previews);
+    }
+}
+
+#[cfg(test)]
+mod persistence_tests {
+    use super::*;
+    use crate::services::resource_files::tests::TestDir;
+
+    #[test]
+    fn missing_and_legacy_settings_load_but_corruption_is_not_reset() {
+        let root = TestDir::new();
+        let path = root.0.join("settings.json");
+        assert!(read_settings_file(&path).is_ok());
+        std::fs::write(&path, r#"{"max_concurrent_downloads":99,"theme":"light"}"#).unwrap();
+        let settings = read_settings_file(&path).unwrap();
+        assert_eq!(settings.max_concurrent_downloads, 5);
+        assert_eq!(settings.theme, "light");
+        std::fs::write(&path, b"broken JSON").unwrap();
+        assert!(read_settings_file(&path).is_err());
+        assert_eq!(std::fs::read(&path).unwrap(), b"broken JSON");
+    }
+
+    #[test]
+    fn settings_are_replaced_completely_and_failed_writes_remove_only_their_temp_file() {
+        let root = TestDir::new();
+        let path = root.0.join("settings.json");
+        let mut settings = AppSettings::default();
+        write_settings_file(&path, &settings).unwrap();
+        settings.theme = "light".into();
+        write_settings_file(&path, &settings).unwrap();
+        assert_eq!(read_settings_file(&path).unwrap().theme, "light");
+        assert_eq!(std::fs::read_dir(&root.0).unwrap().count(), 1);
+        let blocked = root.0.join("blocked");
+        std::fs::create_dir(&blocked).unwrap();
+        std::fs::write(blocked.join("keep"), b"user data").unwrap();
+        assert!(write_settings_file(&blocked, &settings).is_err());
+        assert_eq!(std::fs::read(blocked.join("keep")).unwrap(), b"user data");
+        assert_eq!(std::fs::read_dir(&root.0).unwrap().count(), 2);
     }
 }

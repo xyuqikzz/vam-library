@@ -8,6 +8,9 @@ use walkdir::WalkDir;
 
 use crate::db::Database;
 use crate::errors::AppError;
+use crate::services::dependencies::{
+    load_installed_packages, parse_dependency_parts, InstalledPackage,
+};
 use crate::services::install_context::write_managed_state;
 use rusqlite::{params, OptionalExtension};
 
@@ -66,14 +69,6 @@ struct LinkManifestEntry {
 struct PackagePath {
     id: String,
     file_path: String,
-}
-
-#[derive(Debug, Clone)]
-struct InstalledPackage {
-    id: String,
-    creator: String,
-    name: String,
-    version: i32,
 }
 
 #[tauri::command]
@@ -859,21 +854,7 @@ fn collect_plan_package_ids(
                 .collect::<Result<Vec<_>, _>>()
                 .map_err(|e| AppError::Database(e.to_string()))?;
 
-            let mut pkg_stmt = conn
-                .prepare("SELECT id, creator, name, version FROM packages")
-                .map_err(|e| AppError::Database(e.to_string()))?;
-            let installed = pkg_stmt
-                .query_map([], |row| {
-                    Ok(InstalledPackage {
-                        id: row.get(0)?,
-                        creator: row.get(1)?,
-                        name: row.get(2)?,
-                        version: row.get(3)?,
-                    })
-                })
-                .map_err(|e| AppError::Database(e.to_string()))?
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(|e| AppError::Database(e.to_string()))?;
+            let installed = load_installed_packages(conn)?;
 
             Ok((pairs, installed))
         })
@@ -909,53 +890,18 @@ fn resolve_installed_dependency_id(
         return Some(depends_on_id.to_string());
     }
 
-    let parts: Vec<&str> = depends_on_id.split('.').collect();
-    if parts.len() < 2 {
-        return None;
-    }
-
-    let creator = parts[0];
-    let (name, required_version) = if parts.len() >= 3 {
-        let version_part = parts.last().copied().unwrap_or_default();
-        (
-            parts[1..parts.len() - 1].join("."),
-            parse_required_version(version_part),
-        )
-    } else {
-        (parts[1].to_string(), None)
-    };
-
-    let mut candidates: Vec<&InstalledPackage> = installed_packages
+    let (creator, name, required_version) = parse_dependency_parts(depends_on_id)?;
+    // On-demand plans historically match case-sensitively; do not broaden
+    // their selection when sharing the parser with the dependency views.
+    installed_packages
         .iter()
-        .filter(|pkg| pkg.creator == creator && pkg.name == name)
-        .collect();
-
-    if candidates.is_empty() {
-        return None;
-    }
-
-    candidates.sort_by_key(|pkg| pkg.version);
-
-    if let Some(required) = required_version {
-        candidates
-            .into_iter()
-            .filter(|pkg| pkg.version >= required)
-            .max_by_key(|pkg| pkg.version)
-            .map(|pkg| pkg.id.clone())
-    } else {
-        candidates
-            .into_iter()
-            .max_by_key(|pkg| pkg.version)
-            .map(|pkg| pkg.id.clone())
-    }
-}
-
-fn parse_required_version(version_part: &str) -> Option<i32> {
-    if version_part.eq_ignore_ascii_case("latest") {
-        None
-    } else {
-        version_part.parse::<i32>().ok()
-    }
+        .filter(|pkg| {
+            pkg.creator == creator
+                && pkg.name == name
+                && required_version.map_or(true, |required| pkg.version >= required)
+        })
+        .max_by_key(|pkg| pkg.version)
+        .map(|pkg| pkg.id.clone())
 }
 
 fn load_package_paths(db: &Database, package_ids: &[String]) -> Result<Vec<PackagePath>, String> {
@@ -1295,4 +1241,59 @@ pub async fn launch_vam_config(vam_root: String) -> Result<String, String> {
     })?;
     launch_process_with_args(&root, &launcher, &["-show-screen-selector"])?;
     Ok(launcher.to_string_lossy().to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::services::resource_files::tests::TestDir;
+
+    #[test]
+    fn dependency_selection_preserves_exact_versions_case_and_cycles() {
+        let data = TestDir::new();
+        let db = Database::new(&data.0.join("test.db")).unwrap();
+        db.with_conn(|conn| {
+            for (creator, name, version) in [
+                ("Root", "Scene", 1),
+                ("Author", "Sub.Package", 1),
+                ("Author", "Sub.Package", 2),
+                ("Author", "Sub.Package", 10),
+                ("Other", "Asset", 1),
+            ] {
+                let id = format!("{creator}.{name}.{version}");
+                conn.execute(
+                    "INSERT INTO packages (id, creator, name, version, file_path, scan_time) VALUES (?1, ?2, ?3, ?4, ?1, '')",
+                    params![id, creator, name, version],
+                )?;
+            }
+            for (source, target) in [
+                ("Root.Scene.1", "Author.Sub.Package.1"),
+                ("Root.Scene.1", "Author.Sub.Package.latest"),
+                ("Root.Scene.1", "other.Asset.1"),
+                ("Root.Scene.1", "Missing.Asset.1"),
+                ("Author.Sub.Package.1", "Root.Scene.1"),
+            ] {
+                conn.execute("INSERT INTO dependencies (package_id, depends_on_id) VALUES (?1, ?2)", params![source, target])?;
+            }
+            Ok(())
+        }).unwrap();
+
+        assert_eq!(
+            collect_plan_package_ids(&db, vec!["Root.Scene.1".into()], true).unwrap(),
+            vec![
+                "Author.Sub.Package.1",
+                "Author.Sub.Package.10",
+                "Root.Scene.1"
+            ],
+        );
+        assert_eq!(
+            collect_plan_package_ids(
+                &db,
+                vec!["Root.Scene.1".into(), "Root.Scene.1".into()],
+                false
+            )
+            .unwrap(),
+            vec!["Root.Scene.1"],
+        );
+    }
 }

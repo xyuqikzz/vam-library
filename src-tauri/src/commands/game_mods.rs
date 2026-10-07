@@ -21,6 +21,12 @@ const PREVIOUS_SHA256: &[&str] = &[
     "b4043bd7d4da33c89f5d1f64d1c7ea57d763439b28c5ba6e7e52be66d94c4fad",
     "ebc0e87863aee1a539e8ad773d3d9c2a8fa8159c94326474b4844ef3b8e879d4",
 ];
+// These 1.0.8 builds differ only in the legacy compiler's timestamp, MVID and
+// MVID-derived private type name. Keep exact hashes; never trust a version label.
+const V1_0_8_SHA256: &[&str] = &[
+    "a559c0bf87f14fd09e87f9237f99625eb08636e0f4d94eb4d93066d12c9a1da5",
+    "b341d26e28dd5977dfed2a44af4e505b070809bd323484f468194b51a8c975f5",
+];
 static MOD_LOCK: Mutex<()> = Mutex::new(());
 
 #[derive(Deserialize)]
@@ -48,6 +54,17 @@ pub struct ModStatus {
 
 fn hash(bytes: &[u8]) -> String {
     hex::encode(Sha256::digest(bytes))
+}
+
+fn matches_payload(bytes: &[u8], payload: &[u8]) -> bool {
+    bytes == payload
+        || (V1_0_8_SHA256.contains(&hash(payload).as_str())
+            && V1_0_8_SHA256.contains(&hash(bytes).as_str()))
+}
+
+fn is_known_release(bytes: &[u8]) -> bool {
+    let digest = hash(bytes);
+    PREVIOUS_SHA256.contains(&digest.as_str()) || V1_0_8_SHA256.contains(&digest.as_str())
 }
 
 // Do not follow a junction/symlink in the installation destination, even if a
@@ -94,7 +111,7 @@ pub(crate) fn owned_mod_directory(root: &Path) -> Result<Option<PathBuf>, String
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(error) => return Err(error.to_string()),
     };
-    if bytes != PAYLOAD && !PREVIOUS_SHA256.contains(&hash(&bytes).as_str()) {
+    if !matches_payload(&bytes, PAYLOAD) && !is_known_release(&bytes) {
         return Ok(None);
     }
     Ok(target.parent().map(Path::to_path_buf))
@@ -122,10 +139,10 @@ fn inspect(root: &Path) -> Result<ModStatus, String> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
         Err(e) => return Err(e.to_string()),
     };
-    let installed = existing.as_deref() == Some(PAYLOAD);
-    let update_available = existing
-        .as_ref()
-        .is_some_and(|bytes| PREVIOUS_SHA256.contains(&hash(bytes).as_str()));
+    let installed = existing
+        .as_deref()
+        .is_some_and(|bytes| matches_payload(bytes, PAYLOAD));
+    let update_available = !installed && existing.as_deref().is_some_and(is_known_release);
     let conflict = existing.is_some() && !installed && !update_available;
     let mut reason = None;
     for dependency in manifest.files {
@@ -237,7 +254,7 @@ fn upgrade_known_version(target: &Path) -> Result<(), String> {
     let mut file = options.open(target).map_err(|e| e.to_string())?;
     let mut original = Vec::new();
     file.read_to_end(&mut original).map_err(|e| e.to_string())?;
-    if !PREVIOUS_SHA256.contains(&hash(&original).as_str()) {
+    if !is_known_release(&original) {
         return Err("旧版 DLL 在检查后发生变化，已取消更新".into());
     }
     let write = |file: &mut fs::File, bytes: &[u8]| -> std::io::Result<()> {
@@ -362,6 +379,50 @@ mod tests {
     }
 
     #[test]
+    fn verified_previous_rebuild_is_upgradable_and_owned() {
+        let f = Fixture::new();
+        let target = f.0.join(TARGET);
+        let rebuild = include_bytes!(
+            "../../../mods/SceneBrowser/tests/fixtures/SceneBrowser-1.0.8-rebuild.dll"
+        );
+        assert_eq!(hash(rebuild), V1_0_8_SHA256[1]);
+        assert!(!matches_payload(rebuild, PAYLOAD));
+        // A future payload must offer an upgrade, not treat 1.0.8 as current.
+        assert!(!matches_payload(rebuild, b"future release"));
+        assert!(is_known_release(rebuild));
+        fs::create_dir_all(target.parent().unwrap()).unwrap();
+        fs::write(&target, rebuild).unwrap();
+        let status = inspect(&f.0).unwrap();
+        assert!(!status.installed && status.update_available && !status.conflict);
+        assert_eq!(
+            owned_mod_directory(&f.0).unwrap(),
+            target.parent().map(Path::to_path_buf)
+        );
+        assert!(!uninstall(&f.0).unwrap().installed);
+    }
+
+    #[test]
+    fn modified_rebuild_remains_protected() {
+        let f = Fixture::new();
+        let target = f.0.join(TARGET);
+        let mut rebuild = include_bytes!(
+            "../../../mods/SceneBrowser/tests/fixtures/SceneBrowser-1.0.8-rebuild.dll"
+        )
+        .to_vec();
+        // Same assembly identity/version, but changed executable contents.
+        rebuild[512] ^= 1;
+        fs::create_dir_all(target.parent().unwrap()).unwrap();
+        fs::write(&target, &rebuild).unwrap();
+        let status = inspect(&f.0).unwrap();
+        assert!(!status.installed && !status.update_available && status.conflict);
+        assert!(owned_mod_directory(&f.0).unwrap().is_none());
+        assert!(install(&f.0).is_err());
+        assert!(uninstall(&f.0).is_err());
+        assert!(upgrade_known_version(&target).is_err());
+        assert_eq!(fs::read(target).unwrap(), rebuild);
+    }
+
+    #[test]
     #[ignore = "requires VAM_MOD_TEST_ROOT pointing to the matching local game; writes only to a temporary fixture"]
     fn installation_round_trip_with_local_game() {
         let source =
@@ -439,6 +500,21 @@ mod tests {
         assert!(inspect(&root).unwrap().update_available);
         assert!(install(&root).unwrap().installed);
         assert_eq!(fs::read(root.join(TARGET)).unwrap(), PAYLOAD);
+        assert!(!uninstall(&root).unwrap().installed);
+        let rebuild = include_bytes!(
+            "../../../mods/SceneBrowser/tests/fixtures/SceneBrowser-1.0.8-rebuild.dll"
+        );
+        fs::write(root.join(TARGET), rebuild).unwrap();
+        assert!(inspect(&root).unwrap().update_available);
+        assert!(install(&root).unwrap().installed);
+        assert_eq!(fs::read(root.join(TARGET)).unwrap(), PAYLOAD);
+        // Once upgraded, reinstalling keeps the exact current payload.
+        assert!(install(&root).unwrap().installed);
+        assert_eq!(fs::read(root.join(TARGET)).unwrap(), PAYLOAD);
+        assert_eq!(
+            scene_launch_directory(&root).unwrap(),
+            root.join(TARGET).parent().unwrap().join("scene-launch")
+        );
         assert!(!uninstall(&root).unwrap().installed);
         assert_eq!(
             fs::read(root.join("AddonPackages/Keep.Scene.1.var")).unwrap(),

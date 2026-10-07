@@ -1,166 +1,169 @@
 <template>
   <div class="resource-display">
-    <!-- View Controls -->
-    <div class="view-controls glass-panel">
-      <div class="controls-left">
-        <div class="view-toggle">
-          <button :class="['toggle-btn', { active: viewMode === 'large-card' }]" :aria-label="t('packages.largeCardView')" :title="t('packages.largeCardView')" @click="$emit('update:viewMode', 'large-card')">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <rect x="0.5" y="0.5" width="7" height="7" rx="1" stroke="currentColor" stroke-width="1.2" />
-              <rect x="8.5" y="0.5" width="7" height="7" rx="1" stroke="currentColor" stroke-width="1.2" />
-              <rect x="0.5" y="8.5" width="15" height="7" rx="1" stroke="currentColor" stroke-width="1.2" />
-            </svg>
-          </button>
-          <button :class="['toggle-btn', { active: viewMode === 'small-card' }]" :aria-label="t('packages.smallCardView')" :title="t('packages.smallCardView')" @click="$emit('update:viewMode', 'small-card')">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <rect x="0.5" y="0.5" width="4.5" height="4.5" rx="0.8" stroke="currentColor" stroke-width="1.2" />
-              <rect x="5.8" y="0.5" width="4.5" height="4.5" rx="0.8" stroke="currentColor" stroke-width="1.2" />
-              <rect x="11" y="0.5" width="4.5" height="4.5" rx="0.8" stroke="currentColor" stroke-width="1.2" />
-              <rect x="0.5" y="5.8" width="4.5" height="4.5" rx="0.8" stroke="currentColor" stroke-width="1.2" />
-              <rect x="5.8" y="5.8" width="4.5" height="4.5" rx="0.8" stroke="currentColor" stroke-width="1.2" />
-              <rect x="11" y="5.8" width="4.5" height="4.5" rx="0.8" stroke="currentColor" stroke-width="1.2" />
-              <rect x="0.5" y="11" width="4.5" height="4.5" rx="0.8" stroke="currentColor" stroke-width="1.2" />
-              <rect x="5.8" y="11" width="4.5" height="4.5" rx="0.8" stroke="currentColor" stroke-width="1.2" />
-              <rect x="11" y="11" width="4.5" height="4.5" rx="0.8" stroke="currentColor" stroke-width="1.2" />
-            </svg>
-          </button>
-          <button :class="['toggle-btn', { active: viewMode === 'list' }]" :aria-label="t('packages.listView')" :title="t('packages.listView')" @click="$emit('update:viewMode', 'list')">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <path d="M1 3h14M1 8h14M1 13h14" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" />
-            </svg>
-          </button>
-        </div>
-        <span class="result-count text-secondary text-sm">{{ resultCountLabel }}</span>
-      </div>
-      <div class="controls-right">
-        <slot name="actions" />
-      </div>
-    </div>
-
-    <!-- Content Area -->
-    <div v-if="packages.length > 0" class="resource-content-area">
-      <div class="resource-content-scrollable">
-
-        <!-- Large Card Grid -->
-        <div v-if="viewMode === 'large-card'" class="large-card-grid">
-          <div v-for="pkg in paginatedPackages" :key="pkg.id" class="large-card glass-card-component" @click="selectPackage(pkg)">
-            <!-- 缩略图区域 -->
-            <div class="large-card-thumb">
-              <img data-resource-preview v-if="thumbnails[pkg.id]" :src="thumbnails[pkg.id]" :alt="getVarFileName(pkg)" class="thumb-img" @error="onThumbError(pkg.id)" />
-              <div v-else class="thumb-placeholder">
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
-                  <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="1.5" />
-                  <circle cx="8.5" cy="8.5" r="1.5" stroke="currentColor" stroke-width="1.5" />
-                  <path d="M21 15l-5-5-6 6-3-3-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-                </svg>
-                <span>{{ $t('packages.noThumbnail') }}</span>
-              </div>
-              <div class="large-card-type-badge" :class="'type-' + (pkg.resource_types[0] || 'other')">{{ resourceTypeLabel(pkg.resource_types[0] || 'other') }}</div>
-            </div>
-            <!-- 信息区域 -->
-            <div class="large-card-info">
-              <h4 class="large-card-name" :title="getVarFileName(pkg)">{{ getVarFileName(pkg) }}</h4>
-              <div class="large-card-meta">
-                <span class="meta-tag">v{{ pkg.version }}</span>
-                <span class="meta-tag">{{ formatSize(pkg.size_bytes) }}</span>
-                <span class="meta-tag">{{ $t('packages.files', { count: pkg.content_count }) }}</span>
-              </div>
-              <div class="large-card-stats">
-                <div class="stat-item">
-                  <span class="stat-value">{{ pkg.dependency_count }}</span>
-                  <span class="stat-label">{{ $t('packages.deps') }}</span>
-                </div>
-                <div class="stat-item">
-                  <span class="stat-value">{{ pkg.dependents_count }}</span>
-                  <span class="stat-label">{{ $t('packages.depsBy') }}</span>
-                </div>
-                <div class="stat-item">
-                  <span class="stat-value">{{ formatTime(pkg.scan_time) }}</span>
-                  <span class="stat-label">{{ $t('packages.importTime') }}</span>
-                </div>
-              </div>
-            </div>
+    <slot name="browser" :select-package="selectPackage">
+      <!-- View Controls -->
+      <div class="view-controls glass-panel">
+        <div class="controls-left">
+          <div class="view-toggle">
+            <button :class="['toggle-btn', { active: viewMode === 'large-card' }]" :aria-label="t('packages.largeCardView')" :title="t('packages.largeCardView')" @click="$emit('update:viewMode', 'large-card')">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <rect x="0.5" y="0.5" width="7" height="7" rx="1" stroke="currentColor" stroke-width="1.2" />
+                <rect x="8.5" y="0.5" width="7" height="7" rx="1" stroke="currentColor" stroke-width="1.2" />
+                <rect x="0.5" y="8.5" width="15" height="7" rx="1" stroke="currentColor" stroke-width="1.2" />
+              </svg>
+            </button>
+            <button :class="['toggle-btn', { active: viewMode === 'small-card' }]" :aria-label="t('packages.smallCardView')" :title="t('packages.smallCardView')" @click="$emit('update:viewMode', 'small-card')">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <rect x="0.5" y="0.5" width="4.5" height="4.5" rx="0.8" stroke="currentColor" stroke-width="1.2" />
+                <rect x="5.8" y="0.5" width="4.5" height="4.5" rx="0.8" stroke="currentColor" stroke-width="1.2" />
+                <rect x="11" y="0.5" width="4.5" height="4.5" rx="0.8" stroke="currentColor" stroke-width="1.2" />
+                <rect x="0.5" y="5.8" width="4.5" height="4.5" rx="0.8" stroke="currentColor" stroke-width="1.2" />
+                <rect x="5.8" y="5.8" width="4.5" height="4.5" rx="0.8" stroke="currentColor" stroke-width="1.2" />
+                <rect x="11" y="5.8" width="4.5" height="4.5" rx="0.8" stroke="currentColor" stroke-width="1.2" />
+                <rect x="0.5" y="11" width="4.5" height="4.5" rx="0.8" stroke="currentColor" stroke-width="1.2" />
+                <rect x="5.8" y="11" width="4.5" height="4.5" rx="0.8" stroke="currentColor" stroke-width="1.2" />
+                <rect x="11" y="11" width="4.5" height="4.5" rx="0.8" stroke="currentColor" stroke-width="1.2" />
+              </svg>
+            </button>
+            <button :class="['toggle-btn', { active: viewMode === 'list' }]" :aria-label="t('packages.listView')" :title="t('packages.listView')" @click="$emit('update:viewMode', 'list')">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <path d="M1 3h14M1 8h14M1 13h14" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" />
+              </svg>
+            </button>
           </div>
+          <span class="result-count text-secondary text-sm">{{ resultCountLabel }}</span>
         </div>
+        <div class="controls-right">
+          <slot name="actions" />
+        </div>
+      </div>
 
-        <!-- Small Card Grid -->
-        <div v-else-if="viewMode === 'small-card'" class="small-card-grid">
-          <div v-for="pkg in paginatedPackages" :key="pkg.id" class="small-card glass-card-component" @click="selectPackage(pkg)">
-            <div class="small-card-thumb">
-              <img data-resource-preview v-if="thumbnails[pkg.id]" :src="thumbnails[pkg.id]" :alt="getVarFileName(pkg)" class="thumb-img" @error="onThumbError(pkg.id)" />
-              <div v-else class="thumb-placeholder sm">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                  <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="1.5" />
-                  <circle cx="8.5" cy="8.5" r="1.5" stroke="currentColor" stroke-width="1.5" />
-                  <path d="M21 15l-5-5-6 6-3-3-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-                </svg>
-                <span>{{ $t('packages.noThumbnail') }}</span>
+      <!-- Content Area -->
+      <div v-if="packages.length > 0" class="resource-content-area">
+        <div class="resource-content-scrollable">
+
+          <!-- Large Card Grid -->
+          <div v-if="viewMode === 'large-card'" class="large-card-grid">
+            <div v-for="pkg in paginatedPackages" :key="pkg.id" class="large-card glass-card-component" @click="selectPackage(pkg)">
+              <!-- 缩略图区域 -->
+              <div class="large-card-thumb">
+                <img data-resource-preview v-if="thumbnails[pkg.id]" :src="thumbnails[pkg.id]" :alt="getVarFileName(pkg)" class="thumb-img" @error="onThumbError(pkg.id)" />
+                <div v-else class="thumb-placeholder">
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+                    <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="1.5" />
+                    <circle cx="8.5" cy="8.5" r="1.5" stroke="currentColor" stroke-width="1.5" />
+                    <path d="M21 15l-5-5-6 6-3-3-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                  <span>{{ $t('packages.noThumbnail') }}</span>
+                </div>
+                <div class="large-card-type-badge" :class="'type-' + (pkg.resource_types[0] || 'other')">{{ resourceTypeLabel(pkg.resource_types[0] || 'other') }}</div>
+              </div>
+              <!-- 信息区域 -->
+              <div class="large-card-info">
+                <h4 class="large-card-name" :title="getVarFileName(pkg)">{{ getVarFileName(pkg) }}</h4>
+                <div class="large-card-meta">
+                  <span class="meta-tag">v{{ pkg.version }}</span>
+                  <span class="meta-tag">{{ formatSize(pkg.size_bytes) }}</span>
+                  <span class="meta-tag">{{ $t('packages.files', { count: pkg.content_count }) }}</span>
+                </div>
+                <div class="large-card-stats">
+                  <div class="stat-item">
+                    <span class="stat-value">{{ pkg.dependency_count }}</span>
+                    <span class="stat-label">{{ $t('packages.deps') }}</span>
+                  </div>
+                  <div class="stat-item">
+                    <span class="stat-value">{{ pkg.dependents_count }}</span>
+                    <span class="stat-label">{{ $t('packages.depsBy') }}</span>
+                  </div>
+                  <div class="stat-item">
+                    <span class="stat-value">{{ formatTime(pkg.scan_time) }}</span>
+                    <span class="stat-label">{{ $t('packages.importTime') }}</span>
+                  </div>
+                </div>
               </div>
             </div>
-            <div class="small-card-name" :title="getVarFileName(pkg)">{{ getVarFileName(pkg) }}</div>
           </div>
-        </div>
 
-        <!-- List View -->
-        <div v-else class="resource-list glass-panel">
-          <div class="list-header text-xs text-tertiary">
-            <span class="col-thumb"></span>
-            <span class="col-name">{{ $t('packages.package') }}</span>
-            <span class="col-size">{{ $t('packages.size') }}</span>
-            <span class="col-deps">{{ $t('packages.deps') }}</span>
-            <span class="col-deps-by">{{ $t('packages.depsBy') }}</span>
-            <span class="col-time">{{ $t('packages.importTime') }}</span>
-          </div>
-          <div v-for="pkg in paginatedPackages" :key="pkg.id" class="list-row" @click="selectPackage(pkg)">
-            <span class="list-cell col-thumb">
-              <img data-resource-preview v-if="thumbnails[pkg.id]" :src="thumbnails[pkg.id]" :alt="getVarFileName(pkg)" class="list-thumb-img" @error="onThumbError(pkg.id)" />
-              <div v-else class="list-thumb-placeholder">
-                <span class="type-dot-sm" :class="'type-' + (pkg.resource_types[0] || 'other')" />
-                <span>{{ $t('packages.noThumbnail') }}</span>
+          <!-- Small Card Grid -->
+          <div v-else-if="viewMode === 'small-card'" class="small-card-grid">
+            <div v-for="pkg in paginatedPackages" :key="pkg.id" class="small-card glass-card-component" @click="selectPackage(pkg)">
+              <div class="small-card-thumb">
+                <img data-resource-preview v-if="thumbnails[pkg.id]" :src="thumbnails[pkg.id]" :alt="getVarFileName(pkg)" class="thumb-img" @error="onThumbError(pkg.id)" />
+                <div v-else class="thumb-placeholder sm">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                    <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="1.5" />
+                    <circle cx="8.5" cy="8.5" r="1.5" stroke="currentColor" stroke-width="1.5" />
+                    <path d="M21 15l-5-5-6 6-3-3-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                  <span>{{ $t('packages.noThumbnail') }}</span>
+                </div>
               </div>
-            </span>
-            <span class="list-cell col-name name" :title="getVarFileName(pkg)">{{ getVarFileName(pkg) }}</span>
-            <span class="list-cell col-size size">{{ formatSize(pkg.size_bytes) }}</span>
-            <span class="list-cell col-deps deps">{{ pkg.dependency_count }}</span>
-            <span class="list-cell col-deps-by deps">{{ pkg.dependents_count }}</span>
-            <span class="list-cell col-time deps">{{ formatTime(pkg.scan_time) }}</span>
+              <div class="small-card-name" :title="getVarFileName(pkg)">{{ getVarFileName(pkg) }}</div>
+            </div>
           </div>
+
+          <!-- List View -->
+          <div v-else class="resource-list glass-panel">
+            <div class="list-header text-xs text-tertiary">
+              <span class="col-thumb"></span>
+              <span class="col-name">{{ $t('packages.package') }}</span>
+              <span class="col-size">{{ $t('packages.size') }}</span>
+              <span class="col-deps">{{ $t('packages.deps') }}</span>
+              <span class="col-deps-by">{{ $t('packages.depsBy') }}</span>
+              <span class="col-time">{{ $t('packages.importTime') }}</span>
+            </div>
+            <div v-for="pkg in paginatedPackages" :key="pkg.id" class="list-row" @click="selectPackage(pkg)">
+              <span class="list-cell col-thumb">
+                <img data-resource-preview v-if="thumbnails[pkg.id]" :src="thumbnails[pkg.id]" :alt="getVarFileName(pkg)" class="list-thumb-img" @error="onThumbError(pkg.id)" />
+                <div v-else class="list-thumb-placeholder">
+                  <span class="type-dot-sm" :class="'type-' + (pkg.resource_types[0] || 'other')" />
+                  <span>{{ $t('packages.noThumbnail') }}</span>
+                </div>
+              </span>
+              <span class="list-cell col-name name" :title="getVarFileName(pkg)">{{ getVarFileName(pkg) }}</span>
+              <span class="list-cell col-size size">{{ formatSize(pkg.size_bytes) }}</span>
+              <span class="list-cell col-deps deps">{{ pkg.dependency_count }}</span>
+              <span class="list-cell col-deps-by deps">{{ pkg.dependents_count }}</span>
+              <span class="list-cell col-time deps">{{ formatTime(pkg.scan_time) }}</span>
+            </div>
+          </div>
+
         </div>
-
       </div>
-    </div>
 
-    <!-- Pagination -->
-    <div v-if="packages.length > 0" class="pagination-bar glass-panel">
-      <div class="pagination-info text-xs text-tertiary">{{ paginationInfo }}</div>
-      <div class="pagination-controls">
-        <select v-model.number="pageSize" class="page-size-select text-xs" @change="currentPage = 1">
-          <option v-for="s in pageSizes" :key="s" :value="s">{{ s }} / 页</option>
-        </select>
-        <button class="page-btn" :disabled="currentPage <= 1" @click="currentPage = 1">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M11 19l-7-7 7-7M18 19l-7-7 7-7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /></svg>
-        </button>
-        <button class="page-btn" :disabled="currentPage <= 1" @click="currentPage--">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /></svg>
-        </button>
-        <span class="page-indicator text-sm">{{ currentPage }} / {{ totalPages }}</span>
-        <button class="page-btn" :disabled="currentPage >= totalPages" @click="currentPage++">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /></svg>
-        </button>
-        <button class="page-btn" :disabled="currentPage >= totalPages" @click="currentPage = totalPages">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M13 19l7-7-7-7M6 19l7-7-7-7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /></svg>
-        </button>
+      <!-- Pagination -->
+      <div v-if="packages.length > 0" class="pagination-bar glass-panel">
+        <div class="pagination-info text-xs text-tertiary">{{ paginationInfo }}</div>
+        <div class="pagination-controls">
+          <select v-model.number="pageSize" class="page-size-select text-xs" @change="currentPage = 1">
+            <option v-for="s in pageSizes" :key="s" :value="s">{{ s }} / 页</option>
+          </select>
+          <button class="page-btn" :disabled="currentPage <= 1" @click="currentPage = 1">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M11 19l-7-7 7-7M18 19l-7-7 7-7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /></svg>
+          </button>
+          <button class="page-btn" :disabled="currentPage <= 1" @click="currentPage--">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /></svg>
+          </button>
+          <span class="page-indicator text-sm">{{ currentPage }} / {{ totalPages }}</span>
+          <button class="page-btn" :disabled="currentPage >= totalPages" @click="currentPage++">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /></svg>
+          </button>
+          <button class="page-btn" :disabled="currentPage >= totalPages" @click="currentPage = totalPages">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M13 19l7-7-7-7M6 19l7-7-7-7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /></svg>
+          </button>
+        </div>
       </div>
-    </div>
 
-    <!-- Empty State -->
-    <div v-else class="empty-wrapper">
-      <EmptyState :icon="emptyIcon" :title="emptyTitle" :description="emptyDescription">
-        <template #action>
-          <slot name="empty-action" />
-        </template>
-      </EmptyState>
-    </div>
+      <!-- Empty State -->
+      <div v-else class="empty-wrapper">
+        <EmptyState :icon="emptyIcon" :title="emptyTitle" :description="emptyDescription">
+          <template #action>
+            <slot name="empty-action" />
+          </template>
+        </EmptyState>
+      </div>
+
+    </slot>
 
     <!-- Detail Panel -->
     <Transition name="slide-right">
@@ -388,7 +391,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { parseHubFiles, parsePackageId, selectHubFile, type HubFile, type HubFileCandidate } from '@/utils/hubFiles'
+import { formatSize } from '@/utils/bytes'
+import { ref, watch, computed, onMounted, onUnmounted, nextTick, useSlots } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { invoke } from '@tauri-apps/api/core'
@@ -456,22 +461,11 @@ interface DeleteConfirmState {
   includeDependencies: boolean
 }
 
-interface HubFile {
-  filename?: string | null
-  file_size?: string | null
-  urlHosted?: string | null
-}
 
 interface HubPackageInfo {
   hubFiles?: HubFile[] | null
 }
 
-interface HubFileCandidate {
-  filename: string
-  version: number
-  sizeBytes: number
-  url: string
-}
 
 interface DependencyGroup {
   key: string
@@ -515,6 +509,7 @@ const { t } = useI18n()
 const router = useRouter()
 const notify = useNotification()
 const downloadStore = useDownloadStore()
+const slots = useSlots()
 
 function getVarFileName(pkg: { id: string; file_path?: string } | null): string {
   if (!pkg) return ''
@@ -632,6 +627,7 @@ const observedEls = new Map<Element, { id: string }>()
 
 function setupObserver() {
   if (observer) observer.disconnect()
+  if (slots.browser) return
   observer = new IntersectionObserver(
     (entries) => {
       for (const entry of entries) {
@@ -1027,48 +1023,8 @@ async function resolveDependencyDownload(group: DependencyGroup): Promise<HubFil
   }
 }
 
-function selectHubFile(files: HubFileCandidate[], requiredVersion: number | null) {
-  if (files.length === 0) return null
-  const sorted = [...files].sort((a, b) => a.version - b.version)
-  if (requiredVersion === null) return sorted[sorted.length - 1] || null
-  return sorted.find((file) => file.version >= requiredVersion) || null
-}
 
-function parseHubFiles(files: HubFile[]) {
-  return files
-    .map((file) => {
-      if (!file.filename || !file.urlHosted) return null
-      const parsed = parsePackageId(file.filename)
-      if (!parsed || parsed.version === null) return null
-      return {
-        filename: file.filename,
-        version: parsed.version,
-        sizeBytes: parseSizeValue(file.file_size),
-        url: file.urlHosted,
-      }
-    })
-    .filter((item): item is HubFileCandidate => Boolean(item))
-}
 
-function parsePackageId(packageId: string) {
-  const cleaned = packageId.replace(/\.var$/i, '')
-  const parts = cleaned.split('.')
-  if (parts.length < 2) return null
-
-  const creator = parts[0]
-  if (parts.length === 2) {
-    return { creator, name: parts[1], version: null as number | null }
-  }
-
-  const versionText = parts[parts.length - 1]
-  const name = parts.slice(1, -1).join('.')
-  const version = Number.parseInt(versionText, 10)
-  return {
-    creator,
-    name,
-    version: Number.isFinite(version) ? version : null,
-  }
-}
 
 function parseRequiredVersion(requiredVersion: string) {
   const text = requiredVersion.trim()
@@ -1077,22 +1033,6 @@ function parseRequiredVersion(requiredVersion: string) {
   return Number.isFinite(version) ? version : null
 }
 
-function parseSizeValue(value: string | null | undefined) {
-  if (!value) return 0
-  const text = String(value).trim().toUpperCase()
-  const match = text.match(/^([\d.]+)\s*(B|KB|MB|GB|TB)?$/)
-  if (!match) return 0
-  const size = Number.parseFloat(match[1])
-  const unit = match[2] || 'B'
-  const map: Record<string, number> = {
-    B: 1,
-    KB: 1024,
-    MB: 1024 * 1024,
-    GB: 1024 * 1024 * 1024,
-    TB: 1024 * 1024 * 1024 * 1024,
-  }
-  return Math.round(size * (map[unit] || 1))
-}
 
 async function loadPackageImages(packageId: string) {
   imageListLoading.value = true
@@ -1151,12 +1091,6 @@ function closeImagePreview() {
 }
 
 // ── 工具函数 ────────────────────────────────────────────────
-function formatSize(bytes: number): string {
-  if (bytes === 0) return '0 B'
-  const units = ['B', 'KB', 'MB', 'GB', 'TB']
-  const i = Math.floor(Math.log(bytes) / Math.log(1024))
-  return `${(bytes / Math.pow(1024, i)).toFixed(i > 0 ? 1 : 0)} ${units[i]}`
-}
 
 function formatTime(iso: string): string {
   if (!iso) return '-'

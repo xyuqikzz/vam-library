@@ -4,16 +4,11 @@ use tauri::State;
 use crate::db::Database;
 use crate::models::dependency::{DependencyEdge, DependencyGraphData, DependencyNode};
 use crate::models::resource::primary_resource_type;
+use crate::services::dependencies::{
+    load_installed_packages, parse_dependency_parts, resolve_installed_dependency_id, InstalledPackage,
+};
 use rusqlite::{Connection, OptionalExtension};
 use std::collections::{HashSet, VecDeque};
-
-#[derive(Debug, Clone)]
-struct InstalledPackage {
-    id: String,
-    creator: String,
-    name: String,
-    version: i32,
-}
 
 /// A missing dependency entry
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -303,21 +298,6 @@ pub async fn find_missing_dependencies(
     .map_err(|e| e.to_string())
 }
 
-fn load_installed_packages(conn: &Connection) -> rusqlite::Result<Vec<InstalledPackage>> {
-    let mut stmt = conn.prepare("SELECT id, creator, name, version FROM packages")?;
-    let packages = stmt
-        .query_map([], |row| {
-            Ok(InstalledPackage {
-                id: row.get(0)?,
-                creator: row.get(1)?,
-                name: row.get(2)?,
-                version: row.get(3)?,
-            })
-        })?
-        .collect::<Result<Vec<_>, _>>()?;
-    Ok(packages)
-}
-
 fn physical_dependency_node(package_id: String, size_bytes: u64) -> DependencyNode {
     let (creator, name, version) = package_identity_from_id(&package_id);
 
@@ -375,60 +355,6 @@ fn load_dependency_node(conn: &Connection, id: &str) -> rusqlite::Result<Option<
         },
     )
     .optional()
-}
-
-fn resolve_installed_dependency_id(
-    depends_on_id: &str,
-    installed_packages: &[InstalledPackage],
-) -> Option<String> {
-    if let Some(pkg) = installed_packages
-        .iter()
-        .find(|pkg| pkg.id.eq_ignore_ascii_case(depends_on_id))
-    {
-        return Some(pkg.id.clone());
-    }
-
-    let parts: Vec<&str> = depends_on_id.split('.').collect();
-    if parts.len() < 2 {
-        return None;
-    }
-
-    let creator = parts[0];
-    let (name, required_version) = if parts.len() >= 3 {
-        let version_part = parts.last().copied().unwrap_or_default();
-        (
-            parts[1..parts.len() - 1].join("."),
-            parse_required_version(version_part),
-        )
-    } else {
-        (parts[1].to_string(), None)
-    };
-
-    let mut candidates: Vec<&InstalledPackage> = installed_packages
-        .iter()
-        .filter(|pkg| {
-            pkg.creator.eq_ignore_ascii_case(creator) && pkg.name.eq_ignore_ascii_case(&name)
-        })
-        .collect();
-
-    if candidates.is_empty() {
-        return None;
-    }
-
-    candidates.sort_by_key(|pkg| pkg.version);
-
-    if let Some(required) = required_version {
-        candidates
-            .into_iter()
-            .filter(|pkg| pkg.version >= required)
-            .max_by_key(|pkg| pkg.version)
-            .map(|pkg| pkg.id.clone())
-    } else {
-        candidates
-            .into_iter()
-            .max_by_key(|pkg| pkg.version)
-            .map(|pkg| pkg.id.clone())
-    }
 }
 
 struct DependencySatisfaction {
@@ -534,28 +460,4 @@ fn dependency_best_installed_version(
         })
         .map(|pkg| pkg.version)
         .max()
-}
-
-fn parse_dependency_parts(depends_on_id: &str) -> Option<(String, String, Option<i32>)> {
-    let parts: Vec<&str> = depends_on_id.split('.').collect();
-    if parts.len() < 2 {
-        return None;
-    }
-
-    let creator = parts[0].to_string();
-    if parts.len() == 2 {
-        return Some((creator, parts[1].to_string(), None));
-    }
-
-    let version_part = parts.last().copied().unwrap_or_default();
-    let name = parts[1..parts.len() - 1].join(".");
-    Some((creator, name, parse_required_version(version_part)))
-}
-
-fn parse_required_version(version_part: &str) -> Option<i32> {
-    if version_part.eq_ignore_ascii_case("latest") {
-        None
-    } else {
-        version_part.parse::<i32>().ok()
-    }
 }

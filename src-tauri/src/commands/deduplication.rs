@@ -124,7 +124,7 @@ fn organize_snapshot(
     file_paths: &[String],
 ) -> Result<CleanupResult, String> {
     let scan_id = &snapshot.summary.scan_id;
-    let deletions = resource_dedup::validate_selection(&snapshot, &file_paths)?;
+    let deletions = resource_dedup::validate_selection(snapshot, file_paths)?;
     let selected: HashSet<_> = file_paths.iter().map(|p| files::path_key(p)).collect();
     let mut archives = Vec::new();
     for item in snapshot.groups.iter().flat_map(|g| &g.instances) {
@@ -140,30 +140,50 @@ fn organize_snapshot(
             archives.push((item.clone(), destination.clone()));
         }
     }
-    files::ensure_no_links(&trash)?;
+    files::ensure_no_links(trash)?;
     let mut result = CleanupResult {
         cleaned: 0,
         archived: 0,
         removed_directories: 0,
         errors: vec![],
     };
+    let files_by_path: HashMap<_, _> = snapshot
+        .files
+        .iter()
+        .map(|file| (file.path.as_str(), file))
+        .collect();
+    let groups_by_path: HashMap<_, _> = snapshot
+        .groups
+        .iter()
+        .flat_map(|group| {
+            group
+                .instances
+                .iter()
+                .map(move |item| (item.file_path.as_str(), group))
+        })
+        .collect();
+    let mut replacements = HashMap::<String, Vec<_>>::new();
+    for item in snapshot.groups.iter().flat_map(|group| &group.instances) {
+        replacements
+            .entry(item.package_id.to_ascii_lowercase())
+            .or_default()
+            .push(item);
+    }
     for (index, item) in deletions.iter().enumerate() {
-        if let Some(file) = snapshot.files.iter().find(|f| f.path == item.file_path) {
+        if let Some(file) = files_by_path.get(item.file_path.as_str()) {
             if let Err(e) = files::verify(file) {
                 result.errors.push(e);
                 break;
             }
         }
-        let group = snapshot
-            .groups
-            .iter()
-            .find(|g| g.instances.iter().any(|i| i.file_path == item.file_path))
+        let group = groups_by_path
+            .get(item.file_path.as_str())
             .ok_or("清理分组已失效")?;
         if let Some(error) = group
             .instances
             .iter()
             .filter(|i| i.is_recommended_keep)
-            .filter_map(|i| snapshot.files.iter().find(|f| f.path == i.file_path))
+            .filter_map(|i| files_by_path.get(i.file_path.as_str()))
             .find_map(|f| files::verify(f).err())
         {
             result.errors.push(error);
@@ -185,13 +205,11 @@ fn organize_snapshot(
                 files::transfer(Path::new(&item.file_path), &destination, "move").map_err(AppError::Io)?;
                 let update = (|| -> Result<(), AppError> {
                     tx.execute("DELETE FROM physical_packages WHERE lower(replace(file_path, '\\', '/')) = ?1", [files::path_key(&item.file_path)])?;
-                    let replacement = snapshot.groups.iter().flat_map(|g| &g.instances).find(|i| i.package_id.eq_ignore_ascii_case(&item.package_id) && !selected.contains(&files::path_key(&i.file_path)) && Path::new(&i.file_path).exists());
+                    let replacement = replacements.get(&item.package_id.to_ascii_lowercase()).into_iter().flatten().find(|i| !selected.contains(&files::path_key(&i.file_path)) && Path::new(&i.file_path).exists());
                     if let Some(keep) = replacement {
                         files::index_package(&tx, Path::new(&keep.file_path))?;
-                    tx.execute("DELETE FROM packages WHERE lower(replace(file_path, '\\', '/')) = ?1", [files::path_key(&item.file_path)])?;
-                    } else {
-                        tx.execute("DELETE FROM packages WHERE lower(replace(file_path, '\\', '/')) = ?1", [files::path_key(&item.file_path)])?;
                     }
+                    tx.execute("DELETE FROM packages WHERE lower(replace(file_path, '\\', '/')) = ?1", [files::path_key(&item.file_path)])?;
                     tx.commit()?;
                     Ok(())
                 })();

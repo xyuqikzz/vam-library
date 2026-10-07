@@ -1,8 +1,9 @@
 import { defineStore } from 'pinia'
-import { ref, watch } from 'vue'
+import { onScopeDispose, ref, watch } from 'vue'
 import i18n from '../i18n'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
+import { createEventListeners } from '@/utils/eventListeners'
 
 export interface ScanProgress {
   total_files: number
@@ -79,35 +80,31 @@ export const useAppStore = defineStore('app', () => {
 
 
   // ── Scan Event Listener ────────────────────────────────────
-  let unlistenScan: (() => void) | null = null
+  let progressClearTimer: ReturnType<typeof setTimeout> | null = null
 
   function clampMaxConcurrentDownloads(value: number | undefined | null) {
     if (value === undefined || value === null || !Number.isFinite(value)) return 1
     return Math.min(5, Math.max(1, Math.trunc(value)))
   }
 
-  async function setupScanListener() {
-    // Clean up existing listener
-    if (unlistenScan) {
-      unlistenScan()
-      unlistenScan = null
+  const scanListeners = createEventListeners([() => listen<ScanProgress>('scan-progress', (event) => {
+    if (progressClearTimer) clearTimeout(progressClearTimer)
+    const progress = event.payload
+    scanProgress.value = progress
+    if (progress.phase === 'done') {
+      progressClearTimer = setTimeout(() => {
+        scanProgress.value = null
+        progressClearTimer = null
+      }, 2000)
     }
+  })])
 
-    unlistenScan = await listen<ScanProgress>('scan-progress', (event) => {
-      const progress = event.payload
-      scanProgress.value = progress
+  function setupScanListener() { return scanListeners.start() }
 
-      if (progress.phase === 'scanning') {
-        isScanning.value = true
-      } else if (progress.phase === 'done') {
-        isScanning.value = false
-        // Keep last progress visible briefly
-        setTimeout(() => {
-          scanProgress.value = null
-        }, 2000)
-      }
-    })
-  }
+  onScopeDispose(() => {
+    scanListeners.stop()
+    if (progressClearTimer) clearTimeout(progressClearTimer)
+  })
 
   // ── Actions ────────────────────────────────────────────────
   async function startScan(path: string) {
@@ -116,17 +113,18 @@ export const useAppStore = defineStore('app', () => {
     isScanning.value = true
     scanProgress.value = null
 
-    // Ensure listener is active
-    await setupScanListener()
-
+    if (progressClearTimer) clearTimeout(progressClearTimer)
     try {
+      await setupScanListener()
       const result: ScanResult = await invoke('scan_vam_directory', { path })
       lastScanResult.value = result
       return result
     } catch (error) {
-      isScanning.value = false
       scanProgress.value = null
       throw error
+    } finally {
+      // The parser emits done before the database transaction finishes.
+      isScanning.value = false
     }
   }
 
@@ -164,16 +162,11 @@ export const useAppStore = defineStore('app', () => {
   }
 
   async function saveSettings() {
-    try {
-      await persistSettings()
-      // Sync setting parameters dynamically to Tauri background Downloader
-      await invoke('set_download_settings', {
-        maxConcurrent: maxConcurrentDownloads.value,
-        speedLimitKb: speedLimitKb.value
-      })
-    } catch (e) {
-      console.error('Failed to save settings:', e)
-    }
+    await persistSettings()
+    await invoke('set_download_settings', {
+      maxConcurrent: maxConcurrentDownloads.value,
+      speedLimitKb: speedLimitKb.value
+    })
   }
 
   async function loadSettings() {

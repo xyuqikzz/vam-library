@@ -392,20 +392,33 @@ fn emit_progress(
     );
 }
 
-fn create_temp_dir(prefix: &str) -> Result<PathBuf, String> {
+struct UnpackTempDir(PathBuf);
+
+impl Drop for UnpackTempDir {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.0);
+    }
+}
+
+fn create_temp_dir(prefix: &str) -> Result<UnpackTempDir, String> {
+    static SEQUENCE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|e| format!("获取时间戳失败: {}", e))?
         .as_millis();
     let pid = std::process::id();
-    let dir = std::env::temp_dir().join(format!("vam_box_{}_{}_{}", prefix, pid, timestamp));
-    fs::create_dir_all(&dir).map_err(|e| format!("创建临时目录失败: {}", e))?;
-    Ok(dir)
+    let sequence = SEQUENCE.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let dir = std::env::temp_dir().join(format!(
+        "vam_box_{}_{}_{}_{}",
+        prefix, pid, timestamp, sequence
+    ));
+    fs::create_dir(&dir).map_err(|e| format!("创建临时目录失败: {}", e))?;
+    Ok(UnpackTempDir(dir))
 }
 
-fn ensure_unique_path(path: &Path) -> PathBuf {
+fn ensure_unique_path(path: &Path) -> Result<PathBuf, String> {
     if !path.exists() {
-        return path.to_path_buf();
+        return Ok(path.to_path_buf());
     }
 
     let parent = path.parent().unwrap_or_else(|| Path::new("."));
@@ -426,11 +439,14 @@ fn ensure_unique_path(path: &Path) -> PathBuf {
         };
         let candidate = parent.join(name);
         if !candidate.exists() {
-            return candidate;
+            return Ok(candidate);
         }
     }
 
-    path.to_path_buf()
+    Err(format!(
+        "目标重名文件过多，未覆盖已有文件: {}",
+        path.display()
+    ))
 }
 
 fn safe_join(base: &Path, relative: &str) -> Result<PathBuf, String> {
@@ -593,8 +609,9 @@ fn rename_archive_to_canonical_extension(
         return Ok(path.to_path_buf());
     }
 
-    let renamed = ensure_unique_path(&path.with_extension(kind.canonical_extension()));
-    fs::rename(path, &renamed).map_err(|e| format!("修正伪装后缀失败: {}", e))?;
+    let renamed = ensure_unique_path(&path.with_extension(kind.canonical_extension()))?;
+    crate::services::resource_files::transfer(path, &renamed, "move")
+        .map_err(|e| format!("修正伪装后缀失败: {}", e))?;
     Ok(renamed)
 }
 
@@ -640,7 +657,7 @@ fn unpack_nested_archives(
                 .and_then(OsStr::to_str)
                 .unwrap_or("archive");
             let dest_dir =
-                ensure_unique_path(&normalized_archive.parent().unwrap_or(root).join(stem));
+                ensure_unique_path(&normalized_archive.parent().unwrap_or(root).join(stem))?;
 
             emit_progress(
                 app_handle,
@@ -692,8 +709,9 @@ fn copy_file_to_target(source: &Path, target_dir: &Path) -> Result<PathBuf, Stri
         .file_name()
         .and_then(OsStr::to_str)
         .unwrap_or("unpacked_file");
-    let dest_path = ensure_unique_path(&target_dir.join(file_name));
-    fs::copy(source, &dest_path).map_err(|e| format!("复制文件失败: {}", e))?;
+    let dest_path = ensure_unique_path(&target_dir.join(file_name))?;
+    crate::services::resource_files::transfer(source, &dest_path, "copy")
+        .map_err(|e| format!("复制文件失败: {}", e))?;
     Ok(dest_path)
 }
 
@@ -702,8 +720,8 @@ fn copy_dir_to_target(
     target_dir: &Path,
     preferred_name: &str,
 ) -> Result<PathBuf, String> {
-    let dest_root = ensure_unique_path(&target_dir.join(preferred_name));
-    fs::create_dir_all(&dest_root).map_err(|e| format!("创建目标目录失败: {}", e))?;
+    let dest_root = ensure_unique_path(&target_dir.join(preferred_name))?;
+    fs::create_dir(&dest_root).map_err(|e| format!("创建目标目录失败: {}", e))?;
 
     for entry in WalkDir::new(source_root) {
         let entry = entry.map_err(|e| format!("遍历目录失败: {}", e))?;
@@ -724,22 +742,20 @@ fn copy_dir_to_target(
         if let Some(parent) = dest_path.parent() {
             fs::create_dir_all(parent).map_err(|e| format!("创建目录失败: {}", e))?;
         }
-        fs::copy(entry.path(), &dest_path).map_err(|e| format!("复制文件失败: {}", e))?;
+        crate::services::resource_files::transfer(entry.path(), &dest_path, "copy")
+            .map_err(|e| format!("复制文件失败: {}", e))?;
     }
 
     Ok(dest_root)
 }
 
-fn cleanup_temp_dir(path: &Path) {
-    let _ = fs::remove_dir_all(path);
-}
-
 #[tauri::command]
 pub async fn analyze_archive(archive_path: String) -> Result<ArchiveAnalysis, String> {
-    let path = Path::new(&archive_path);
-    if !path.exists() {
-        return Err(format!("文件不存在: {}", archive_path));
-    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let path = Path::new(&archive_path);
+        if !path.exists() {
+            return Err(format!("文件不存在: {}", archive_path));
+        }
 
     let file_name = path
         .file_name()
@@ -752,13 +768,16 @@ pub async fn analyze_archive(archive_path: String) -> Result<ArchiveAnalysis, St
     let kind = detect_archive_kind(path)?;
     let entries = list_archive_entries(path, kind)?;
 
-    Ok(analyze_entries(
-        archive_path,
-        file_name,
-        size_bytes,
-        kind,
-        &entries,
-    ))
+        Ok(analyze_entries(
+            archive_path,
+            file_name,
+            size_bytes,
+            kind,
+            &entries,
+        ))
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 fn execute_recursive_extract(
@@ -775,22 +794,13 @@ fn execute_recursive_extract(
         .unwrap_or("unpacked_archive");
 
     emit_progress(app_handle, 10.0, "正在解压外层压缩包", 0, 3);
-    let extract_result = extract_archive_to_dir(source_path, kind, &temp_dir);
-    if let Err(err) = extract_result {
-        cleanup_temp_dir(&temp_dir);
-        return Err(err);
-    }
+    extract_archive_to_dir(source_path, kind, &temp_dir.0)?;
 
     emit_progress(app_handle, 30.0, "正在查找嵌套压缩包和伪装后缀", 1, 3);
-    let nested_result = unpack_nested_archives(app_handle, &temp_dir, 16);
-    if let Err(err) = nested_result {
-        cleanup_temp_dir(&temp_dir);
-        return Err(err);
-    }
-    let nested_count = nested_result.unwrap_or(0);
+    let nested_count = unpack_nested_archives(app_handle, &temp_dir.0, 16)?;
 
     emit_progress(app_handle, 82.0, "正在整理最终输出", 2, 3);
-    let final_root = collapse_single_folder_chain(&temp_dir)?;
+    let final_root = collapse_single_folder_chain(&temp_dir.0)?;
     let output_path = if final_root.is_file() {
         copy_file_to_target(&final_root, target_dir)?
     } else {
@@ -802,7 +812,7 @@ fn execute_recursive_extract(
         copy_dir_to_target(&final_root, target_dir, preferred_name)?
     };
 
-    cleanup_temp_dir(&temp_dir);
+    drop(temp_dir);
 
     let extracted_files = if output_path.is_file() {
         vec![output_path
@@ -846,16 +856,69 @@ pub async fn execute_unpack(
     analysis: ArchiveAnalysis,
     custom_target_dir: Option<String>,
 ) -> Result<UnpackResult, String> {
-    let target_dir = if let Some(custom_dir) = custom_target_dir {
-        PathBuf::from(custom_dir)
-    } else {
-        Path::new(&analysis.file_path)
-            .parent()
-            .ok_or_else(|| "无法获取压缩包所在目录".to_string())?
-            .to_path_buf()
-    };
+    tauri::async_runtime::spawn_blocking(move || {
+        let target_dir = if let Some(custom_dir) = custom_target_dir {
+            PathBuf::from(custom_dir)
+        } else {
+            Path::new(&analysis.file_path)
+                .parent()
+                .ok_or_else(|| "无法获取压缩包所在目录".to_string())?
+                .to_path_buf()
+        };
 
-    fs::create_dir_all(&target_dir).map_err(|e| format!("创建目标文件夹失败: {}", e))?;
-    let archive_kind = detect_archive_kind(Path::new(&analysis.file_path))?;
-    execute_recursive_extract(&app_handle, &analysis, &target_dir, archive_kind)
+        fs::create_dir_all(&target_dir).map_err(|e| format!("创建目标文件夹失败: {}", e))?;
+        let archive_kind = detect_archive_kind(Path::new(&analysis.file_path))?;
+        execute_recursive_extract(&app_handle, &analysis, &target_dir, archive_kind)
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::services::resource_files::tests::TestDir;
+
+    #[test]
+    fn exhausted_collision_names_never_overwrite_originals() {
+        let root = TestDir::new();
+        let source = TestDir::new();
+        let file = source.write("asset.txt", b"new");
+        root.write("asset.txt", b"original");
+        for i in 1..1000 {
+            root.write(&format!("asset_{i}.txt"), b"keep");
+        }
+        assert!(copy_file_to_target(&file, &root.0).is_err());
+        assert_eq!(fs::read(root.0.join("asset.txt")).unwrap(), b"original");
+        assert_eq!(fs::read(file).unwrap(), b"new");
+    }
+
+    #[test]
+    fn temporary_directories_are_unique_and_removed_on_early_error() {
+        let first = create_temp_dir("test").unwrap();
+        let second = create_temp_dir("test").unwrap();
+        assert_ne!(first.0, second.0);
+        let path = first.0.clone();
+        fn fail(_owned: UnpackTempDir) -> Result<(), String> {
+            Err("copy failed".into())
+        }
+        let failure = fail(first);
+        assert!(failure.is_err());
+        assert!(!path.exists());
+        assert!(second.0.exists());
+    }
+
+    #[test]
+    fn archive_paths_and_copy_collisions_keep_destination_contained() {
+        let source = TestDir::new();
+        let target = TestDir::new();
+        assert!(safe_join(&target.0, "../escape").is_err());
+        assert!(safe_join(&target.0, "/escape").is_err());
+        let original = source.write("asset.txt", b"new");
+        target.write("asset.txt", b"old");
+        let copied = copy_file_to_target(&original, &target.0).unwrap();
+        assert_eq!(copied, target.0.join("asset_1.txt"));
+        assert_eq!(fs::read(target.0.join("asset.txt")).unwrap(), b"old");
+        assert_eq!(fs::read(copied).unwrap(), b"new");
+    }
 }

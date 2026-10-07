@@ -79,7 +79,7 @@ pub fn scan_addon_packages_with_cache(
 ) -> Result<(Vec<VarPackage>, ScanResult), AppError> {
     let addon_dir = root.join("AddonPackages");
 
-    if !addon_dir.exists() {
+    if !addon_dir.is_dir() {
         return Err(AppError::Io(format!(
             "AddonPackages directory not found at '{}'",
             addon_dir.display()
@@ -97,33 +97,37 @@ pub fn scan_addon_packages_with_cache(
     // 第一阶段只遍历目录并读取文件状态，后续增量判断直接复用这里的数据。
     let mut var_files = Vec::new();
     for source_dir in source_dirs {
-        var_files.extend(
-            WalkDir::new(&source_dir)
-                .follow_links(true)
-                .into_iter()
-                .filter_map(|entry| entry.ok())
-                .filter(|entry| {
-                    entry.file_type().is_file()
-                        && entry
-                            .path()
-                            .extension()
-                            .map(|ext| ext.eq_ignore_ascii_case("var"))
-                            .unwrap_or(false)
-                })
-                .filter_map(|entry| {
-                    let path = entry.into_path();
-                    let metadata = std::fs::metadata(&path).ok()?;
-                    Some(ScannedVarFile {
-                        file_path: path.to_string_lossy().to_string(),
-                        size_bytes: metadata.len(),
-                        modified_time: metadata
-                            .modified()
-                            .map(system_time_to_rfc3339)
-                            .unwrap_or_default(),
-                        path,
-                    })
-                }),
-        );
+        for entry in WalkDir::new(&source_dir).follow_links(true) {
+            // A partial directory listing must never drive removal of existing index rows.
+            let entry = entry.map_err(|e| {
+                AppError::Io(format!(
+                    "Incomplete scan of '{}': {}",
+                    source_dir.display(),
+                    e
+                ))
+            })?;
+            if !entry.file_type().is_file()
+                || !entry
+                    .path()
+                    .extension()
+                    .is_some_and(|ext| ext.eq_ignore_ascii_case("var"))
+            {
+                continue;
+            }
+            let path = entry.into_path();
+            let metadata = std::fs::metadata(&path).map_err(|e| {
+                AppError::Io(format!("Failed to inspect '{}': {}", path.display(), e))
+            })?;
+            var_files.push(ScannedVarFile {
+                file_path: path.to_string_lossy().to_string(),
+                size_bytes: metadata.len(),
+                modified_time: metadata
+                    .modified()
+                    .map(system_time_to_rfc3339)
+                    .unwrap_or_default(),
+                path,
+            });
+        }
     }
     var_files.sort_by(|a, b| a.file_path.cmp(&b.file_path));
 
@@ -266,4 +270,40 @@ pub fn scan_addon_packages_simple(root: &Path) -> Result<(Vec<VarPackage>, ScanR
 fn system_time_to_rfc3339(time: SystemTime) -> String {
     let datetime: chrono::DateTime<chrono::Utc> = time.into();
     datetime.to_rfc3339()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::services::resource_files::tests::TestDir;
+
+    #[test]
+    fn invalid_scan_root_is_not_reported_as_an_empty_library() {
+        let root = TestDir::new();
+        root.write("AddonPackages", b"not a directory");
+        assert!(scan_addon_packages_simple(&root.0).is_err());
+    }
+
+    #[test]
+    fn cached_uppercase_packages_are_kept_and_corrupt_packages_are_reported() {
+        let root = TestDir::new();
+        root.write("AddonPackages/Author.Package.1.VAR", b"unchanged");
+        let cached = root.0.join("AddonPackages").join("Author.Package.1.VAR");
+        root.write("AddonPackages/Author.Broken.1.var", b"invalid zip");
+        let metadata = cached.metadata().unwrap();
+        let cache = HashMap::from([(
+            cached.to_string_lossy().to_string(),
+            ScanCacheEntry {
+                size_bytes: metadata.len(),
+                modified_time: system_time_to_rfc3339(metadata.modified().unwrap()),
+                scan_status: "ok".into(),
+            },
+        )]);
+        let (packages, result) = scan_addon_packages_with_cache(&root.0, cache, None).unwrap();
+        assert!(packages.is_empty());
+        assert_eq!(result.skipped_files, 1);
+        assert_eq!(result.total_files, 2);
+        assert_eq!(result.current_file_paths.len(), 2);
+        assert_eq!(result.failures.len(), 1);
+    }
 }

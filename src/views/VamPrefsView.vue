@@ -162,8 +162,8 @@ async function selectVamRoot() {
       await appStore.setVamRoot(selected)
       await loadPrefs()
     }
-  } catch {
-    // 用户取消选择时无需提示。
+  } catch (error) {
+    notify.error(String(error))
   }
 }
 

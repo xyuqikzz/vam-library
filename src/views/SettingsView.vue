@@ -474,8 +474,21 @@ async function saveDownloadSettings() {
   if (speedLimitKb.value === undefined || speedLimitKb.value === null || speedLimitKb.value < 0) {
     speedLimitKb.value = 0
   }
-  await appStore.saveSettings()
-  await appStore.refreshInstallContext()
+  await saveWithFeedback(async () => {
+    await appStore.saveSettings()
+    await appStore.refreshInstallContext()
+  })
+}
+
+async function saveWithFeedback(action: () => Promise<unknown>): Promise<boolean> {
+  try {
+    await action()
+    return true
+  } catch (error) {
+    notify.error(String(error))
+    await appStore.loadSettings()
+    return false
+  }
 }
 
 async function changeMaxConcurrentDownloads(delta: number) {
@@ -484,49 +497,49 @@ async function changeMaxConcurrentDownloads(delta: number) {
 }
 
 function toggleManagedMode() {
-  appStore.setManagedSettings(!managedEnabled.value, appStore.managedLibraryPath)
+  void saveWithFeedback(() => appStore.setManagedSettings(!managedEnabled.value, appStore.managedLibraryPath))
 }
 
 function toggleAutoScan() {
-  appStore.setAutoScan(!appStore.autoScan)
+  void saveWithFeedback(() => appStore.setAutoScan(!appStore.autoScan))
 }
 
 async function addCurrentInstance() {
-  if (!canAddCurrentInstance.value || !vamRootPath.value) return
+  const rootPath = vamRootPath.value
+  if (!canAddCurrentInstance.value || !rootPath) return
   const name = newInstanceName.value.trim() || `VAM 实例 ${vamInstances.value.length + 1}`
   const id = `instance_${Date.now()}`
-  await appStore.saveInstances(
+  const saved = await saveWithFeedback(() => appStore.saveInstances(
     [...vamInstances.value, {
       id,
       name,
-      rootPath: vamRootPath.value,
+      rootPath,
       managedEnabled: managedEnabled.value,
       managedLibraryPath: appStore.managedLibraryPath,
       downloadTargetPolicy: downloadTargetPolicy.value,
       downloadAfterAction: downloadAfterAction.value,
     }],
     id,
-  )
-  newInstanceName.value = ''
+  ))
+  if (saved) newInstanceName.value = ''
 }
 
 async function deleteInstance(id: string) {
   const nextInstances = vamInstances.value.filter((instance) => instance.id !== id)
   const nextActiveId = activeInstanceId.value === id ? nextInstances[0]?.id ?? null : activeInstanceId.value
-  await appStore.saveInstances(nextInstances, nextActiveId)
+  await saveWithFeedback(() => appStore.saveInstances(nextInstances, nextActiveId))
 }
 
 async function switchInstance(id: string) {
-  await appStore.saveInstances(vamInstances.value, id)
+  await saveWithFeedback(() => appStore.saveInstances(vamInstances.value, id))
 }
 
 async function saveHubCookie() {
-  await appStore.saveHubCookie(hubCookieDraft.value)
+  await saveWithFeedback(() => appStore.saveHubCookie(hubCookieDraft.value))
 }
 
 async function clearHubCookie() {
-  hubCookieDraft.value = ''
-  await appStore.saveHubCookie(null)
+  if (await saveWithFeedback(() => appStore.saveHubCookie(null))) hubCookieDraft.value = ''
 }
 
 async function openRepository() {
@@ -550,10 +563,10 @@ async function browseDirectory() {
       title: t('settings.selectVamDirectory'),
     })
     if (selected && typeof selected === 'string') {
-      appStore.setVamRoot(selected)
+      await saveWithFeedback(() => appStore.setVamRoot(selected))
     }
-  } catch {
-    // Dialog cancelled or not available
+  } catch (error) {
+    notify.error(String(error))
   }
 }
 

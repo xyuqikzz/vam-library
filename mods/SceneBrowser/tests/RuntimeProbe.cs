@@ -82,6 +82,39 @@ class RuntimeProbe
             }
             finally { if (File.Exists(fixture)) File.Delete(fixture); }
             Console.WriteLine("PASS: software import-time parsing and sorting in game Mono");
+            // Exercise the actual Harmony sort callback with game types, without constructing Unity components.
+            var gameAssembly = Assembly.LoadFrom(Path.Combine(root, "VaM_Data/Managed/Assembly-CSharp.dll"));
+            var browserType = gameAssembly.GetType("uFileBrowser.FileBrowser", true);
+            var itemType = browserType.GetNestedType("FileAndDirInfo", BindingFlags.Public | BindingFlags.NonPublic);
+            var packageType = gameAssembly.GetType("MVR.FileManagement.VarPackage", true);
+            var entryType = gameAssembly.GetType("MVR.FileManagement.VarFileEntry", true);
+            object browser = System.Runtime.Serialization.FormatterServices.GetUninitializedObject(browserType);
+            object browserState = state.Invoke(null, new[] { browser });
+            browserState.GetType().GetField("Scene").SetValue(browserState, true);
+            var sizeItems = (System.Collections.IList)Activator.CreateInstance(typeof(System.Collections.Generic.List<>).MakeGenericType(itemType));
+            sizeItems.Add(SizeItem(itemType, packageType, entryType, "Local", null, null));
+            sizeItems.Add(SizeItem(itemType, packageType, entryType, "LargeZ", "Z", long.MaxValue));
+            sizeItems.Add(SizeItem(itemType, packageType, entryType, "Empty", "B", 0));
+            sizeItems.Add(SizeItem(itemType, packageType, entryType, "Medium", "A", 4294967296L));
+            sizeItems.Add(SizeItem(itemType, packageType, entryType, "LargeA", "Z", long.MaxValue));
+            var sortPatch = plugin.GetNestedType("SortPatch", BindingFlags.NonPublic).GetMethod("Postfix", BindingFlags.Static | BindingFlags.NonPublic);
+            foreach (string mode in new[] { "SizeDescending", "SizeAscending" })
+            {
+                browserState.GetType().GetField("Mode").SetValue(browserState, plugin.GetField(mode, BindingFlags.Static | BindingFlags.NonPublic).GetRawConstantValue());
+                sortPatch.Invoke(null, new[] { browser, sizeItems });
+                string[] expected = mode == "SizeDescending"
+                    ? new[] { "LargeA", "LargeZ", "Medium", "Empty", "Local" }
+                    : new[] { "Empty", "Medium", "LargeA", "LargeZ", "Local" };
+                for (int i = 0; i < expected.Length; i++)
+                    if ((string)itemType.GetProperty("Name").GetValue(sizeItems[i], null) != expected[i])
+                        throw new Exception("Package size sort callback failed: " + mode);
+            }
+            browserState.GetType().GetField("Scene").SetValue(browserState, false);
+            browserState.GetType().GetField("Mode").SetValue(browserState, plugin.GetField("SizeDescending", BindingFlags.Static | BindingFlags.NonPublic).GetRawConstantValue());
+            sortPatch.Invoke(null, new[] { browser, sizeItems });
+            if ((string)itemType.GetProperty("Name").GetValue(sizeItems[0], null) != "Empty")
+                throw new Exception("Package size sorting affected a non-scene browser");
+            Console.WriteLine("PASS: real game sort callback uses 64-bit VAR sizes in both directions, keeps local scenes last and other browsers unchanged");
             var folders = (System.Collections.IList)rules.GetMethod("ListFolders").Invoke(null, new object[] { Path.Combine(root, "AddonPackages"), "" });
             if (folders.Count == 0) throw new Exception("Expected folders in the regression game library");
             var createItem = plugin.GetMethod("CreateNavigationItem", BindingFlags.Static | BindingFlags.NonPublic);
@@ -104,5 +137,27 @@ class RuntimeProbe
             if (load != null) foreach (var inner in load.LoaderExceptions) Console.WriteLine(inner);
             return 1;
         }
+    }
+
+    static object SizeItem(Type itemType, Type packageType, Type entryType, string name, string author, long? size)
+    {
+        object item = System.Runtime.Serialization.FormatterServices.GetUninitializedObject(itemType);
+        SetProperty(item, "Name", name);
+        SetProperty(item, "FullName", name + ".json");
+        if (size.HasValue)
+        {
+            object package = System.Runtime.Serialization.FormatterServices.GetUninitializedObject(packageType);
+            SetProperty(package, "Size", size.Value);
+            SetProperty(package, "Creator", author);
+            object entry = System.Runtime.Serialization.FormatterServices.GetUninitializedObject(entryType);
+            SetProperty(entry, "Package", package);
+            SetProperty(item, "FileEntry", entry);
+        }
+        return item;
+    }
+
+    static void SetProperty(object target, string name, object value)
+    {
+        target.GetType().GetProperty(name).GetSetMethod(true).Invoke(target, new[] { value });
     }
 }

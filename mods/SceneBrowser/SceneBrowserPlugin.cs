@@ -14,12 +14,14 @@ using Item = uFileBrowser.FileBrowser.FileAndDirInfo;
 
 namespace VamLibrary.SceneBrowser
 {
-    [BepInPlugin("com.vamlibrary.scenebrowser", "vam管理增强插件", "1.0.8")]
+    [BepInPlugin("com.vamlibrary.scenebrowser", "vam管理增强插件", "1.0.9")]
     public sealed class SceneBrowserPlugin : BaseUnityPlugin
     {
         private const string Author = "作者 A–Z";
         private const string Folders = "按文件夹浏览";
         private const string Imported = "入库时间";
+        private const string SizeDescending = "资源包大小（大到小）";
+        private const string SizeAscending = "资源包大小（小到大）";
         private const string MissingTimes = "暂无入库记录，在软件中入库或刷新资源后自动更新。";
         private const string InvalidTimes = "读取入库时间失败，请在软件中刷新资源。";
         private const string FolderPrefix = "vamlibrary-folder:";
@@ -75,7 +77,7 @@ namespace VamLibrary.SceneBrowser
                     ApplyDecompression();
                 }
                 catch (Exception error) { NativeDecompression.Disable(); Logger.LogWarning("原生解压未启用: " + error.Message); }
-                Logger.LogInfo("vam管理增强插件 1.0.8 ready: sorting, scene launch and native VAR decompression.");
+                Logger.LogInfo("vam管理增强插件 1.0.9 ready: sorting, scene launch and native VAR decompression.");
             }
             catch (Exception e)
             {
@@ -302,11 +304,18 @@ namespace VamLibrary.SceneBrowser
             for (int i = 0; i < popup.numPopupValues; i++)
             {
                 string value = popup.popupValues[i];
-                if (value == Author || value == Folders || value == Imported) continue;
+                if (value == Author || value == Folders || value == Imported || value == SizeDescending || value == SizeAscending) continue;
                 values.Add(value);
                 labels.Add(popup.useDifferentDisplayValues ? popup.displayPopupValues[i] : value);
             }
-            if (Active(browser)) { values.Add(Author); labels.Add(Author); values.Add(Folders); labels.Add(Folders); values.Add(Imported); labels.Add(Imported); }
+            if (Active(browser))
+            {
+                values.Add(Author); labels.Add(Author);
+                values.Add(Folders); labels.Add(Folders);
+                values.Add(Imported); labels.Add(Imported);
+                values.Add(SizeDescending); labels.Add(SizeDescending);
+                values.Add(SizeAscending); labels.Add(SizeAscending);
+            }
             if (!values.SequenceEqual(popup.popupValues))
             {
                 popup.numPopupValues = values.Count;
@@ -347,7 +356,7 @@ namespace VamLibrary.SceneBrowser
             {
                 var state = State(__instance);
                 bool wasFolders = state.Mode == Folders;
-                if (Active(__instance) && (__0 == Author || __0 == Folders || __0 == Imported))
+                if (Active(__instance) && (__0 == Author || __0 == Folders || __0 == Imported || __0 == SizeDescending || __0 == SizeAscending))
                 {
                     state.Mode = __0;
                     if (__0 == Folders)
@@ -382,11 +391,19 @@ namespace VamLibrary.SceneBrowser
             {
                 if (!Active(__instance) || State(__instance).Mode == null) return;
                 bool imported = State(__instance).Mode == Imported;
+                bool size = State(__instance).Mode == SizeDescending || State(__instance).Mode == SizeAscending;
+                bool descending = State(__instance).Mode == SizeDescending;
                 if (imported) instance.importTimes.Refresh(ImportTimesPath, false);
                 __0.Sort(delegate(Item a, Item b)
                 {
                     var ap = a.FileEntry as VarFileEntry;
                     var bp = b.FileEntry as VarFileEntry;
+                    if (size)
+                        return BrowserRules.CompareSize(
+                            ap == null ? (long?)null : ap.Package.Size,
+                            bp == null ? (long?)null : bp.Package.Size, descending,
+                            ap == null ? null : ap.Package.Creator, a.Name, a.FullName,
+                            bp == null ? null : bp.Package.Creator, b.Name, b.FullName);
                     if (imported)
                         return BrowserRules.CompareImported(
                             instance.importTimes.Find(ap == null ? null : ap.Package.Uid),

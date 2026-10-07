@@ -1,7 +1,7 @@
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, OnceLock};
-use tauri::{Emitter, Manager, State};
+use tauri::{Emitter, State};
 
 use crate::commands::hub::{
     fetch_hub_package_info, fetch_hub_package_info_basic, HubApiResponse, HubDependency,
@@ -155,42 +155,29 @@ pub async fn set_download_settings(
     speed_limit_kb: u64,
 ) -> Result<(), String> {
     let max_concurrent = max_concurrent.clamp(MIN_CONCURRENT_DOWNLOADS, MAX_CONCURRENT_DOWNLOADS);
-    {
-        let mut mc = manager.max_concurrent.lock().unwrap();
-        *mc = max_concurrent;
-    }
-    {
-        let mut sl = manager.speed_limit_kb.lock().unwrap();
-        *sl = speed_limit_kb;
-    }
-
-    // Save to settings.json
-    if let Ok(app_data_dir) = app_handle.path().app_data_dir() {
-        let settings_path = app_data_dir.join("settings.json");
-        let mut settings = if settings_path.exists() {
-            let contents = std::fs::read_to_string(&settings_path).unwrap_or_default();
-            serde_json::from_str::<serde_json::Value>(&contents).unwrap_or(serde_json::json!({}))
-        } else {
-            serde_json::json!({})
-        };
-
-        if let Some(obj) = settings.as_object_mut() {
-            obj.insert(
-                "max_concurrent_downloads".to_string(),
-                serde_json::Value::Number(max_concurrent.into()),
-            );
-            obj.insert(
-                "speed_limit_kb".to_string(),
-                serde_json::Value::Number(speed_limit_kb.into()),
-            );
-        }
-
-        if let Ok(contents) = serde_json::to_string_pretty(&settings) {
-            let _ = std::fs::write(settings_path, contents);
-        }
-    }
+    let path = crate::services::install_context::settings_file_path(&app_handle)?;
+    persist_download_settings(&path, max_concurrent, speed_limit_kb)?;
+    *manager.max_concurrent.lock().unwrap() = max_concurrent;
+    *manager.speed_limit_kb.lock().unwrap() = speed_limit_kb;
 
     Ok(())
+}
+
+fn persist_download_settings(
+    path: &std::path::Path,
+    max_concurrent: usize,
+    speed_limit_kb: u64,
+) -> Result<(), String> {
+    let mut settings = match std::fs::read_to_string(path) {
+        Ok(contents) => serde_json::from_str::<serde_json::Value>(&contents)
+            .map_err(|error| format!("解析设置文件失败: {}", error))?,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => serde_json::json!({}),
+        Err(error) => return Err(format!("读取设置文件失败: {}", error)),
+    };
+    let object = settings.as_object_mut().ok_or("设置文件必须是 JSON 对象")?;
+    object.insert("max_concurrent_downloads".into(), max_concurrent.into());
+    object.insert("speed_limit_kb".into(), speed_limit_kb.into());
+    crate::commands::settings::write_settings_file(path, &settings)
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -568,4 +555,29 @@ pub async fn resolve_hub_dependencies(
         total_size_bytes: 0, // Placeholder, calculated client-side or omitted
         dependencies: resolved_list,
     })
+}
+
+#[cfg(test)]
+mod settings_tests {
+    use super::*;
+    use crate::services::resource_files::tests::TestDir;
+
+    #[test]
+    fn download_settings_preserve_other_fields_and_refuse_corrupt_files() {
+        let root = TestDir::new();
+        let path = root.write(
+            "settings.json",
+            br#"{"theme":"light","future_field":{"keep":true}}"#,
+        );
+        persist_download_settings(&path, 3, 512).unwrap();
+        let value: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        assert_eq!(value["theme"], "light");
+        assert_eq!(value["future_field"]["keep"], true);
+        assert_eq!(value["max_concurrent_downloads"], 3);
+        assert_eq!(value["speed_limit_kb"], 512);
+        std::fs::write(&path, b"bad JSON").unwrap();
+        assert!(persist_download_settings(&path, 1, 0).is_err());
+        assert_eq!(std::fs::read(&path).unwrap(), b"bad JSON");
+    }
 }

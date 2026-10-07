@@ -53,6 +53,17 @@ namespace VamLibrary.SceneBrowser
             return result != 0 ? result : Compare(authorA, nameA, pathA, authorB, nameB, pathB);
         }
 
+        public static int CompareSize(long? sizeA, long? sizeB, bool descending,
+                                      string authorA, string nameA, string pathA,
+                                      string authorB, string nameB, string pathB)
+        {
+            // Loose scenes stay last in both directions. Use CompareTo to avoid overflow on large VARs.
+            int result = sizeB.HasValue.CompareTo(sizeA.HasValue);
+            if (result == 0 && sizeA.HasValue)
+                result = descending ? sizeB.Value.CompareTo(sizeA.Value) : sizeA.Value.CompareTo(sizeB.Value);
+            return result != 0 ? result : Compare(authorA, nameA, pathA, authorB, nameB, pathB);
+        }
+
         public static string PackageFolder(string root, string packagePath)
         {
             if (string.IsNullOrEmpty(packagePath)) return null;

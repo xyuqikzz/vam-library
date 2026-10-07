@@ -221,6 +221,8 @@
 </template>
 
 <script setup lang="ts">
+import { parseHubFiles, parsePackageId as parseDependencyId, selectHubFile as selectCandidate, type HubFile, type HubFileCandidate } from '@/utils/hubFiles'
+import { formatSize } from '@/utils/bytes'
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { invoke } from '@tauri-apps/api/core'
@@ -231,25 +233,6 @@ import { useNotification } from '@/composables/useNotification'
 import StatCard from '@/components/common/StatCard.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 
-/*
-interface MissingDependency {
-  package_id: string
-  depends_on_id: string
-  required_version: string
-  dependent_package: string
-  status: 'missing' | 'lower_version' | string
-  installed_version: number | null
-}
-*/
-
-interface HubFile {
-  filename?: string | null
-  file_size?: string | null
-  creatorName?: string | null
-  licenseType?: string | null
-  urlHosted?: string | null
-}
-
 interface HubPackageInfo {
   title?: string | null
   username?: string | null
@@ -257,12 +240,6 @@ interface HubPackageInfo {
   hubFiles?: HubFile[] | null
 }
 
-interface HubFileCandidate {
-  filename: string
-  version: number
-  sizeBytes: number
-  url: string
-}
 
 interface DownloadQueueItem {
   id: string
@@ -503,7 +480,7 @@ async function openPreview() {
           const detail = await invoke<HubPackageInfo>('fetch_hub_package_info', {
             packageName: group.hubQuery,
           })
-          const files = parseHubFiles(detail.hubFiles || [])
+          const files = parseHubFiles(detail.hubFiles || []).sort((a, b) => b.version - a.version)
           return {
             ...group,
             hubTitle: detail.title || '',
@@ -605,14 +582,7 @@ function goSettings() {
 }
 
 function selectHubFile(group: PreviewGroup): HubFileCandidate | null {
-  if (!group.hubFiles.length) return null
-
-  const sortedFiles = [...group.hubFiles].sort((a, b) => a.version - b.version)
-  if (resolutionMode.value === 'latest' || group.requiredVersion === null) {
-    return sortedFiles[sortedFiles.length - 1] || null
-  }
-
-  return sortedFiles.find(file => file.version >= group.requiredVersion!) || null
+  return selectCandidate(group.hubFiles, resolutionMode.value === 'latest' ? null : group.requiredVersion)
 }
 
 function getCopyIdentifier(group: DependencyGroup | PreviewGroup): string {
@@ -627,37 +597,6 @@ function getCopyIdentifier(group: DependencyGroup | PreviewGroup): string {
   return `${group.creator}.${group.name}.${version}`
 }
 
-function parseDependencyId(dependsOnId: string) {
-  const cleaned = dependsOnId.replace(/\.var$/i, '')
-  const parts = cleaned.split('.')
-  if (parts.length < 2) return null
-
-  const creator = parts[0]
-  if (parts.length === 2) {
-    return {
-      creator,
-      name: parts[1],
-      version: null as number | null,
-    }
-  }
-
-  const versionPart = parts[parts.length - 1]
-  const name = parts.slice(1, -1).join('.')
-  if (!versionPart || versionPart.toLowerCase() === 'latest') {
-    return {
-      creator,
-      name,
-      version: null as number | null,
-    }
-  }
-
-  const version = Number.parseInt(versionPart, 10)
-  return {
-    creator,
-    name,
-    version: Number.isFinite(version) ? version : null,
-  }
-}
 
 function parseRequiredVersion(requiredVersion: string) {
   const text = requiredVersion.trim()
@@ -666,46 +605,8 @@ function parseRequiredVersion(requiredVersion: string) {
   return Number.isFinite(version) ? version : 'latest'
 }
 
-function parseHubFiles(files: HubFile[]) {
-  return files
-    .map((file) => {
-      if (!file.filename || !file.urlHosted) return null
-      const parsed = parseDependencyId(file.filename)
-      if (!parsed || parsed.version === null) return null
-      return {
-        filename: file.filename,
-        version: parsed.version,
-        sizeBytes: parseSizeValue(file.file_size),
-        url: file.urlHosted,
-      } satisfies HubFileCandidate
-    })
-    .filter((item): item is HubFileCandidate => Boolean(item))
-    .sort((a, b) => b.version - a.version)
-}
 
-function parseSizeValue(value: string | null | undefined) {
-  if (!value) return 0
-  const text = String(value).trim().toUpperCase()
-  const match = text.match(/^([\d.]+)\s*(B|KB|MB|GB|TB)?$/)
-  if (!match) return 0
-  const size = Number.parseFloat(match[1])
-  const unit = match[2] || 'B'
-  const map: Record<string, number> = {
-    B: 1,
-    KB: 1024,
-    MB: 1024 * 1024,
-    GB: 1024 * 1024 * 1024,
-    TB: 1024 * 1024 * 1024 * 1024,
-  }
-  return Math.round(size * (map[unit] || 1))
-}
 
-function formatSize(bytes: number) {
-  if (!bytes) return '0 B'
-  const units = ['B', 'KB', 'MB', 'GB', 'TB']
-  const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1)
-  return `${(bytes / Math.pow(1024, index)).toFixed(index > 0 ? 1 : 0)} ${units[index]}`
-}
 
 function chunkArray<T>(list: T[], size: number) {
   const chunks: T[][] = []

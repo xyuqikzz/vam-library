@@ -169,32 +169,33 @@
         </div>
       </div>
 
-      <!-- Pagination Bar -->
-      <div v-if="filteredAndSortedResources.length > 0 && totalPages > 1" class="hub-pagination-bar glass-panel">
-        <button
-          class="page-btn"
-          :disabled="currentPage <= 1 || loading"
-          @click="changePage(currentPage - 1)"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-            <path d="M15 19l-7-7 7-7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
-          <span>上一页</span>
-        </button>
+    </div>
 
-        <span class="page-indicator">第 {{ currentPage }} 页 / 共 {{ totalPages }} 页 (找到 {{ totalFound }} 项)</span>
+    <!-- Keep pagination outside the scroll area so it stays visible without covering cards. -->
+    <div v-if="filteredAndSortedResources.length > 0 && totalPages > 1" class="hub-pagination-bar glass-panel">
+      <button
+        class="page-btn"
+        :disabled="currentPage <= 1 || loading"
+        @click="changePage(currentPage - 1)"
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+          <path d="M15 19l-7-7 7-7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+        <span>上一页</span>
+      </button>
 
-        <button
-          class="page-btn"
-          :disabled="currentPage >= totalPages || loading"
-          @click="changePage(currentPage + 1)"
-        >
-          <span>下一页</span>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-            <path d="M9 5l7 7-7 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
-        </button>
-      </div>
+      <span class="page-indicator">第 {{ currentPage }} 页 / 共 {{ totalPages }} 页 (找到 {{ totalFound }} 项)</span>
+
+      <button
+        class="page-btn"
+        :disabled="currentPage >= totalPages || loading"
+        @click="changePage(currentPage + 1)"
+      >
+        <span>下一页</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+          <path d="M9 5l7 7-7 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+      </button>
     </div>
 
     <!-- Background dim overlay for detail panel -->
@@ -665,6 +666,8 @@
 </template>
 
 <script setup lang="ts">
+import { parseSizeValue as parseSizeStringToBytes } from '@/utils/bytes'
+import { formatDescription } from '@/utils/hubDescription'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -1484,25 +1487,6 @@ function resolveDependencyVersion(dep: any, fallbackVersion: number): number {
   return Number.isFinite(parsedVersion) && parsedVersion > 0 ? parsedVersion : fallbackVersion
 }
 
-// Convert "12.3 MB" to bytes
-function parseSizeStringToBytes(sizeStr: string): number {
-  if (!sizeStr) return 0
-  const trimmed = sizeStr.trim().toUpperCase()
-  const match = trimmed.match(/^([\d.]+)\s*(B|KB|MB|GB|TB)?$/)
-  if (!match) return 0
-  const value = parseFloat(match[1])
-  const unit = match[2] || 'B'
-  const multipliers: Record<string, number> = {
-    'B': 1,
-    'KB': 1024,
-    'MB': 1024 * 1024,
-    'GB': 1024 * 1024 * 1024,
-    'TB': 1024 * 1024 * 1024 * 1024
-  }
-  // 必须取整，否则 Rust 后端 u64 无法反序列化浮点数
-  return Math.round(value * (multipliers[unit] || 1))
-}
-
 function formatBytes(bytes: number): string {
   if (!bytes || bytes === 0) return '0 B'
   const units = ['B', 'KB', 'MB', 'GB']
@@ -1532,14 +1516,6 @@ function isFileInstalled(filename: string): boolean {
 }
 
 // Formatting utils
-function formatDescription(desc: string): string {
-  if (!desc) return ''
-  let formatted = desc.replace(/\r\n|\n/g, '<br/>')
-  formatted = formatted.replace(/\[b\](.*?)\[\/b\]/gi, '<strong>$1</strong>')
-  formatted = formatted.replace(/\[i\](.*?)\[\/i\]/gi, '<em>$1</em>')
-  formatted = formatted.replace(/\[url=(.*?)\](.*?)\[\/url\]/gi, '<a href="$1" target="_blank" class="about-link">$2</a>')
-  return formatted
-}
 
 function formatNumber(num: any): string {
   if (num === null || num === undefined) return '0'
@@ -1594,6 +1570,7 @@ function translateType(type: string): string {
 <style scoped>
 .online-hub-view {
   height: 100%;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
@@ -2060,7 +2037,6 @@ function translateType(type: string): string {
   background: var(--glass-bg);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
-  margin-top: auto;
   flex-shrink: 0;
 }
 

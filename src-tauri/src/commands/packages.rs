@@ -1,4 +1,4 @@
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
@@ -10,6 +10,9 @@ use crate::db::Database;
 use crate::errors::AppError;
 use crate::models::resource::normalize_resource_types;
 use crate::models::var_package::VarPackageSummary;
+use crate::services::dependencies::{
+    load_installed_packages, resolve_installed_dependency_id, InstalledPackage,
+};
 use crate::services::install_context::resolve_install_context;
 
 /// Dashboard statistics for the overview page
@@ -72,14 +75,6 @@ pub struct QuickDeleteResult {
     pub skipped_count: usize,
     pub deleted_file_count: usize,
     pub freed_bytes: u64,
-}
-
-#[derive(Debug, Clone)]
-struct InstalledPackage {
-    id: String,
-    creator: String,
-    name: String,
-    version: i32,
 }
 
 /// Get aggregate dashboard statistics from the database.
@@ -294,6 +289,7 @@ pub async fn list_packages(
     db: State<'_, Database>,
 ) -> Result<Vec<VarPackageSummary>, String> {
     let result = db.with_conn(|conn| {
+        let mut tags_by_package = load_all_package_tags(conn)?;
         let mut stmt = conn
             .prepare(
                 "SELECT p.id, p.creator, p.name, p.version, p.file_path, p.size_bytes, p.resource_types,
@@ -309,7 +305,10 @@ pub async fn list_packages(
             })?;
 
         let mut packages = stmt
-            .query_map([], |row| map_package_summary_row(row, conn))
+            .query_map([], |row| {
+                let id: String = row.get(0)?;
+                map_package_summary_row(row, tags_by_package.remove(&id).unwrap_or_default())
+            })
             .map_err(|e| {
                 crate::errors::AppError::Database(format!("Failed to execute query: {}", e))
             })?
@@ -396,7 +395,8 @@ pub async fn get_package_summary(
                 crate::errors::AppError::Database(format!("Failed to prepare query: {}", e))
             })?;
 
-        match stmt.query_row([package_id], |row| map_package_summary_row(row, conn)) {
+        let tags = load_package_tags(&package_id, conn)?;
+        match stmt.query_row([package_id], |row| map_package_summary_row(row, tags)) {
             Ok(package) => Ok(Some(package)),
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
             Err(e) => Err(crate::errors::AppError::Database(format!(
@@ -563,16 +563,28 @@ fn load_package_tags(
     Ok(tags)
 }
 
+fn load_all_package_tags(conn: &Connection) -> rusqlite::Result<HashMap<String, Vec<String>>> {
+    let mut stmt = conn.prepare("SELECT package_id, tag FROM package_tags ORDER BY tag")?;
+    let rows = stmt.query_map([], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+    })?;
+    let mut tags = HashMap::<String, Vec<String>>::new();
+    for row in rows {
+        let (id, tag) = row?;
+        tags.entry(id).or_default().push(tag);
+    }
+    Ok(tags)
+}
+
 fn map_package_summary_row(
     row: &Row<'_>,
-    conn: &Connection,
+    tags: Vec<String>,
 ) -> rusqlite::Result<VarPackageSummary> {
     let package_id: String = row.get(0)?;
     let resource_types_json: String = row.get(6)?;
     let resource_types: Vec<String> =
         serde_json::from_str(&resource_types_json).unwrap_or_default();
     let resource_types = normalize_resource_types(resource_types);
-    let tags = load_package_tags(&package_id, conn).unwrap_or_default();
 
     Ok(VarPackageSummary {
         id: package_id,
@@ -896,80 +908,6 @@ fn load_package_physical_files(
     let mut seen = HashSet::new();
     files.retain(|(path, _)| seen.insert(normalize_path_key(path)));
     Ok(files)
-}
-
-fn load_installed_packages(conn: &Connection) -> Result<Vec<InstalledPackage>, AppError> {
-    let mut stmt = conn
-        .prepare("SELECT id, creator, name, version FROM packages")
-        .map_err(|e| AppError::Database(e.to_string()))?;
-    let packages = stmt
-        .query_map([], |row| {
-            Ok(InstalledPackage {
-                id: row.get(0)?,
-                creator: row.get(1)?,
-                name: row.get(2)?,
-                version: row.get(3)?,
-            })
-        })
-        .map_err(|e| AppError::Database(e.to_string()))?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| AppError::Database(e.to_string()))?;
-    Ok(packages)
-}
-
-fn resolve_installed_dependency_id(
-    depends_on_id: &str,
-    installed_packages: &[InstalledPackage],
-) -> Option<String> {
-    if let Some(pkg) = installed_packages
-        .iter()
-        .find(|pkg| pkg.id.eq_ignore_ascii_case(depends_on_id))
-    {
-        return Some(pkg.id.clone());
-    }
-
-    let (creator, name, required_version) = parse_dependency_parts(depends_on_id)?;
-    let mut candidates: Vec<&InstalledPackage> = installed_packages
-        .iter()
-        .filter(|pkg| {
-            pkg.creator.eq_ignore_ascii_case(&creator) && pkg.name.eq_ignore_ascii_case(&name)
-        })
-        .collect();
-    candidates.sort_by_key(|pkg| pkg.version);
-
-    if let Some(required) = required_version {
-        candidates
-            .into_iter()
-            .filter(|pkg| pkg.version >= required)
-            .max_by_key(|pkg| pkg.version)
-            .map(|pkg| pkg.id.clone())
-    } else {
-        candidates
-            .into_iter()
-            .max_by_key(|pkg| pkg.version)
-            .map(|pkg| pkg.id.clone())
-    }
-}
-
-fn parse_dependency_parts(depends_on_id: &str) -> Option<(String, String, Option<i32>)> {
-    let parts: Vec<&str> = depends_on_id.split('.').collect();
-    if parts.len() < 2 {
-        return None;
-    }
-
-    let creator = parts[0].to_string();
-    if parts.len() == 2 {
-        return Some((creator, parts[1].to_string(), None));
-    }
-
-    let version_part = parts.last().copied().unwrap_or_default();
-    let name = parts[1..parts.len() - 1].join(".");
-    let required_version = if version_part.eq_ignore_ascii_case("latest") {
-        None
-    } else {
-        version_part.parse::<i32>().ok()
-    };
-    Some((creator, name, required_version))
 }
 
 fn build_trash_path(trash_dir: &Path, original_path: &Path) -> PathBuf {
@@ -1574,6 +1512,28 @@ pub(super) fn base64(data: &[u8]) -> std::string::String {
     }
 
     result
+}
+
+#[cfg(test)]
+mod summary_tests {
+    use super::*;
+
+    #[test]
+    fn bulk_tags_match_single_package_loading_and_keep_sort_order() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE package_tags (package_id TEXT, tag TEXT);
+            INSERT INTO package_tags VALUES ('A.P.1','z'),('B.P.1','other'),('A.P.1','a');",
+        )
+        .unwrap();
+        let tags = load_all_package_tags(&conn).unwrap();
+        assert_eq!(tags["A.P.1"], vec!["a", "z"]);
+        assert_eq!(tags["A.P.1"], load_package_tags("A.P.1", &conn).unwrap());
+        assert_eq!(tags["B.P.1"], vec!["other"]);
+        assert!(!tags.contains_key("missing"));
+        conn.execute("DROP TABLE package_tags", []).unwrap();
+        assert!(load_all_package_tags(&conn).is_err());
+    }
 }
 
 #[cfg(test)]

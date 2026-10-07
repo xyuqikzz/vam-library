@@ -209,24 +209,30 @@ pub fn index_parsed_package(
     pkg: &crate::models::var_package::VarPackage,
 ) -> Result<(), crate::errors::AppError> {
     let types = serde_json::to_string(&pkg.resource_types)?;
-    let meta_json = serde_json::to_string(&pkg.meta)?;
+    let meta_json = pkg.meta.as_ref().map(serde_json::to_string).transpose()?;
     let license = pkg
         .meta
         .as_ref()
         .map(|m| m.license_type.as_str())
         .unwrap_or_default();
-    conn.execute("INSERT INTO packages (id,creator,name,version,file_path,size_bytes,resource_types,meta_json,license_type,scan_time,file_created_time,description,credits,instructions,promotional_link) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15) ON CONFLICT(id) DO UPDATE SET file_path=excluded.file_path,size_bytes=excluded.size_bytes,resource_types=excluded.resource_types,meta_json=excluded.meta_json,license_type=excluded.license_type,description=excluded.description,credits=excluded.credits,instructions=excluded.instructions,promotional_link=excluded.promotional_link,updated_at=datetime('now')",
+    conn.prepare_cached("INSERT INTO packages (id,creator,name,version,file_path,size_bytes,resource_types,meta_json,license_type,scan_time,file_created_time,description,credits,instructions,promotional_link) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15) ON CONFLICT(id) DO UPDATE SET creator=excluded.creator,name=excluded.name,version=excluded.version,file_created_time=excluded.file_created_time,file_path=excluded.file_path,size_bytes=excluded.size_bytes,resource_types=excluded.resource_types,meta_json=excluded.meta_json,license_type=excluded.license_type,description=excluded.description,credits=excluded.credits,instructions=excluded.instructions,promotional_link=excluded.promotional_link,updated_at=datetime('now')")?.execute(
         rusqlite::params![pkg.id,pkg.creator,pkg.name,pkg.version,pkg.file_path,pkg.size_bytes,types,meta_json,license,pkg.scan_time,pkg.created_time,pkg.meta.as_ref().and_then(|m|m.description.as_ref()),pkg.meta.as_ref().and_then(|m|m.credits.as_ref()),pkg.meta.as_ref().and_then(|m|m.instructions.as_ref()),pkg.meta.as_ref().and_then(|m|m.promotional_link.as_ref())])?;
-    conn.execute("INSERT INTO physical_packages (file_path,package_id,size_bytes,modified_time,scan_time) VALUES (?1,?2,?3,?4,?5) ON CONFLICT(file_path) DO UPDATE SET package_id=excluded.package_id,size_bytes=excluded.size_bytes,modified_time=excluded.modified_time,scan_status='ok',last_error=NULL,file_md5=NULL",rusqlite::params![pkg.file_path,pkg.id,pkg.size_bytes,pkg.modified_time,pkg.scan_time])?;
-    conn.execute("DELETE FROM contents WHERE package_id=?1", [&pkg.id])?;
-    conn.execute("DELETE FROM dependencies WHERE package_id=?1", [&pkg.id])?;
+    conn.prepare_cached("INSERT INTO physical_packages (file_path,package_id,size_bytes,modified_time,scan_time) VALUES (?1,?2,?3,?4,?5) ON CONFLICT(file_path) DO UPDATE SET package_id=excluded.package_id,size_bytes=excluded.size_bytes,modified_time=excluded.modified_time,scan_status='ok',last_error=NULL,file_md5=NULL")?.execute(rusqlite::params![pkg.file_path,pkg.id,pkg.size_bytes,pkg.modified_time,pkg.scan_time])?;
+    conn.prepare_cached("DELETE FROM contents WHERE package_id=?1")?
+        .execute([&pkg.id])?;
+    conn.prepare_cached("DELETE FROM dependencies WHERE package_id=?1")?
+        .execute([&pkg.id])?;
     for (name, size) in &pkg.contents {
-        conn.execute("INSERT INTO contents (package_id,file_path,resource_type,size_bytes) VALUES (?1,?2,?3,?4)",rusqlite::params![pkg.id,name,crate::models::resource::ResourceType::from_path(name).as_str(),size])?;
+        conn.prepare_cached("INSERT INTO contents (package_id,file_path,resource_type,size_bytes) VALUES (?1,?2,?3,?4)")?.execute(rusqlite::params![pkg.id,name,crate::models::resource::ResourceType::from_path(name).as_str(),size])?;
     }
     if let Some(meta) = &pkg.meta {
         for id in meta.dependencies.keys() {
-            let version = id.rsplit_once('.').map(|(_, v)| v).unwrap_or("latest");
-            conn.execute("INSERT OR IGNORE INTO dependencies (package_id,depends_on_id,required_version) VALUES (?1,?2,?3)",rusqlite::params![pkg.id,id,version])?;
+            let version = id
+                .split_once('.')
+                .and_then(|(_, name)| name.rsplit_once('.'))
+                .map(|(_, v)| v)
+                .unwrap_or("latest");
+            conn.prepare_cached("INSERT OR IGNORE INTO dependencies (package_id,depends_on_id,required_version) VALUES (?1,?2,?3)")?.execute(rusqlite::params![pkg.id,id,version])?;
         }
     }
     Ok(())
@@ -355,6 +361,86 @@ pub fn remove_empty_dirs_excluding(
 #[cfg(test)]
 pub mod tests {
     use super::*;
+
+    #[test]
+    fn shared_indexing_preserves_import_times_tags_and_replaces_metadata() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        crate::db::schema::create_tables(&conn).unwrap();
+        let mut pkg = crate::models::var_package::VarPackage {
+            id: "Author.Package.1".into(), creator: "Author".into(), name: "Package".into(), version: 1,
+            file_path: "fixture.var".into(), size_bytes: 123, resource_types: vec!["scene".into()],
+            contents: vec![("Saves/scene/old.json".into(), 12)], created_time: "old-created".into(),
+            modified_time: "old-modified".into(), scan_time: "first-import".into(),
+            meta: Some(serde_json::from_value(serde_json::json!({"description":"old", "dependencies":{"Author.Sub.Asset.12":{},"Other.Asset":{}}})).unwrap()),
+        };
+        index_parsed_package(&conn, &pkg).unwrap();
+        assert_eq!(conn.query_row("SELECT required_version FROM dependencies WHERE depends_on_id='Author.Sub.Asset.12'", [], |row| row.get::<_, String>(0)).unwrap(), "12");
+        assert_eq!(
+            conn.query_row(
+                "SELECT required_version FROM dependencies WHERE depends_on_id='Other.Asset'",
+                [],
+                |row| row.get::<_, String>(0)
+            )
+            .unwrap(),
+            "latest"
+        );
+        conn.execute(
+            "INSERT INTO package_tags (package_id,tag) VALUES (?1,'keep')",
+            [&pkg.id],
+        )
+        .unwrap();
+        conn.execute("UPDATE physical_packages SET file_md5='stale',scan_status='failed',last_error='old error'", []).unwrap();
+        pkg.scan_time = "rescan".into();
+        pkg.created_time = "new-created".into();
+        pkg.contents = vec![("Saves/scene/new.json".into(), 24)];
+        pkg.meta = None;
+        index_parsed_package(&conn, &pkg).unwrap();
+        assert_eq!(
+            conn.query_row("SELECT scan_time FROM packages", [], |r| r
+                .get::<_, String>(0))
+                .unwrap(),
+            "first-import"
+        );
+        assert_eq!(
+            conn.query_row("SELECT scan_time FROM physical_packages", [], |r| r
+                .get::<_, String>(0))
+                .unwrap(),
+            "first-import"
+        );
+        assert_eq!(
+            conn.query_row("SELECT file_created_time FROM packages", [], |r| r
+                .get::<_, String>(0))
+                .unwrap(),
+            "new-created"
+        );
+        assert_eq!(
+            conn.query_row("SELECT tag FROM package_tags", [], |r| r
+                .get::<_, String>(0))
+                .unwrap(),
+            "keep"
+        );
+        assert_eq!(
+            conn.query_row("SELECT file_path FROM contents", [], |r| r
+                .get::<_, String>(0))
+                .unwrap(),
+            "Saves/scene/new.json"
+        );
+        assert_eq!(
+            conn.query_row("SELECT count(*) FROM dependencies", [], |r| r
+                .get::<_, i64>(0))
+                .unwrap(),
+            0
+        );
+        assert!(conn
+            .query_row(
+                "SELECT meta_json IS NULL AND description IS NULL FROM packages",
+                [],
+                |r| r.get::<_, bool>(0)
+            )
+            .unwrap());
+        assert!(conn.query_row("SELECT file_md5 IS NULL AND last_error IS NULL AND scan_status='ok' FROM physical_packages", [], |r| r.get::<_, bool>(0)).unwrap());
+    }
+
     pub struct TestDir(pub PathBuf);
     impl TestDir {
         pub fn new() -> Self {

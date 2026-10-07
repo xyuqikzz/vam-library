@@ -89,169 +89,19 @@ pub async fn scan_vam_directory(
 
         remove_missing_physical_packages(&tx, &scan_result.current_file_paths)?;
 
+        for pkg in &packages {
+            crate::services::resource_files::index_parsed_package(&tx, pkg).map_err(|e| {
+                crate::errors::AppError::Database(format!("Failed to index package '{}': {}", pkg.id, e))
+            })?;
+        }
         {
-            let mut upsert_package = tx
-                .prepare_cached(
-                    "INSERT INTO packages (
-                    id, creator, name, version, file_path, size_bytes,
-                    license_type, description, credits, instructions,
-                    promotional_link, meta_json, resource_types, file_created_time, scan_time
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
-                ON CONFLICT(id) DO UPDATE SET
-                    creator = excluded.creator,
-                    name = excluded.name,
-                    version = excluded.version,
-                    file_path = excluded.file_path,
-                    size_bytes = excluded.size_bytes,
-                    license_type = excluded.license_type,
-                    description = excluded.description,
-                    credits = excluded.credits,
-                    instructions = excluded.instructions,
-                    promotional_link = excluded.promotional_link,
-                    meta_json = excluded.meta_json,
-                    resource_types = excluded.resource_types,
-                    file_created_time = excluded.file_created_time,
-                    updated_at = datetime('now')",
-                )
-                .map_err(|e| crate::errors::AppError::Database(e.to_string()))?;
-            let mut upsert_physical = tx
-                .prepare_cached(
-                    "INSERT OR REPLACE INTO physical_packages (
-                    file_path, package_id, size_bytes, modified_time, scan_time, scan_status, last_error
-                 ) VALUES (?1, ?2, ?3, ?4, ?5, 'ok', NULL)",
-                )
-                .map_err(|e| crate::errors::AppError::Database(e.to_string()))?;
-            let mut clear_contents = tx
-                .prepare_cached("DELETE FROM contents WHERE package_id = ?1")
-                .map_err(|e| crate::errors::AppError::Database(e.to_string()))?;
-            let mut clear_dependencies = tx
-                .prepare_cached("DELETE FROM dependencies WHERE package_id = ?1")
-                .map_err(|e| crate::errors::AppError::Database(e.to_string()))?;
-            let mut insert_content = tx
-                .prepare_cached(
-                    "INSERT OR IGNORE INTO contents (package_id, file_path, resource_type, size_bytes)
-                     VALUES (?1, ?2, ?3, ?4)",
-                )
-                .map_err(|e| crate::errors::AppError::Database(e.to_string()))?;
-            let mut insert_dependency = tx
-                .prepare_cached(
-                    "INSERT OR IGNORE INTO dependencies (package_id, depends_on_id, required_version)
-                         VALUES (?1, ?2, ?3)",
-                )
-                .map_err(|e| crate::errors::AppError::Database(e.to_string()))?;
-            let mut upsert_failure = tx
-                .prepare_cached(
-                    "INSERT OR REPLACE INTO physical_packages (
-                    file_path, package_id, size_bytes, modified_time, scan_time, scan_status, last_error
-                 ) VALUES (?1, ?2, ?3, ?4, ?5, 'failed', ?6)",
-                )
-                .map_err(|e| crate::errors::AppError::Database(e.to_string()))?;
-
-            for pkg in &packages {
-                let resource_types_json =
-                    serde_json::to_string(&pkg.resource_types).unwrap_or_else(|_| "[]".to_string());
-
-                let meta_json = pkg
-                    .meta
-                    .as_ref()
-                    .and_then(|m| serde_json::to_string(m).ok());
-
-                let description = pkg.meta.as_ref().and_then(|m| m.description.clone());
-                let credits = pkg.meta.as_ref().and_then(|m| m.credits.clone());
-                let instructions = pkg.meta.as_ref().and_then(|m| m.instructions.clone());
-                let promotional_link = pkg.meta.as_ref().and_then(|m| m.promotional_link.clone());
-                let license_type = pkg
-                    .meta
-                    .as_ref()
-                    .map(|m| m.license_type.clone())
-                    .unwrap_or_default();
-
-                upsert_package
-                    .execute(rusqlite::params![
-                        pkg.id,
-                        pkg.creator,
-                        pkg.name,
-                        pkg.version,
-                        pkg.file_path,
-                        pkg.size_bytes,
-                        license_type,
-                        description,
-                        credits,
-                        instructions,
-                        promotional_link,
-                        meta_json,
-                        resource_types_json,
-                        pkg.created_time,
-                        pkg.scan_time,
-                    ])
-                    .map_err(|e| {
-                        crate::errors::AppError::Database(format!(
-                            "Failed to insert package '{}': {}",
-                            pkg.id, e
-                        ))
-                    })?;
-
-                upsert_physical
-                    .execute(rusqlite::params![
-                        pkg.file_path,
-                        pkg.id,
-                        pkg.size_bytes as i64,
-                        pkg.modified_time,
-                        pkg.scan_time,
-                    ])
-                    .map_err(|e| {
-                        crate::errors::AppError::Database(format!(
-                            "Failed to insert physical package path: {}",
-                            e
-                        ))
-                    })?;
-
-                clear_contents.execute([&pkg.id]).map_err(|e| {
-                    crate::errors::AppError::Database(format!(
-                        "Failed to clear content entries for '{}': {}",
-                        pkg.id, e
-                    ))
-                })?;
-
-                clear_dependencies.execute([&pkg.id]).map_err(|e| {
-                    crate::errors::AppError::Database(format!(
-                        "Failed to clear dependency entries for '{}': {}",
-                        pkg.id, e
-                    ))
-                })?;
-
-                // 重新扫描同一个包时先清空旧明细，避免文件数重复累加。
-                for (content_path, size) in &pkg.contents {
-                    let rt = crate::models::resource::ResourceType::from_path(content_path);
-                    insert_content
-                        .execute(rusqlite::params![pkg.id, content_path, rt.as_str(), size])
-                        .map_err(|e| {
-                            crate::errors::AppError::Database(format!(
-                                "Failed to insert content entry: {}",
-                                e
-                            ))
-                        })?;
-                }
-                if let Some(meta) = &pkg.meta {
-                    for (dep_id, _dep_val) in &meta.dependencies {
-                        let parts: Vec<&str> = dep_id.splitn(3, '.').collect();
-                        let required_version = if parts.len() == 3 {
-                            parts[2].to_string()
-                        } else {
-                            "latest".to_string()
-                        };
-
-                        insert_dependency
-                            .execute(rusqlite::params![pkg.id, dep_id, required_version])
-                            .map_err(|e| {
-                                crate::errors::AppError::Database(format!(
-                                    "Failed to insert dependency: {}",
-                                    e
-                                ))
-                            })?;
-                    }
-                }
-            }
+            let mut upsert_failure = tx.prepare_cached(
+                "INSERT INTO physical_packages (file_path, package_id, size_bytes, modified_time, scan_time, scan_status, last_error)
+                 VALUES (?1, ?2, ?3, ?4, ?5, 'failed', ?6)
+                 ON CONFLICT(file_path) DO UPDATE SET package_id=excluded.package_id,
+                    size_bytes=excluded.size_bytes, modified_time=excluded.modified_time,
+                    scan_status='failed', last_error=excluded.last_error, file_md5=NULL",
+            )?;
 
             for failure in &scan_result.failures {
                 let package_id = Path::new(&failure.file_path)
@@ -367,17 +217,20 @@ fn remove_missing_physical_packages(
         return Ok(());
     }
 
-    let placeholders = std::iter::repeat("?")
-        .take(current_file_paths.len())
-        .collect::<Vec<_>>()
-        .join(",");
-    let sql = format!(
-        "DELETE FROM physical_packages WHERE file_path NOT IN ({})",
-        placeholders
-    );
-    let params = rusqlite::params_from_iter(current_file_paths.iter());
-    tx.execute(&sql, params)
-        .map_err(|e| crate::errors::AppError::Database(e.to_string()))?;
+    // A large library can exceed SQLite's bound-parameter limit. Compare paths
+    // in memory, then reuse a single indexed DELETE inside the scan transaction.
+    let current: std::collections::HashSet<&str> =
+        current_file_paths.iter().map(String::as_str).collect();
+    let mut query = tx.prepare("SELECT file_path FROM physical_packages")?;
+    let paths = query
+        .query_map([], |row| row.get::<_, String>(0))?
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut delete = tx.prepare("DELETE FROM physical_packages WHERE file_path = ?1")?;
+    for path in paths {
+        if !current.contains(path.as_str()) {
+            delete.execute([path])?;
+        }
+    }
     Ok(())
 }
 
@@ -397,4 +250,45 @@ pub async fn validate_vam_directory(path: String) -> Result<bool, String> {
     let has_saves = root.join("Saves").exists();
 
     Ok(has_addon_packages && has_custom && has_saves)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn large_scan_removes_only_missing_paths_without_sql_parameter_limit() {
+        let mut conn = rusqlite::Connection::open_in_memory().unwrap();
+        crate::db::schema::create_tables(&conn).unwrap();
+        let paths: Vec<_> = (0..40_000)
+            .map(|i| format!("AddonPackages/A.P.{i}.var"))
+            .collect();
+        for path in [&paths[0], &paths[39_999], &"stale.var".to_string()] {
+            conn.execute("INSERT INTO physical_packages (file_path,package_id,size_bytes,scan_time) VALUES (?1,'A.P.1',1,'original')", [path]).unwrap();
+        }
+        let tx = conn.transaction().unwrap();
+        remove_missing_physical_packages(&tx, &paths).unwrap();
+        assert_eq!(
+            tx.query_row("SELECT count(*) FROM physical_packages", [], |r| r
+                .get::<_, i64>(0))
+                .unwrap(),
+            2
+        );
+        assert_eq!(
+            tx.query_row(
+                "SELECT count(*) FROM physical_packages WHERE scan_time='original'",
+                [],
+                |r| r.get::<_, i64>(0)
+            )
+            .unwrap(),
+            2
+        );
+        remove_missing_physical_packages(&tx, &[]).unwrap();
+        assert_eq!(
+            tx.query_row("SELECT count(*) FROM physical_packages", [], |r| r
+                .get::<_, i64>(0))
+                .unwrap(),
+            0
+        );
+    }
 }

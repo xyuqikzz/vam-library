@@ -313,6 +313,7 @@
 </template>
 
 <script setup lang="ts">
+import { formatSize } from '@/utils/bytes'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { invoke } from '@tauri-apps/api/core'
@@ -613,12 +614,6 @@ function resetWizard() {
 
 function fileName(path: string) { return path.split(/[\\/]/).pop() || path }
 
-function formatSize(bytes: number): string {
-  if (bytes === 0) return '0 B'
-  const units = ['B', 'KB', 'MB', 'GB', 'TB']
-  const i = Math.floor(Math.log(bytes) / Math.log(1024))
-  return `${(bytes / Math.pow(1024, i)).toFixed(i > 0 ? 1 : 0)} ${units[i]}`
-}
 </script>
 
 <style scoped>

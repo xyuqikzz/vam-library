@@ -27,6 +27,9 @@ try {
         if (-not ($browser.Fields | Where-Object Name -EQ $name)) { throw "Missing field: $name" }
     }
     Write-Output 'PASS: 15 game binary contract checks'
+    $packageSize = $assembly.MainModule.GetType('MVR.FileManagement.VarPackage').Properties | Where-Object Name -EQ 'Size'
+    if (-not $packageSize -or -not $packageSize.GetMethod.IsPublic -or $packageSize.PropertyType.FullName -ne 'System.Int64') { throw 'Package size API contract changed' }
+    Write-Output 'PASS: public 64-bit package size API contract'
     $controller = $assembly.MainModule.GetType('SuperController')
     foreach ($name in @('Start','Load','RescanPackages','get_isLoading','get_LoadedSceneName')) {
         $methods = @($controller.Methods | Where-Object Name -EQ $name)

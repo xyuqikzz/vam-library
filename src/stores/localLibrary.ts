@@ -1,7 +1,8 @@
-import { computed, ref } from 'vue'
+import { computed, onScopeDispose, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
+import { createEventListeners } from '@/utils/eventListeners'
 import { useAppStore } from './app'
 import type { CorruptedPackage, DashboardStats, PackageDisplayItem, PackageFolderEntry } from '@/types/package'
 import type { DependencyGraphData } from '@/types/dependency'
@@ -68,7 +69,6 @@ export const useLocalLibraryStore = defineStore('localLibrary', () => {
   const revision = ref(0)
   const error = ref<string | null>(null)
 
-  let unlistenIndexChanged: (() => void) | null = null
   let refreshTimer: ReturnType<typeof setTimeout> | null = null
   let refreshToken = 0
   let pendingChange: LibraryIndexChangedPayload | null = null
@@ -78,23 +78,28 @@ export const useLocalLibraryStore = defineStore('localLibrary', () => {
   const recentPackages = computed(() => (
     [...packages.value]
       .sort((a, b) => packageTime(b.scan_time) - packageTime(a.scan_time))
-      .slice(0, 5)
+      .slice(0, 12)
   ))
 
-  async function startListeners() {
-    if (unlistenIndexChanged) return
-    unlistenIndexChanged = await listen<LibraryIndexChangedPayload>('library-index-changed', (event) => {
-      const payload = event.payload
-      revision.value = payload.revision
-      scheduleRefresh(payload)
-    })
-  }
+  const listeners = createEventListeners([() => listen<LibraryIndexChangedPayload>('library-index-changed', (event) => {
+    const payload = event.payload
+    revision.value = payload.revision
+    scheduleRefresh(payload)
+  })])
+
+  function startListeners() { return listeners.start() }
+
+  onScopeDispose(stopListeners)
 
   function stopListeners() {
-    if (unlistenIndexChanged) {
-      unlistenIndexChanged()
-      unlistenIndexChanged = null
-    }
+    listeners.stop()
+    cancelPendingRefresh()
+  }
+
+  function cancelPendingRefresh() {
+    // Invalidate requests already in flight as well as the debounced event.
+    refreshToken += 1
+    pendingChange = null
     if (refreshTimer) {
       clearTimeout(refreshTimer)
       refreshTimer = null
@@ -164,11 +169,8 @@ export const useLocalLibraryStore = defineStore('localLibrary', () => {
       void refreshSecondaryStartupData(token)
     } catch (err) {
       if (token !== refreshToken) return
-      packages.value = []
-      allTags.value = []
-      packageFolders.value = []
+      resetState('error')
       error.value = String(err)
-      state.value = 'error'
     }
   }
 
@@ -203,19 +205,31 @@ export const useLocalLibraryStore = defineStore('localLibrary', () => {
       return
     }
 
-    if (change.reason === 'package_indexed' && change.changed_package_ids.length > 0) {
-      await refreshIndexedPackages(change.changed_package_ids)
+    if (!['package_indexed', 'tags_changed'].includes(change.reason) || change.changed_package_ids.length === 0) {
+      await refreshAll('refreshing')
       return
     }
 
-    if (change.reason === 'tags_changed' && change.changed_package_ids.length > 0) {
-      await refreshChangedPackages(change.changed_package_ids)
-      await refreshTags()
-      markReady()
-      return
+    const token = refreshToken
+    error.value = null
+    try {
+      await refreshChangedPackages(change.changed_package_ids, token)
+      if (token !== refreshToken) return
+      if (change.reason === 'package_indexed') {
+        await Promise.all([
+          refreshDashboard(token),
+          refreshDependencies(token),
+          refreshTags(token),
+          refreshFolders(token),
+        ])
+      } else {
+        await refreshTags(token)
+      }
+      if (token === refreshToken) markReady()
+    } catch {
+      // A failed lookup is not evidence that a package was deleted.
+      if (token === refreshToken) await refreshAll('refreshing')
     }
-
-    await refreshAll('refreshing')
   }
 
   async function refreshAll(nextState: LocalLibraryState = 'refreshing') {
@@ -254,77 +268,57 @@ export const useLocalLibraryStore = defineStore('localLibrary', () => {
       markReady()
     } catch (err) {
       if (token !== refreshToken) return
-      packages.value = []
-      dashboardStats.value = emptyDashboardStats()
-      dependencyGraph.value = emptyDependencyGraph()
-      missingDependencies.value = []
-      allTags.value = []
-      packageFolders.value = []
+      resetState('error')
       error.value = String(err)
-      state.value = 'error'
     }
   }
 
-  async function refreshIndexedPackages(packageIds: string[]) {
-    state.value = 'indexing'
-    error.value = null
-    try {
-      await refreshChangedPackages(packageIds)
-      await Promise.all([
-        refreshDashboard(),
-        refreshDependencies(),
-        refreshTags(),
-        refreshFolders(),
-      ])
-      markReady()
-    } catch (err) {
-      error.value = String(err)
-      await refreshAll('refreshing')
-    }
-  }
-
-  async function refreshChangedPackages(packageIds: string[]) {
+  async function refreshChangedPackages(packageIds: string[], token: number) {
     const uniqueIds = [...new Set(packageIds)]
     const summaries = await Promise.all(uniqueIds.map(packageId => (
-      invoke<PackageDisplayItem | null>('get_package_summary', { packageId }).catch(() => null)
+      invoke<PackageDisplayItem | null>('get_package_summary', { packageId })
     )))
+    if (token !== refreshToken) return
 
-    const nextPackages = [...packages.value]
+    const nextPackages = new Map(packages.value.map(pkg => [pkg.id, pkg]))
     for (let index = 0; index < uniqueIds.length; index += 1) {
       const packageId = uniqueIds[index]
       const summary = summaries[index]
-      const existingIndex = nextPackages.findIndex(pkg => pkg.id === packageId)
       if (summary) {
-        if (existingIndex >= 0) {
-          nextPackages[existingIndex] = summary
-        } else {
-          nextPackages.push(summary)
-        }
-      } else if (existingIndex >= 0) {
-        nextPackages.splice(existingIndex, 1)
+        nextPackages.set(packageId, summary)
+      } else {
+        nextPackages.delete(packageId)
       }
     }
-    packages.value = nextPackages
+    packages.value = [...nextPackages.values()]
   }
 
-  async function refreshDashboard() {
-    dashboardStats.value = await invoke<DashboardStats>('get_dashboard_stats')
-    missingDependencies.value = await invoke<MissingDependency[]>('find_missing_dependencies').catch(() => [])
-    corruptedPackages.value = await invoke<CorruptedPackage[]>('find_corrupted_packages').catch(() => [])
+  async function refreshDashboard(token: number) {
+    const [stats, missing, corrupted] = await Promise.all([
+      invoke<DashboardStats>('get_dashboard_stats'),
+      invoke<MissingDependency[]>('find_missing_dependencies').catch(() => []),
+      invoke<CorruptedPackage[]>('find_corrupted_packages').catch(() => []),
+    ])
+    if (token !== refreshToken) return
+    dashboardStats.value = stats
+    missingDependencies.value = missing
+    corruptedPackages.value = corrupted
   }
 
-  async function refreshDependencies() {
+  async function refreshDependencies(token: number) {
     const graph = await invoke<DependencyGraphData>('get_dependency_graph').catch(() => emptyDependencyGraph())
-    dependencyGraph.value = graph
+    if (token === refreshToken) dependencyGraph.value = graph
   }
 
-  async function refreshTags() {
-    allTags.value = await invoke<string[]>('list_all_tags').catch(() => [])
+  async function refreshTags(token: number) {
+    const tags = await invoke<string[]>('list_all_tags').catch(() => [])
+    if (token === refreshToken) allTags.value = tags
   }
 
-  async function refreshFolders() {
+  async function refreshFolders(token: number) {
     const appStore = useAppStore()
-    packageFolders.value = await loadPackageFolders(appStore.vamRootPath)
+    const folders = await loadPackageFolders(appStore.vamRootPath)
+    if (token === refreshToken) packageFolders.value = folders
   }
 
   async function loadPackageFolders(vamRootPath: string | null): Promise<string[]> {
@@ -341,6 +335,7 @@ export const useLocalLibraryStore = defineStore('localLibrary', () => {
   }
 
   function resetState(nextState: LocalLibraryState = 'idle') {
+    cancelPendingRefresh()
     packages.value = []
     dashboardStats.value = emptyDashboardStats()
     dependencyGraph.value = emptyDependencyGraph()

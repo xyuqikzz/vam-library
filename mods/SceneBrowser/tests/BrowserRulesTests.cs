@@ -50,6 +50,18 @@ class BrowserRulesTests
         Check(BrowserRules.CompareImported(1000, 1000, "alice", "a", "1", "ALICE", "z", "2") < 0, "Same-package scenes use scene-name tie break");
         Check(BrowserRules.CompareImported(null, null, "A", "a", "1", "B", "a", "2") < 0, "Unindexed scenes retain deterministic author sorting");
         Check(BrowserRules.CompareImported(1000, 1000, "A", "a", "1", "A", "a", "2") < 0, "Equal timestamps and names use full path");
+        Check(BrowserRules.CompareSize(1000, 100, true, "Z", "z", "1", "A", "a", "2") < 0, "Largest package precedes author and scene name");
+        Check(BrowserRules.CompareSize(100, 1000, false, "Z", "z", "1", "A", "a", "2") < 0, "Smallest package precedes author and scene name");
+        Check(BrowserRules.CompareSize(long.MaxValue, 0, true, "A", "a", "1", "A", "a", "2") < 0, "Large package sizes do not overflow descending comparison");
+        Check(BrowserRules.CompareSize(0, long.MaxValue, false, "A", "a", "1", "A", "a", "2") < 0, "Zero-byte packages sort first ascending without overflow");
+        foreach (bool descending in new[] { false, true })
+        {
+            Check(BrowserRules.CompareSize(null, 0, descending, null, "a", "1", "Z", "z", "2") > 0, "Loose scenes follow even empty packages in both directions");
+            Check(BrowserRules.CompareSize(0, null, descending, "Z", "z", "1", null, "a", "2") < 0, "Known package size precedes loose scenes in both directions");
+            Check(BrowserRules.CompareSize(100, 100, descending, "alice", "a", "1", "ALICE", "z", "2") < 0, "Same-package scenes retain name ordering in both directions");
+            Check(BrowserRules.CompareSize(100, 100, descending, "A", "a", "1", "A", "a", "2") < 0, "Equal size and scene name use deterministic path ordering");
+            Check(BrowserRules.CompareSize(null, null, descending, null, "a", "1", null, "z", "2") < 0, "Loose scenes retain deterministic ordering");
+        }
         string timesFile = Path.Combine(Path.GetTempPath(), "VamImportTimes-" + Guid.NewGuid().ToString("N") + ".tsv");
         try
         {

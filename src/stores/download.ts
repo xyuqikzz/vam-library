@@ -1,7 +1,8 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, onScopeDispose } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
+import { createEventListeners } from '@/utils/eventListeners'
 
 export interface DownloadItem {
   id: string
@@ -42,9 +43,9 @@ export const useDownloadStore = defineStore('download', () => {
   const queue = ref<DownloadItem[]>([])
   const loading = ref(false)
   
-  // Tauri event unlisteners
-  let unlistenProgress: (() => void) | null = null
-  let unlistenQueueUpdated: (() => void) | null = null
+  let queueRequest: Promise<void> | null = null
+  let refreshAgain = false
+  let queueGeneration = 0
   
   // ── Computed ──────────────────────────────────────────────
   const activeDownloads = computed(() => {
@@ -77,18 +78,30 @@ export const useDownloadStore = defineStore('download', () => {
   const totalWastedBytesSaved = ref(0)
   
   // ── Actions ────────────────────────────────────────────────
-  async function fetchQueue() {
+  function fetchQueue(): Promise<void> {
+    refreshAgain = true
+    if (queueRequest) return queueRequest
+    const generation = queueGeneration
     loading.value = true
-    try {
-      const q = await invoke<DownloadItem[]>('get_download_queue')
-      queue.value = q || []
-    } catch (e) {
-      console.error('Failed to fetch download queue:', e)
-    } finally {
-      loading.value = false
-    }
+    queueRequest = (async () => {
+      do {
+        refreshAgain = false
+        try {
+          const result = await invoke<DownloadItem[]>('get_download_queue')
+          if (generation === queueGeneration && !refreshAgain) queue.value = result || []
+        } catch (error) {
+          console.error('Failed to fetch download queue:', error)
+        }
+      } while (generation === queueGeneration && refreshAgain)
+    })().finally(() => {
+      if (generation === queueGeneration) {
+        loading.value = false
+        queueRequest = null
+      }
+    })
+    return queueRequest
   }
-  
+
   async function addItems(items: Omit<DownloadItem, 'downloaded_bytes' | 'progress' | 'speed_bytes_per_sec' | 'status' | 'error_msg' | 'added_at' | 'final_path' | 'temp_path' | 'install_mode' | 'indexed'>[]) {
     const preparedItems = items.map(item => ({
       ...item,
@@ -122,74 +135,39 @@ export const useDownloadStore = defineStore('download', () => {
     }
   }
   
-  async function pauseTask(id: string) {
-    try {
-      await invoke('pause_download', { id })
-      await fetchQueue()
-    } catch (e) {
-      console.error('Failed to pause download:', e)
+  async function runQueueCommand(command: string, ids: (string | undefined)[] = [undefined]) {
+    for (const id of ids) {
+      try {
+        await invoke(command, id === undefined ? undefined : { id })
+      } catch (error) {
+        console.error(`Failed to ${command}:`, error)
+      }
     }
+    if (ids.length) await fetchQueue()
   }
-  
-  async function resumeTask(id: string) {
-    try {
-      await invoke('resume_download', { id })
-      await fetchQueue()
-    } catch (e) {
-      console.error('Failed to resume download:', e)
-    }
+
+  function pauseTask(id: string) { return runQueueCommand('pause_download', [id]) }
+  function resumeTask(id: string) { return runQueueCommand('resume_download', [id]) }
+  function cancelTask(id: string) { return runQueueCommand('cancel_download', [id]) }
+  function retryTask(id: string) { return runQueueCommand('retry_download', [id]) }
+  function clearCompleted() { return runQueueCommand('clear_completed_downloads') }
+
+  function pauseAll() {
+    return runQueueCommand('pause_download', queue.value
+      .filter(item => item.status === 'Downloading' || item.status === 'Pending').map(item => item.id))
   }
-  
-  async function cancelTask(id: string) {
-    try {
-      await invoke('cancel_download', { id })
-      await fetchQueue()
-    } catch (e) {
-      console.error('Failed to cancel download:', e)
-    }
+
+  function resumeAll() {
+    return runQueueCommand('resume_download', queue.value
+      .filter(item => item.status === 'Paused' || item.status === 'Failed').map(item => item.id))
   }
-  
-  async function retryTask(id: string) {
-    try {
-      await invoke('retry_download', { id })
-      await fetchQueue()
-    } catch (e) {
-      console.error('Failed to retry download:', e)
-    }
-  }
-  
-  async function clearCompleted() {
-    try {
-      await invoke('clear_completed_downloads')
-      await fetchQueue()
-    } catch (e) {
-      console.error('Failed to clear completed:', e)
-    }
-  }
-  
-  async function pauseAll() {
-    const active = queue.value.filter(i => i.status === 'Downloading' || i.status === 'Pending')
-    for (const item of active) {
-      await pauseTask(item.id)
-    }
-  }
-  
-  async function resumeAll() {
-    const paused = queue.value.filter(i => i.status === 'Paused' || i.status === 'Failed')
-    for (const item of paused) {
-      await resumeTask(item.id)
-    }
-  }
-  
+
   // ── Setup Listeners ────────────────────────────────────────
-  async function startListeners() {
-    // 1. Queue updated event
-    unlistenQueueUpdated = await listen('download-queue-updated', () => {
-      fetchQueue()
-    })
+  const listeners = createEventListeners([
+    () => listen('download-queue-updated', () => { void fetchQueue() }),
     
     // 2. Progress event (extremely fast updates, we update in-place for performance)
-    unlistenProgress = await listen<ProgressPayload>('download-progress', (event) => {
+    () => listen<ProgressPayload>('download-progress', (event) => {
       const payload = event.payload
       if (!payload) return
       
@@ -212,19 +190,20 @@ export const useDownloadStore = defineStore('download', () => {
           item.status = 'Downloading'
         }
       }
-    })
-  }
-  
+    }),
+  ])
+
+  function startListeners() { return listeners.start() }
+
   function stopListeners() {
-    if (unlistenQueueUpdated) {
-      unlistenQueueUpdated()
-      unlistenQueueUpdated = null
-    }
-    if (unlistenProgress) {
-      unlistenProgress()
-      unlistenProgress = null
-    }
+    listeners.stop()
+    queueGeneration += 1
+    queueRequest = null
+    refreshAgain = false
+    loading.value = false
   }
+
+  onScopeDispose(stopListeners)
   
   return {
     queue,

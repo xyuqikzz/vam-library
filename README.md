@@ -269,6 +269,22 @@ npm run build
 npm run tauri:build
 ```
 
+### 测试
+
+```bash
+# 前端回归：排序、异步状态、订阅清理、Hub 解析及富文本安全（模拟 Tauri IPC）
+npm test
+
+# Rust 单元与集成测试；需要本地游戏文件的测试默认忽略
+cargo test --locked --manifest-path src-tauri/Cargo.toml
+```
+
+前端测试使用 Node.js 22.22.2+（22 LTS 分支，与 CI 一致），也支持 Node.js 24.15+ / 26+；无需启动桌面应用。
+
+Hub 描述保留普通 HTML 和 BBCode，经 DOMPurify 清理后显示；脚本、事件属性、危险链接和页面覆盖样式不会进入界面。jsdom 仅用于测试这一边界，不进入桌面运行包。
+
+扫描需要完整读取目录清单，目录读取失败时保留已有索引并报告错误；大资源库不再受单条清理 SQL 的参数数量限制。设置采用完整文件替换写入，损坏的 JSON 会报告错误，不会在修改实例或登录信息时静默重置。
+
 ### 常用脚本
 
 | 命令 | 说明 |

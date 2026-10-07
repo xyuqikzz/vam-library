@@ -55,6 +55,9 @@ jobs:
       - name: Type-check and build frontend
         run: npm run build
 
+      - name: Test frontend logic
+        run: npm test
+
       # The ignored game integration test requires proprietary local VaM files.
       # CI tests the app and packages the already committed scene-browser DLL.
       - name: Test Rust backend
