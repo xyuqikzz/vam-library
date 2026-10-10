@@ -1,4 +1,6 @@
+import { uiEn } from '../ui'
 export default {
+  ui: uiEn,
   gameContent: {
     sceneActions: 'Launch scene & extract characters', launchScene: 'Launch scene', launchingScene: 'Launching scene…',
     extractPreset: 'Extract character preset',
@@ -125,6 +127,7 @@ export default {
 
   // ── Sidebar ────────────────────────────────────────────────────
   sidebar: {
+    short: uiEn.short,
     ingestion: 'Quick Import',
     browse: 'BROWSE',
     resources: 'RESOURCES',
@@ -811,6 +814,7 @@ export default {
 
   // ── Common ─────────────────────────────────────────────────────
   common: {
+    processing: 'Processing…',
     ok: 'OK',
     cancel: 'Cancel',
     save: 'Save',

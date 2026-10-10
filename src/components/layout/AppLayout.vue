@@ -45,6 +45,7 @@
     <div class="bg-gradient-overlay" aria-hidden="true" />
     <!-- Toast notifications -->
     <Toast ref="toastEl" />
+    <ConfirmHost />
     <ExternalImportPrompt :ready="startupReady" />
   </div>
 </template>
@@ -60,6 +61,7 @@ import { useI18n } from 'vue-i18n'
 import AppSidebar from './AppSidebar.vue'
 import AppToolbar from './AppToolbar.vue'
 import Toast from '@/components/common/Toast.vue'
+import ConfirmHost from '@/components/ui/ConfirmHost.vue'
 import ExternalImportPrompt from '@/components/ExternalImportPrompt.vue'
 
 const appStore = useAppStore()

@@ -188,6 +188,28 @@
   --z-modal: 500;
   --z-overlay: 600;
   --z-toast: 700;
+
+  /* Detailed component tokens from UI spec sections 3–6. */
+  --color-error-surface-active: #451f1c;
+  --color-error-subtle: rgba(255, 122, 110, 0.08);
+  --color-error-ink: #2a0b08;
+  --color-error-border: #4a2522;
+  --color-destructive: #c8372b;
+  --color-on-destructive: #ffffff;
+  --color-warning-subtle: rgba(245, 196, 81, 0.08);
+  --bg-input-disabled: #161618;
+  --bg-image-hover: rgba(10, 10, 11, 0.42);
+  --text-image-placeholder: rgba(255, 255, 255, 0.16);
+  --border-control: #3a3a3f;
+  --border-menu: rgba(255, 255, 255, 0.06);
+  --radius-icon: 12px;
+  --radius-thumbnail: 9px;
+  --radius-progress: 2px;
+  --text-caption: 11.5px;
+  --text-tooltip: 12.5px;
+  --text-description: 13.5px;
+  --text-dialog: 18px;
+  --text-stat: 30px;
 }
 
 /* ============================================================
@@ -237,6 +259,11 @@
   --thumb-plugin: color-mix(in srgb, var(--color-plugin) 14%, var(--bg-elevated));
   --thumb-asset: color-mix(in srgb, var(--color-asset) 14%, var(--bg-elevated));
   --thumb-other: var(--bg-hover);
+  --color-error-surface-active: color-mix(in srgb, var(--color-error) 28%, var(--bg-surface));
+  --color-error-border: var(--color-error);
+  --bg-input-disabled: var(--bg-base);
+  --border-control: var(--text-tertiary);
+  --border-menu: var(--border-default);
 
   --border-subtle:  rgba(0, 0, 0, 0.05);
   --border-default: rgba(0, 0, 0, 0.08);

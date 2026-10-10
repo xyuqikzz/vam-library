@@ -1,4 +1,6 @@
+import { uiZh } from '../ui'
 export default {
+  ui: uiZh,
   gameContent: {
     sceneActions: '场景启动与角色提取', launchScene: '启动场景', launchingScene: '正在启动场景…',
     extractPreset: '提取角色预设',
@@ -125,6 +127,7 @@ export default {
 
   // ── Sidebar ────────────────────────────────────────────────────
   sidebar: {
+    short: uiZh.short,
     ingestion: '快捷入库',
     browse: '浏览',
     resources: '资源',
@@ -811,6 +814,7 @@ export default {
 
   // ── Common ─────────────────────────────────────────────────────
   common: {
+    processing: '处理中…',
     ok: '确定',
     cancel: '取消',
     save: '保存',
