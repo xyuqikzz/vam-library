@@ -1,9 +1,8 @@
 /* ============================================================
-   VAM Library Design System — Base Styles v2
+   VAM Library Design System — B2「画廊」Base Styles
    ============================================================ */
 
-/* ── Google Fonts ────────────────────────────────────────────── */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+/* 规范只要求 Manrope 本地打包；等宽字体保留现有加载方式与系统回退。 */
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap');
 
 /* ── Reset ───────────────────────────────────────────────────── */
@@ -19,7 +18,7 @@ html {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
-  font-size: 16px;
+  font-size: var(--text-lg);
   scroll-behavior: smooth;
   width: 100%;
   height: 100%;
@@ -28,7 +27,8 @@ html {
 
 body {
   font-family: var(--font-family);
-  font-size: var(--text-base);
+  font-size: var(--text-md);
+  font-variant-numeric: tabular-nums;
   line-height: var(--leading-normal);
   color: var(--text-primary);
   background-color: var(--bg-base);
@@ -92,13 +92,13 @@ ol {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--border-default);
   border-radius: var(--radius-full);
   transition: background var(--duration-fast) var(--ease);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.15);
+  background: var(--border-strong);
 }
 
 ::-webkit-scrollbar-corner {
@@ -108,25 +108,18 @@ ol {
 /* Firefox scrollbar */
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
+  scrollbar-color: var(--border-default) transparent;
 }
 
 /* ── Selection ───────────────────────────────────────────────── */
 ::selection {
-  background: rgba(110, 107, 240, 0.3);
+  background: var(--accent-muted);
   color: var(--text-primary);
 }
 
 ::-moz-selection {
-  background: rgba(110, 107, 240, 0.3);
+  background: var(--accent-muted);
   color: var(--text-primary);
-}
-
-/* ── Focus Visible ───────────────────────────────────────────── */
-:focus-visible {
-  outline: 2px solid var(--accent-primary);
-  outline-offset: 2px;
-  border-radius: var(--radius-sm);
 }
 
 /* ── Utility Classes ─────────────────────────────────────────── */
@@ -174,10 +167,13 @@ select,
   -webkit-appearance: none;
   -moz-appearance: none;
   background-color: var(--bg-input);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%236e6e85' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  /* 两个变量着色的三角片保留下拉箭头，避免 data URI 内写死描边颜色。 */
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--text-tertiary) 50%),
+    linear-gradient(135deg, var(--text-tertiary) 50%, transparent 50%);
   background-repeat: no-repeat;
-  background-position: right 10px center;
-  background-size: 13px;
+  background-position: right 14px center, right 10px center;
+  background-size: 4px 4px;
   padding-right: 30px;
   padding-left: 10px;
   border: 1px solid var(--border-subtle);
@@ -196,15 +192,17 @@ select:hover,
 .sort-select:hover,
 .setting-select:hover {
   border-color: var(--border-strong);
-  background-color: rgba(255, 255, 255, 0.07);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%239a9ab0' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-color: var(--bg-hover);
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--text-secondary) 50%),
+    linear-gradient(135deg, var(--text-secondary) 50%, transparent 50%);
 }
 
 select:focus,
 .sort-select:focus,
 .setting-select:focus {
   border-color: var(--accent-primary);
-  box-shadow: 0 0 0 3px rgba(110, 107, 240, 0.15);
+  box-shadow: inset 0 0 0 2px var(--accent-primary);
   background-color: var(--bg-hover);
 }
 
@@ -222,7 +220,7 @@ input[type="checkbox"] {
   width: 16px;
   height: 16px;
   border: 1.5px solid var(--border-strong);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background-color: var(--bg-input);
   cursor: pointer;
   position: relative;
@@ -238,11 +236,11 @@ input[type="checkbox"] {
 
 input[type="checkbox"]:hover:not(:disabled) {
   border-color: var(--accent-primary);
-  background-color: rgba(255, 255, 255, 0.07);
+  background-color: var(--bg-hover);
 }
 
 input[type="checkbox"]:focus {
-  box-shadow: 0 0 0 3px rgba(110, 107, 240, 0.15);
+  box-shadow: inset 0 0 0 2px var(--accent-primary);
   border-color: var(--accent-primary);
 }
 
@@ -259,7 +257,7 @@ input[type="checkbox"]::after {
   position: absolute;
   width: 4px;
   height: 8px;
-  border: solid white;
+  border: solid var(--accent-ink);
   border-width: 0 1.6px 1.6px 0;
   transform: rotate(45deg) scale(0);
   opacity: 0;
@@ -306,7 +304,7 @@ input[type="number"]:hover,
 textarea:hover,
 .setting-input:hover {
   border-color: var(--border-strong);
-  background-color: rgba(255, 255, 255, 0.06);
+  background-color: var(--bg-hover);
 }
 
 input[type="text"]:focus,
@@ -314,13 +312,13 @@ input[type="number"]:focus,
 textarea:focus,
 .setting-input:focus {
   border-color: var(--accent-primary);
-  box-shadow: 0 0 0 3px rgba(110, 107, 240, 0.15);
-  background-color: rgba(255, 255, 255, 0.07);
+  box-shadow: inset 0 0 0 2px var(--accent-primary);
+  background-color: var(--bg-hover);
 }
 
 /* ── Toggle Switch (滑动开关) ────────────────────────────────── */
 .toggle-switch {
-  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3);
+  box-shadow: none;
   transition: background var(--duration-base) var(--ease), border-color var(--duration-base) var(--ease), transform var(--duration-fast) var(--ease);
 }
 
@@ -334,7 +332,7 @@ textarea:focus,
 
 .toggle-thumb {
   transition: transform var(--duration-base) var(--ease-bounce), background var(--duration-base) var(--ease);
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
+  box-shadow: none;
 }
 
 /* ── Button Base ─────────────────────────────────────────────── */
@@ -344,9 +342,9 @@ textarea:focus,
   justify-content: center;
   gap: var(--space-2);
   padding: var(--space-2) var(--space-4);
-  border-radius: var(--radius-sm);
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
+  border-radius: var(--radius-full);
+  font-size: var(--text-base);
+  font-weight: var(--font-bold);
   cursor: pointer;
   transition:
     background-color var(--duration-fast) var(--ease),
@@ -361,24 +359,40 @@ textarea:focus,
 
 .btn-primary {
   background: var(--accent-gradient);
-  color: white;
+  color: var(--accent-ink);
+  font-weight: var(--font-heavy);
   border: none;
-  box-shadow: 0 2px 8px rgba(108, 92, 231, 0.25);
+  box-shadow: none;
 }
 
 .btn-primary:hover {
-  box-shadow: 0 4px 12px rgba(108, 92, 231, 0.35);
+  background: var(--accent-primary-hover);
+}
+
+.btn-primary:active {
+  background: var(--accent-primary-active);
 }
 
 .btn-secondary {
-  background: var(--bg-hover);
+  background: var(--bg-control);
   color: var(--text-primary);
-  border: 1px solid var(--border-default);
+  border: none;
 }
 
 .btn-secondary:hover {
+  background: var(--bg-control-hover);
+}
+
+.btn-secondary:active {
   background: var(--bg-active);
-  border-color: var(--border-strong);
+}
+
+/* ── Focus Visible ───────────────────────────────────────────── */
+:focus-visible {
+  /* 旧组件的 scoped :focus/outline 规则优先级不一；键盘焦点统一覆盖，
+     保留控件自身圆角，避免焦点时改变形状。 */
+  box-shadow: var(--focus-ring) !important;
+  outline: none !important;
 }
 
 /* Preview blur is enabled unless an explicitly saved preference turns it off.

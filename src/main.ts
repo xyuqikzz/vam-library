@@ -1,3 +1,4 @@
+import '@fontsource-variable/manrope'
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import i18n from './i18n'

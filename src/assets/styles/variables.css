@@ -1,69 +1,90 @@
 /* ============================================================
-   VAM Library Design System — Design Tokens v3
-   风格：暖灰深色 · macOS 原生感 · Linear/Raycast 灵感
+   VAM Library Design System — B2「画廊」Design Tokens
+   令牌定义的字面值来自 docs/ui-spec-b2.md；样式使用处只引用变量。
    ============================================================ */
 
 :root {
-  /* ── Backgrounds（暖灰色阶，不是纯黑）───────────────────────── */
-  --bg-base:     #161618;
-  --bg-surface:  #1c1c1e;
-  --bg-elevated: #2c2c2e;
-  --bg-hover:    #2c2c2e;
-  --bg-active:   #3a3a3c;
-  --bg-overlay:  rgba(22, 22, 24, 0.8);
-  --bg-input:    rgba(255, 255, 255, 0.05);
-  --bg-subtle:   rgba(255, 255, 255, 0.04);
+  /* ── Backgrounds ───────────────────────────────────────────── */
+  --bg-base:     #0a0a0b;
+  --bg-surface:  #111113;
+  --bg-elevated: #19191c;
+  --bg-hover:    #222226;
+  --bg-active:   #2a2a2e;
+  --bg-overlay:  rgba(6, 6, 7, 0.78);
+  --bg-input:    #1c1c1f;
+  --bg-subtle:   rgba(255, 255, 255, 0.03);
+  --bg-control: #26262a;
+  --bg-control-hover: #303035;
+  --bg-menu: #1f1f22;
+  --bg-on-image: rgba(10, 10, 11, 0.72);
 
   /* ── Text（四级灰度）──────────────────────────────────────── */
-  --text-primary:    #f5f5f7;
-  --text-secondary:  #a1a1a6;
-  --text-tertiary:   #6e6e73;
-  --text-disabled:   #48484a;
-  --text-inverse:    #161618;
+  --text-primary:    #f4f2f0;
+  --text-secondary:  #b8b4ae;
+  --text-tertiary:   #9c9893;
+  --text-disabled:   #5c5955;
+  --text-inverse:    #111113;
+  --text-muted-strong: #d6d2cc;
 
-  /* ── Accent（低饱和蓝紫）────────────────────────────────── */
-  --accent-primary:       #6e6bf0;
-  --accent-primary-hover: #7d7af5;
-  --accent-primary-active:#5c59d6;
-  --accent-secondary:     #5b8def;
-  --accent-secondary-hover:#6d9df5;
-  --accent-gradient:      linear-gradient(135deg, #6e6bf0 0%, #5b8def 100%);
-  --accent-muted:         rgba(110, 107, 240, 0.15);
-  --accent-subtle:        rgba(110, 107, 240, 0.08);
+  /* ── Accent（橙色，保留旧变量名兼容现有组件）──────────────── */
+  --accent-primary:       #ff8a5c;
+  --accent-primary-hover: #ff9d76;
+  --accent-primary-active:#f07a4c;
+  --accent-secondary:     #ff9d76;
+  --accent-secondary-hover:#ffb08f;
+  --accent-gradient:      #ff8a5c;
+  --accent-muted:         rgba(255, 138, 92, 0.16);
+  --accent-subtle:        rgba(255, 138, 92, 0.08);
+  --accent-ink:           #1a0e08;
 
   /* ── Semantic Colors ───────────────────────────────────────── */
-  --color-success:    #30d158;
-  --color-success-bg: rgba(48, 209, 88, 0.1);
-  --color-warning:    #ffd60a;
-  --color-warning-bg: rgba(255, 214, 10, 0.1);
-  --color-error:      #ff453a;
-  --color-error-bg:   rgba(255, 69, 58, 0.1);
-  --color-info:       #64d2ff;
-  --color-info-bg:    rgba(100, 210, 255, 0.1);
+  --color-success:    #5fd68a;
+  --color-success-bg: rgba(95, 214, 138, 0.14);
+  --color-warning:    #f5c451;
+  --color-warning-bg: rgba(245, 196, 81, 0.14);
+  --color-warning-ink:#241a02;
+  --color-error:      #ff7a6e;
+  --color-error-bg:   rgba(255, 122, 110, 0.14);
+  --color-error-surface: #2e1a19;
+  --color-error-surface-hover: #3a1f1d;
+  --color-info:       #7cc4ff;
+  --color-info-bg:    rgba(124, 196, 255, 0.14);
 
-  /* ── Resource Type Colors（保留，已经很好）──────────────────── */
-  --color-scene:       #f59e0b;
-  --color-scene-bg:    rgba(245, 158, 11, 0.1);
-  --color-appearance:  #ec4899;
-  --color-appearance-bg: rgba(236, 72, 153, 0.1);
-  --color-morph:       #8b5cf6;
-  --color-morph-bg:    rgba(139, 92, 246, 0.1);
-  --color-clothing:    #06b6d4;
-  --color-clothing-bg: rgba(6, 182, 212, 0.1);
-  --color-plugin:      #30d158;
-  --color-plugin-bg:   rgba(48, 209, 88, 0.1);
-  --color-texture:     #f97316;
-  --color-texture-bg:  rgba(249, 115, 22, 0.1);
-  --color-asset:       #818cf8;
-  --color-asset-bg:    rgba(129, 140, 248, 0.1);
-  --color-hair:        #c084fc;
-  --color-hair-bg:     rgba(192, 132, 252, 0.1);
+  /* ── Resource Type Colors（圆点、细标）──────────────────────── */
+  --color-scene:       #f5b041;
+  --color-scene-bg:    rgba(245, 176, 65, 0.14);
+  --color-appearance:  #f27aa8;
+  --color-appearance-bg: rgba(242, 122, 168, 0.14);
+  --color-morph:       #b096fa;
+  --color-morph-bg:    rgba(176, 150, 250, 0.14);
+  --color-clothing:    #4fcbe0;
+  --color-clothing-bg: rgba(79, 203, 224, 0.14);
+  --color-plugin:      #5fd68a;
+  --color-plugin-bg:   rgba(95, 214, 138, 0.14);
+  --color-texture:     #ff935a;
+  --color-texture-bg:  rgba(255, 147, 90, 0.14);
+  --color-asset:       #a3abff;
+  --color-asset-bg:    rgba(163, 171, 255, 0.14);
+  --color-hair:        #d4a8ff;
+  --color-hair-bg:     rgba(212, 168, 255, 0.14);
 
-  /* ── Borders（简化为两级）─────────────────────────────────── */
-  --border-subtle:  rgba(255, 255, 255, 0.06);
+  /* ── Thumbnail Placeholders ────────────────────────────────── */
+  --thumb-scene: #4a3524;
+  --thumb-appearance: #46263a;
+  --thumb-clothing: #21384a;
+  --thumb-hair: #3a2a4a;
+  --thumb-morph: #352a4a;
+  --thumb-texture: #4a3a22;
+  --thumb-plugin: #1e2a23;
+  --thumb-asset: #2a3240;
+  --thumb-other: #232327;
+
+  /* ── Borders（分隔线与输入焦点）───────────────────────────── */
+  --border-subtle:  rgba(255, 255, 255, 0.05);
   --border-default: rgba(255, 255, 255, 0.08);
-  --border-strong:  rgba(255, 255, 255, 0.14);
-  --border-accent:  rgba(110, 107, 240, 0.35);
+  --border-strong:  rgba(255, 255, 255, 0.12);
+  --border-accent:  rgba(255, 138, 92, 0.45);
+  --divider: #232327;
 
   /* ── Spacing ───────────────────────────────────────────────── */
   --space-1: 4px;
@@ -78,34 +99,39 @@
   --space-16: 64px;
 
   /* ── Border Radius ─────────────────────────────────────────── */
-  --radius-xs: 4px;
-  --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
-  --radius-xl: 16px;
+  --radius-xs: 6px;
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 18px;
+  --radius-xl: 24px;
+  --radius-card: 16px;
+  --radius-shell: 20px;
   --radius-full: 9999px;
 
-  /* ── Shadows（实色，不依赖 blur）──────────────────────────── */
-  --shadow-sm:  0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-md:  0 4px 12px rgba(0, 0, 0, 0.25);
-  --shadow-lg:  0 8px 24px rgba(0, 0, 0, 0.35);
+  /* ── Shadows（仅浮层）─────────────────────────────────────── */
+  --shadow-sm:  0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md:  0 12px 28px rgba(0, 0, 0, 0.45);
+  --shadow-lg:  0 24px 80px rgba(0, 0, 0, 0.6);
+  --shadow-float: var(--shadow-lg);
+  --focus-ring: 0 0 0 2px var(--bg-surface), 0 0 0 4px var(--text-primary);
+  --ring-selected: 0 0 0 2px var(--bg-surface), 0 0 0 4px var(--accent-primary);
 
   /* ── Glass Effects（保留变量名兼容，但去掉 blur）──────────── */
-  --glass-bg:         #1c1c1e;
-  --glass-bg-heavy:   #232325;
+  --glass-bg:         #19191c;
+  --glass-bg-heavy:   #1f1f22;
   --glass-blur:       none;
   --glass-blur-light: none;
   --glass-blur-heavy: none;
-  --glass-border:     1px solid rgba(255, 255, 255, 0.08);
-  --glass-shadow:     var(--shadow-md);
+  --glass-border:     1px solid transparent;
+  --glass-shadow:     none;
   --glass-shadow-lg:  var(--shadow-lg);
-  --glass-panel-bg:   #1c1c1e;
-  --glass-sidebar-bg: #1c1c1e;
-  --glass-toolbar-bg: #1c1c1e;
+  --glass-panel-bg:   #19191c;
+  --glass-sidebar-bg: #141416;
+  --glass-toolbar-bg: #111113;
 
   /* ── Typography ────────────────────────────────────────────── */
-  --font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', 'Segoe UI', sans-serif;
-  --font-mono: 'SF Mono', 'JetBrains Mono', 'Fira Code', monospace;
+  --font-family: 'Manrope Variable', 'Manrope', 'PingFang SC', 'Microsoft YaHei UI', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Cascadia Mono', 'Consolas', monospace;
 
   --text-xs:   11px;
   --text-sm:   12px;
@@ -124,6 +150,7 @@
   --font-medium:   500;
   --font-semibold: 600;
   --font-bold:     700;
+  --font-heavy:    800;
 
   /* ── Transitions ───────────────────────────────────────────── */
   --ease:       cubic-bezier(0.25, 0.1, 0.25, 1);
@@ -142,8 +169,12 @@
   --transition-slow:   var(--duration-slow) var(--ease);
 
   /* ── Layout Dimensions ─────────────────────────────────────── */
-  --sidebar-width: 220px;
-  --sidebar-collapsed-width: 68px;
+  --control-h-sm: 32px;
+  --control-h-md: 40px;
+  --control-h-lg: 44px;
+  --app-gutter: 8px;
+  --sidebar-width: 76px;
+  --sidebar-collapsed-width: 76px;
   --toolbar-height: 48px;
   --titlebar-height: 38px;
 
@@ -171,20 +202,47 @@
   --bg-overlay:  rgba(245, 245, 247, 0.75);
   --bg-input:    rgba(0, 0, 0, 0.04);
   --bg-subtle:   rgba(0, 0, 0, 0.03);
+  --bg-control: var(--bg-hover);
+  --bg-control-hover: var(--bg-active);
+  --bg-menu: var(--glass-bg-heavy);
+  --bg-on-image: rgba(255, 255, 255, 0.9);
 
   --text-primary:   #1d1d1f;
   --text-secondary: #86868b;
   --text-tertiary:  #6e6e73;
   --text-disabled:  #a1a1a6;
   --text-inverse:   #ffffff;
+  --text-muted-strong: var(--text-primary);
 
-  --accent-muted:  rgba(110, 107, 240, 0.12);
-  --accent-subtle: rgba(110, 107, 240, 0.06);
+  --accent-primary: #c2521f;
+  --accent-primary-hover: color-mix(in srgb, var(--accent-primary) 85%, var(--text-inverse));
+  --accent-primary-active: color-mix(in srgb, var(--accent-primary) 90%, var(--text-primary));
+  --accent-secondary: var(--accent-primary);
+  --accent-secondary-hover: var(--accent-primary-hover);
+  --accent-gradient: var(--accent-primary);
+  --accent-muted:  rgba(194, 82, 31, 0.12);
+  --accent-subtle: rgba(194, 82, 31, 0.06);
+  --accent-ink: #ffffff;
+
+  /* 浅色主题沿用原有表面层级，新令牌复用或混合既有颜色。 */
+  --color-warning-ink: #241a02;
+  --color-error-surface: var(--color-error-bg);
+  --color-error-surface-hover: color-mix(in srgb, var(--color-error) 20%, var(--bg-surface));
+  --thumb-scene: color-mix(in srgb, var(--color-scene) 14%, var(--bg-elevated));
+  --thumb-appearance: color-mix(in srgb, var(--color-appearance) 14%, var(--bg-elevated));
+  --thumb-clothing: color-mix(in srgb, var(--color-clothing) 14%, var(--bg-elevated));
+  --thumb-hair: color-mix(in srgb, var(--color-hair) 14%, var(--bg-elevated));
+  --thumb-morph: color-mix(in srgb, var(--color-morph) 14%, var(--bg-elevated));
+  --thumb-texture: color-mix(in srgb, var(--color-texture) 14%, var(--bg-elevated));
+  --thumb-plugin: color-mix(in srgb, var(--color-plugin) 14%, var(--bg-elevated));
+  --thumb-asset: color-mix(in srgb, var(--color-asset) 14%, var(--bg-elevated));
+  --thumb-other: var(--bg-hover);
 
   --border-subtle:  rgba(0, 0, 0, 0.05);
   --border-default: rgba(0, 0, 0, 0.08);
   --border-strong:  rgba(0, 0, 0, 0.12);
-  --border-accent:  rgba(110, 107, 240, 0.3);
+  --border-accent:  rgba(194, 82, 31, 0.3);
+  --divider: var(--border-default);
 
   --shadow-sm:  0 1px 2px rgba(0, 0, 0, 0.06);
   --shadow-md:  0 4px 12px rgba(0, 0, 0, 0.08);
