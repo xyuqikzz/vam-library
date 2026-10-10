@@ -24,7 +24,6 @@
     </div>
     <AppSidebar />
     <div class="main-area">
-      <AppToolbar />
       <main class="main-content">
         <router-view v-slot="{ Component, route }">
           <Transition
@@ -41,8 +40,6 @@
         </router-view>
       </main>
     </div>
-    <!-- Background gradient overlay -->
-    <div class="bg-gradient-overlay" aria-hidden="true" />
     <!-- Toast notifications -->
     <Toast ref="toastEl" />
     <ConfirmHost />
@@ -59,7 +56,6 @@ import { storeToRefs } from 'pinia'
 import { toastRef } from '@/composables/useNotification'
 import { useI18n } from 'vue-i18n'
 import AppSidebar from './AppSidebar.vue'
-import AppToolbar from './AppToolbar.vue'
 import Toast from '@/components/common/Toast.vue'
 import ConfirmHost from '@/components/ui/ConfirmHost.vue'
 import ExternalImportPrompt from '@/components/ExternalImportPrompt.vue'
@@ -225,6 +221,8 @@ onMounted(async () => {
   min-width: 0;
   min-height: 0;
   background: var(--bg-base);
+  padding: var(--app-gutter);
+  gap: var(--app-gutter);
   overflow: hidden;
 }
 
@@ -356,6 +354,9 @@ onMounted(async () => {
 }
 
 .main-area {
+  background: var(--bg-surface);
+  border-radius: var(--radius-shell);
+  overflow: hidden;
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -369,20 +370,7 @@ onMounted(async () => {
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: var(--space-5);
+  padding: 0;
 }
 
-/* ── Background gradient overlay ───────────────────────────── */
-.bg-gradient-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  pointer-events: none;
-  z-index: -1;
-  background:
-    radial-gradient(ellipse 80% 60% at 20% 10%, rgba(110, 107, 240, 0.04) 0%, transparent 60%),
-    radial-gradient(ellipse 60% 50% at 80% 80%, rgba(91, 141, 239, 0.03) 0%, transparent 50%);
-}
 </style>
