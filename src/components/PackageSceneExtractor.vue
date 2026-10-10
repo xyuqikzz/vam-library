@@ -161,6 +161,7 @@ watch(() => app.vamRootPath, () => {
 watch(busy, value => { if (!value && alive && !loaded.value && !loading.value && !error.value) void loadScenes() })
 onMounted(() => { void loadScenes() })
 onBeforeUnmount(() => { alive = false; ++listEpoch; ++detailEpoch; emit('busyChange', false) })
+defineExpose({ launch: launchScene, extract: toggleExtraction, ready: computed(() => !busy.value && !choosingDirectory.value && !loading.value && !!selectedScene.value), loading, error })
 </script>
 
 <template>

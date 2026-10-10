@@ -1,5 +1,5 @@
 export const uiZh = {
-  cleanup: '资源清理', dialog: '对话框', removeFilter: '移除筛选', browsePackages: '浏览资源包', menu: '操作菜单',
+  sort: '排序', status: '状态', subDependencies: '子依赖', missingStatus: '缺失', toTrash: '移到回收站', perPageLabel: '每页数量', firstPage: '第一页', lastPage: '最后一页', cleanup: '资源清理', dialog: '对话框', removeFilter: '移除筛选', browsePackages: '浏览资源包', menu: '操作菜单',
   tools: '工具', view: '视图', search: '搜索资源包', all: '全部', directory: '目录', issues: '有问题',
   missing: '缺 {count}', installed: '已安装', missingDependencies: '缺失依赖', complete: '补全',
   selected: '已选 {count} 个包', shown: '已显示 {shown} / {total}', more: '更多', new: '新',
@@ -17,7 +17,7 @@ export const uiZh = {
   short: { dashboard: '仪表盘', packages: '包管理', statistics: '统计', appearances: '预设', scenes: '收藏', online: '在线', download: '下载', tools: '工具', settings: '设置', startGame: '开始游戏' },
 }
 export const uiEn = {
-  cleanup: 'Resource cleanup', dialog: 'Dialog', removeFilter: 'Remove filter', browsePackages: 'Browse packages', menu: 'Actions',
+  sort: 'Sort', status: 'Status', subDependencies: 'Nested dependencies', missingStatus: 'Missing', toTrash: 'Move to recycle bin', perPageLabel: 'Items per page', firstPage: 'First page', lastPage: 'Last page', cleanup: 'Resource cleanup', dialog: 'Dialog', removeFilter: 'Remove filter', browsePackages: 'Browse packages', menu: 'Actions',
   tools: 'Tools', view: 'View', search: 'Search packages', all: 'All', directory: 'Folder', issues: 'Issues',
   missing: '{count} missing', installed: 'Installed', missingDependencies: 'Missing dependencies', complete: 'Resolve',
   selected: '{count} packages selected', shown: 'Showing {shown} / {total}', more: 'More', new: 'New',

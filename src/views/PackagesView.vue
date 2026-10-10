@@ -1,130 +1,14 @@
-<template>
-  <div class="packages-view animate-fadeIn">
-    <div class="packages-browser">
-      <div class="folder-shell" :class="{ collapsed: !isFolderPanelOpen }">
-        <Transition name="folder-panel">
-          <aside v-if="isFolderPanelOpen" class="folder-tree glass-panel">
-            <div class="folder-tree-title">
-              <span class="text-xs text-tertiary">{{ t('packages.folderTree') }}</span>
-              <button
-                class="folder-panel-toggle"
-                :title="t('packages.collapseFolderPanel')"
-                :aria-label="t('packages.collapseFolderPanel')"
-                @click="isFolderPanelOpen = false"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                  <path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
-                </svg>
-              </button>
-            </div>
-            <div
-              v-for="folder in flatFolderNodes"
-              :key="folder.path || '__root__'"
-              :class="['folder-tree-row', { active: selectedFolder === folder.path }]"
-              :style="{ paddingLeft: `${8 + folder.depth * 14}px` }"
-              :title="folder.fullLabel"
-            >
-              <button
-                class="folder-expand-btn"
-                :class="{ hidden: !folder.hasChildren }"
-                :title="folder.isExpanded ? t('packages.collapseFolder') : t('packages.expandFolder')"
-                :aria-label="folder.isExpanded ? t('packages.collapseFolder') : t('packages.expandFolder')"
-                @click="toggleFolder(folder.path)"
-              >
-                <svg :class="['folder-caret', { expanded: folder.isExpanded }]" width="12" height="12" viewBox="0 0 24 24" fill="none">
-                  <path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-                </svg>
-              </button>
-              <button class="folder-tree-item" @click="selectedFolder = folder.path">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                  <path d="M3 6.5A2.5 2.5 0 0 1 5.5 4H9l2 2h7.5A2.5 2.5 0 0 1 21 8.5v9A2.5 2.5 0 0 1 18.5 20h-13A2.5 2.5 0 0 1 3 17.5v-11Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" />
-                </svg>
-                <span class="folder-name truncate">{{ folder.label }}</span>
-                <span class="folder-count">{{ folder.count }}</span>
-              </button>
-            </div>
-          </aside>
-        </Transition>
-        <button
-          v-if="!isFolderPanelOpen"
-          class="folder-panel-open glass-panel"
-          :title="t('packages.expandFolderPanel')"
-          :aria-label="t('packages.expandFolderPanel')"
-          @click="isFolderPanelOpen = true"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-            <path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
-        </button>
-      </div>
-
-      <!-- Local Packages View -->
-      <ResourceDisplay
-        :packages="sortedPackages"
-        :view-mode="viewMode"
-        :result-count-label="t('packages.packagesCount', { count: filteredPackages.length })"
-        :empty-title="t('packages.noPackages')"
-        :empty-description="t('packages.noPackagesDesc')"
-        :show-quick-delete="true"
-        @update:view-mode="viewMode = $event"
-        @package-deleted="handlePackageDeleted"
-      >
-        <template #actions>
-          <SearchInput
-            v-model="packageNameQuery"
-            class="package-name-search"
-            :placeholder="t('packages.searchNamePlaceholder')"
-          />
-          <button
-            class="scan-btn-inline"
-            :disabled="isScanning || !vamRootPath"
-            @click="handleScan"
-          >
-            <span>{{ isScanning ? t('toolbar.scanning') : t('packages.scan') }}</span>
-          </button>
-          <div class="filter-dropdown">
-            <button class="filter-btn" :class="{ active: selectedType !== 'all' }" @click="showFilterMenu = !showFilterMenu">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                <path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-              </svg>
-              <span>{{ activeTypeLabel }}</span>
-            </button>
-            <div v-if="showFilterMenu" class="filter-menu glass-panel">
-              <button
-                v-for="item in typeFilters"
-                :key="item.value"
-                :class="['filter-menu-item', { active: selectedType === item.value }]"
-                @click="selectType(item.value)"
-              >
-                {{ item.label }}
-              </button>
-            </div>
-          </div>
-          <div class="sort-dropdown">
-            <select v-model="sortBy" class="sort-select" @change="sortPackages">
-              <option value="name">{{ t('packages.sortByName') }}</option>
-              <option value="size">{{ t('packages.sortBySize') }}</option>
-              <option value="creator">{{ t('packages.sortByCreator') }}</option>
-              <option value="created">{{ t('packages.sortByCreatedTime') }}</option>
-              <option value="imported">{{ t('packages.sortByImportTime') }}</option>
-            </select>
-          </div>
-        </template>
-        <template #empty-action>
-          <button class="action-btn" @click="goToSettings">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-              <path d="M4 20h16M4 20V4h16v16M9 10h6M12 7v6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-            </svg>
-            {{ t('packages.selectDirectory') }}
-          </button>
-        </template>
-      </ResourceDisplay>
-    </div>
-  </div>
-</template>
-
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import PageHeader from '@/components/layout/PageHeader.vue'
+import UiButton from '@/components/ui/UiButton.vue'
+import UiChip from '@/components/ui/UiChip.vue'
+import UiSegmented from '@/components/ui/UiSegmented.vue'
+import UiMenu, { type MenuItem } from '@/components/ui/UiMenu.vue'
+import Icon from '@/components/ui/Icon.vue'
+import { formatSize } from '@/utils/bytes'
+import { resourceColor } from '@/utils/resourcePresentation'
+
+import { computed, onMounted, onUnmounted, onActivated, onDeactivated, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'
@@ -145,9 +29,9 @@ const viewMode = ref<'large-card' | 'small-card' | 'list'>('large-card')
 const sortBy = ref('imported')
 const selectedType = ref('all')
 const selectedFolder = ref('')
-const showFilterMenu = ref(false)
+const sortMenuOpen = ref(false)
 const packageNameQuery = ref('')
-const isFolderPanelOpen = ref(true)
+const isFolderPanelOpen = ref(false)
 const expandedFolders = ref(new Set<string>())
 
 interface FolderNode {
@@ -181,10 +65,6 @@ const typeFilters = computed(() => [
   { value: 'other', label: t('packages.filterOther') },
 ])
 
-const activeTypeLabel = computed(() => {
-  const item = typeFilters.value.find(item => item.value === selectedType.value)
-  return item?.label || t('packages.filter')
-})
 
 const filteredPackages = computed(() => {
   let list = packages.value
@@ -298,7 +178,7 @@ function goToSettings() {
 
 function selectType(type: string) {
   selectedType.value = type
-  showFilterMenu.value = false
+
 }
 
 function toggleFolder(path: string) {
@@ -386,9 +266,6 @@ function ensureFolderPath(root: FolderNode, folderPath: string): FolderNode[] {
   return nodes
 }
 
-function sortPackages() {
-  // reactivity handled by computed
-}
 
 async function handlePackageDeleted() {
   await localLibraryStore.refreshAll('refreshing')
@@ -404,341 +281,29 @@ function comparePackageName(a: PackageDisplayItem, b: PackageDisplayItem): numbe
     || a.name.localeCompare(b.name)
     || b.version - a.version
 }
+
+const searchInput = ref<InstanceType<typeof SearchInput> | null>(null)
+const folderAnchor = ref<HTMLElement | null>(null)
+const sortAnchor = ref<HTMLElement | null>(null)
+const issuesOnly = ref(false)
+const missingCounts = computed(() => { const result: Record<string, number> = {}; for (const item of localLibraryStore.missingDependencies) result[item.package_id] = (result[item.package_id] || 0) + 1; return result })
+const problemIds = computed(() => new Set([...Object.keys(missingCounts.value), ...localLibraryStore.corruptedPackages.map(item => item.package_id)]))
+const displayPackages = computed(() => issuesOnly.value ? sortedPackages.value.filter(item => problemIds.value.has(item.id)) : sortedPackages.value)
+const latestScanTime = computed(() => packages.value.reduce((latest, item) => Math.max(latest, Date.parse(item.scan_time) || 0), 0))
+const packageSubtitle = computed(() => [t('ui.total', { count: packages.value.length }), formatSize(packages.value.reduce((sum, item) => sum + item.size_bytes, 0)), latestScanTime.value ? t('ui.synced', { minutes: Math.max(0, Math.floor((Date.now() - latestScanTime.value) / 60000)) }) : t('ui.notSynced')])
+const viewOptions = computed(() => [{ value: 'large-card', label: t('packages.largeCardView'), icon: 'grid' as const }, { value: 'small-card', label: t('packages.smallCardView'), icon: 'landscape' as const }, { value: 'list', label: t('packages.listView'), icon: 'list' as const }])
+const sortItems = computed<MenuItem[]>(() => [['name', 'packages.sortByName'], ['size', 'packages.sortBySize'], ['creator', 'packages.sortByCreator'], ['created', 'packages.sortByCreatedTime'], ['imported', 'packages.sortByImportTime']].map(([value, label]) => ({ value, label: t(label), checked: sortBy.value === value })))
+function typeCount(type: string) { return type === 'all' ? packages.value.length : packages.value.filter(pkg => pkg.resource_types.includes(type)).length }
+function openFolders(event: MouseEvent) { folderAnchor.value = event.currentTarget as HTMLElement; isFolderPanelOpen.value = !isFolderPanelOpen.value }
+function openSort(event: MouseEvent) { sortAnchor.value = event.currentTarget as HTMLElement; sortMenuOpen.value = !sortMenuOpen.value }
+function setView(value: string) { if (value === 'large-card' || value === 'small-card' || value === 'list') viewMode.value = value }
+function focusSearch(event: KeyboardEvent) { if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); searchInput.value?.focus() } }
+onMounted(() => window.addEventListener('keydown', focusSearch))
+onActivated(() => window.addEventListener('keydown', focusSearch))
+onDeactivated(() => window.removeEventListener('keydown', focusSearch))
+onUnmounted(() => window.removeEventListener('keydown', focusSearch))
 </script>
-
+<template><div class="packages-view"><PageHeader :title="t('sidebar.packages')" :subtitle="packageSubtitle"><template #actions><SearchInput ref="searchInput" v-model="packageNameQuery" class="package-name-search" :placeholder="t('packages.searchNamePlaceholder')" /><UiButton icon="sort" :aria-expanded="sortMenuOpen" aria-haspopup="menu" @click="openSort">{{ t('ui.sort') }}</UiButton><UiSegmented :model-value="viewMode" :options="viewOptions" :label="t('ui.view')" icon-only @update:model-value="setView" /><UiButton variant="primary" size="lg" icon="refresh" :disabled="isScanning || !vamRootPath" :loading="isScanning" :loading-text="t('toolbar.scanning')" @click="handleScan">{{ t('packages.scan') }}</UiButton></template><template #filters><div class="type-filters"><UiChip v-for="filter in typeFilters" :key="filter.value" :selected="selectedType === filter.value" :count="typeCount(filter.value)" :color="filter.value === 'all' ? undefined : resourceColor(filter.value)" @click="selectType(filter.value)">{{ filter.label }}</UiChip></div><div class="extra-filters"><UiButton size="sm" variant="ghost" icon="folder" :aria-expanded="isFolderPanelOpen" aria-haspopup="menu" @click="openFolders">{{ t('ui.directory') }}: {{ selectedFolder || t('ui.all') }}<Icon name="chevron-down" :size="14" /></UiButton><UiChip :selected="issuesOnly" :count="problemIds.size" @click="issuesOnly = !issuesOnly">{{ t('ui.issues') }}</UiChip></div></template></PageHeader><div class="packages-content"><ResourceDisplay :packages="displayPackages" :view-mode="viewMode" :missing-counts="missingCounts" :result-count-label="t('packages.packagesCount', { count: displayPackages.length })" :empty-title="t('packages.noPackages')" :empty-description="t('packages.noPackagesDesc')" hide-controls show-quick-delete @update:view-mode="viewMode = $event" @package-deleted="handlePackageDeleted"><template #empty-action><UiButton variant="primary" size="lg" @click="goToSettings">{{ t('packages.selectDirectory') }}</UiButton></template></ResourceDisplay></div><UiMenu v-model:open="sortMenuOpen" :anchor="sortAnchor" :items="sortItems" :label="t('ui.sort')" @select="sortBy = $event.value" /><UiMenu v-model:open="isFolderPanelOpen" :anchor="folderAnchor" :items="[]" :label="t('ui.folders')"><div class="folder-tree"><div v-for="folder in flatFolderNodes" :key="folder.path || '__root__'" class="folder-tree-row" :class="{ active: selectedFolder === folder.path }" :style="{ paddingLeft: (folder.depth * 14) + 'px' }"><UiButton v-if="folder.hasChildren" variant="ghost" size="sm" :icon="folder.isExpanded ? 'chevron-down' : 'chevron-right'" icon-only :aria-label="folder.isExpanded ? t('packages.collapseFolder') : t('packages.expandFolder')" @click="toggleFolder(folder.path)" /><button type="button" role="menuitemradio" :aria-checked="selectedFolder === folder.path" class="folder-tree-item" @click="selectedFolder = folder.path; isFolderPanelOpen = false"><Icon name="folder" :size="16" /><span>{{ folder.label }}</span><small>{{ folder.count }}</small></button></div></div></UiMenu></div></template>
 <style scoped>
-.packages-view {
-  height: 100%;
-  position: relative;
-  overflow: hidden;
-}
-
-.packages-browser {
-  position: relative;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: var(--space-4);
-  height: 100%;
-  min-width: 0;
-  min-height: 0;
-}
-
-.folder-shell {
-  position: relative;
-  width: 240px;
-  min-height: 0;
-  overflow: hidden;
-  transition: width 220ms var(--ease);
-}
-
-.folder-shell.collapsed {
-  width: 20px;
-}
-
-.folder-tree {
-  position: absolute;
-  inset: 0;
-  width: 240px;
-  min-height: 0;
-  overflow-y: auto;
-  padding: var(--space-3);
-  box-sizing: border-box;
-  transition:
-    opacity 220ms var(--ease),
-    transform 220ms var(--ease);
-  will-change: opacity, transform;
-}
-
-.folder-tree-title {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-  padding: 0 var(--space-1) var(--space-2) var(--space-2);
-  font-weight: var(--font-semibold);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.folder-panel-toggle,
-.folder-panel-open,
-.folder-expand-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  color: var(--text-tertiary);
-  transition: color var(--duration-fast) var(--ease), background var(--duration-fast) var(--ease);
-}
-
-.folder-panel-toggle,
-.folder-expand-btn {
-  width: 24px;
-  height: 24px;
-  border-radius: var(--radius-xs);
-}
-
-.folder-panel-toggle:hover,
-.folder-expand-btn:hover {
-  color: var(--text-primary);
-  background: var(--bg-hover);
-}
-
-.folder-panel-open {
-  position: absolute;
-  top: 50%;
-  right: 2px;
-  width: 16px;
-  height: 86px;
-  min-height: 0;
-  border-radius: 999px;
-  transform: translateY(-50%);
-  z-index: 2;
-  overflow: hidden;
-  background: rgba(30, 30, 55, 0.72);
-  /* backdrop-filter removed */
-}
-
-.folder-panel-open:hover {
-  color: var(--text-primary);
-}
-
-.folder-panel-open svg {
-  margin-left: 4px;
-}
-
-.folder-shell.collapsed .folder-panel-open {
-  animation: folder-handle-in 220ms var(--ease);
-}
-
-.folder-panel-enter-active,
-.folder-panel-leave-active {
-  transition:
-    opacity 220ms var(--ease),
-    transform 220ms var(--ease);
-}
-
-.folder-panel-enter-from,
-.folder-panel-leave-to {
-  opacity: 0;
-  transform: translateX(-10px);
-}
-
-.folder-panel-enter-to,
-.folder-panel-leave-from {
-  opacity: 1;
-  transform: translateX(0);
-}
-
-.folder-tree-row {
-  display: flex;
-  align-items: center;
-  min-height: 30px;
-  border-radius: var(--radius-sm);
-  color: var(--text-secondary);
-  transition: background var(--duration-fast) var(--ease), color var(--duration-fast) var(--ease);
-}
-
-.folder-tree-row:hover {
-  color: var(--text-primary);
-  background: var(--bg-hover);
-}
-
-.folder-tree-row.active {
-  color: var(--accent-primary);
-  background: rgba(110, 107, 240, 0.14);
-}
-
-.folder-caret {
-  transition: transform var(--duration-fast) var(--ease);
-}
-
-.folder-caret.expanded {
-  transform: rotate(90deg);
-}
-
-.folder-expand-btn.hidden {
-  visibility: hidden;
-}
-
-.folder-tree-item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  width: 100%;
-  min-height: 30px;
-  min-width: 0;
-  padding-right: var(--space-2);
-  border-radius: var(--radius-sm);
-  color: inherit;
-  font-size: var(--text-sm);
-  text-align: left;
-}
-
-.folder-name {
-  flex: 1;
-}
-
-.folder-count {
-  flex-shrink: 0;
-  color: var(--text-tertiary);
-  font-size: var(--text-xs);
-  font-variant-numeric: tabular-nums;
-}
-
-@media (max-width: 1180px) {
-  .packages-browser {
-    grid-template-columns: 1fr;
-  }
-
-  .folder-shell {
-    width: 100%;
-  }
-
-  .folder-shell.collapsed {
-    width: 20px;
-    height: 64px;
-  }
-
-  .folder-panel-open {
-    right: 0;
-  }
-
-  .folder-tree {
-    width: 100%;
-    max-height: 180px;
-  }
-}
-
-@keyframes folder-handle-in {
-  from {
-    opacity: 0;
-    transform: translateY(-50%) translateX(-6px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(-50%) translateX(0);
-  }
-}
-
-/* ── Action buttons (passed into ResourceDisplay slot) ───── */
-.package-name-search {
-  width: 220px;
-}
-
-.scan-btn-inline {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-1) var(--space-3);
-  height: 30px;
-  border-radius: var(--radius-sm);
-  color: var(--accent-primary);
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-  transition: color var(--duration-fast) var(--ease), background var(--duration-fast) var(--ease);
-}
-
-.scan-btn-inline:hover:not(:disabled) {
-  background: rgba(110, 107, 240, 0.1);
-}
-
-.scan-btn-inline:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.filter-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-1) var(--space-3);
-  height: 30px;
-  border-radius: var(--radius-sm);
-  color: var(--text-secondary);
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-  transition: color var(--duration-fast) var(--ease), background var(--duration-fast) var(--ease);
-}
-
-.filter-btn:hover {
-  color: var(--text-primary);
-  background: var(--bg-hover);
-}
-
-.filter-btn.active {
-  color: var(--text-primary);
-  background: rgba(110, 107, 240, 0.15);
-}
-
-.filter-dropdown {
-  position: relative;
-}
-
-.filter-menu {
-  position: absolute;
-  top: calc(100% + var(--space-2));
-  right: 0;
-  z-index: var(--z-dropdown);
-  display: grid;
-  grid-template-columns: repeat(2, minmax(72px, 1fr));
-  gap: var(--space-1);
-  width: 180px;
-  padding: var(--space-2);
-}
-
-.filter-menu-item {
-  height: 28px;
-  padding: 0 var(--space-2);
-  border-radius: var(--radius-sm);
-  color: var(--text-secondary);
-  font-size: var(--text-xs);
-  text-align: left;
-  transition: color var(--duration-fast) var(--ease), background var(--duration-fast) var(--ease);
-}
-
-.filter-menu-item:hover,
-.filter-menu-item.active {
-  color: var(--text-primary);
-  background: var(--bg-hover);
-}
-
-.sort-select {
-  height: 30px;
-  padding: 0 var(--space-3);
-  background: var(--bg-base);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
-  color: var(--text-secondary);
-  font-size: var(--text-sm);
-  cursor: pointer;
-  transition: border-color var(--duration-fast) var(--ease);
-}
-
-.sort-select:focus {
-  border-color: var(--accent-primary);
-}
-
-.action-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-5);
-  height: 36px;
-  background: var(--accent-gradient);
-  color: white;
-  font-size: var(--text-sm);
-  font-weight: var(--font-semibold);
-  border-radius: var(--radius-md);
-  transition: opacity var(--duration-fast) var(--ease), transform var(--duration-fast) var(--ease);
-}
-
-.action-btn:hover {
-  opacity: 0.9;
-  transform: translateY(-1px);
-}
-
-.action-btn:active {
-  transform: translateY(0);
-}
+.packages-view { display: flex; flex-direction: column; height: 100%; min-height: 0; overflow: hidden; }.packages-content { flex: 1; min-height: 0; padding: 16px 20px; }.package-name-search { width: 280px; max-width: 100%; }.type-filters,.extra-filters { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }.folder-tree { min-width: 260px; max-width: calc(100vw - 32px); padding: 4px; }.folder-tree-row { display: flex; align-items: center; border-radius: var(--radius-sm); }.folder-tree-row.active { background: var(--bg-active); }.folder-tree-item { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; min-height: 36px; padding: 4px 8px; border-radius: var(--radius-sm); text-align: left; font-size: var(--text-base); }.folder-tree-item span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.folder-tree-item small { color: var(--text-tertiary); font-size: var(--text-xs); }@media(max-width: 800px) { .packages-content { padding: 12px; } }
 </style>

@@ -14,6 +14,7 @@ const load = componentLoader({ 'vue-i18n': moduleUrl('export const useI18n = () 
 const { default: UiModal } = await import(load('src/components/ui/UiModal.vue'))
 const { default: UiMenu } = await import(load('src/components/ui/UiMenu.vue'))
 const { default: Toast } = await import(load('src/components/common/Toast.vue'))
+const { default: PackageCard } = await import(load('src/components/packages/PackageCard.vue'))
 const { useConfirm, resolveConfirmation, confirmation } = await import(load('src/composables/useConfirm.ts'))
 after(async () => { await delay(100); dom.window.close(); for (const key of ['window', 'document', 'Element', 'HTMLElement', 'SVGElement', 'Node', 'getComputedStyle', 'requestAnimationFrame', 'cancelAnimationFrame']) delete globalThis[key] })
 const key = (target, value, shiftKey = false) => target.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: value, shiftKey, bubbles: true, cancelable: true }))
@@ -66,4 +67,22 @@ test('queued confirmation requests resolve independently', async () => {
   assert.equal(confirmation.value.title, 'Second')
   resolveConfirmation(false); assert.equal(await second, false)
   await Promise.resolve(); assert.equal(confirmation.value, null)
+})
+
+test('package cards expose independent keyboard and selection actions without nested buttons', async t => {
+  const events = [], checked = ref(false)
+  const app = createApp({ render: () => h(PackageCard, {
+    item: { id: 'Author.Scene.1', name: 'Scene', creator: 'Author', version: 1, resource_types: ['scene'] },
+    multiSelect: true, checked: checked.value, canLaunch: true,
+    onDetails: () => events.push('details'), onLaunch: () => events.push('launch'),
+    onToggle: () => { checked.value = !checked.value },
+  }) })
+  app.mount('#app'); t.after(() => app.unmount())
+  assert.equal(document.querySelector('button button'), null)
+  const target = document.querySelector('.card-hit-target')
+  key(target, ' '); key(target, 'Enter')
+  assert.deepEqual(events, ['details', 'launch'])
+  document.querySelector('.package-check input').click(); await nextTick()
+  assert.equal(checked.value, true)
+  assert.equal(document.querySelector('.package-check input').checked, true)
 })

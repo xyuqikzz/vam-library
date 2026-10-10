@@ -1,15 +1,3 @@
-<template>
-  <div class="stats-bar">
-    <div v-for="(item, i) in items" :key="item.label" class="stat-entry">
-      <div v-if="i > 0" class="stat-sep" />
-      <span class="stat-value" :class="item.cls">
-        {{ loading ? '—' : item.value }}
-      </span>
-      <span class="stat-label">{{ item.label }}</span>
-    </div>
-  </div>
-</template>
-
 <script setup lang="ts">
 import { formatSize } from '@/utils/bytes'
 import { computed } from 'vue'
@@ -38,7 +26,7 @@ const totalIssues = computed(() =>
 
 const items = computed(() => [
   { value: props.stats.total_packages, label: t('dashboard.totalPackages'), cls: '' },
-  { value: formatSize(props.stats.total_size_bytes), label: t('dashboard.totalSize') || '总大小', cls: '' },
+  { value: formatSize(props.stats.total_size_bytes), label: t('dashboard.totalSize'), cls: '' },
   { value: props.stats.scene_count, label: t('dashboard.scenes'), cls: '' },
   {
     value: totalIssues.value,
@@ -46,46 +34,4 @@ const items = computed(() => [
     cls: totalIssues.value > 0 ? 'has-issues' : 'all-clear',
   },
 ])
-</script>
-
-<style scoped>
-.stats-bar {
-  display: flex;
-  align-items: baseline;
-  padding: var(--space-3) 0;
-}
-
-.stat-entry {
-  display: flex;
-  align-items: baseline;
-  gap: 4px;
-}
-
-.stat-sep {
-  width: 1px;
-  height: 16px;
-  background: var(--border-default);
-  margin: 0 var(--space-4);
-  align-self: center;
-}
-
-.stat-value {
-  font-size: var(--text-xl);
-  font-weight: var(--font-semibold);
-  color: var(--text-primary);
-  font-variant-numeric: tabular-nums;
-}
-
-.stat-value.has-issues {
-  color: var(--color-error);
-}
-
-.stat-value.all-clear {
-  color: var(--color-success);
-}
-
-.stat-label {
-  font-size: var(--text-xs);
-  color: var(--text-tertiary);
-}
-</style>
+</script><template><div class="stats-bar"><div v-for="(item, i) in items" :key="item.label" class="stat-entry"><span class="stat-label">{{ item.label }}</span><strong class="stat-value" :class="item.cls">{{ loading ? '—' : item.value }}</strong><span class="stat-note">{{ i === 3 ? t('ui.health') : i === 2 ? t('resourceType.scene') : t('sidebar.packages') }}</span></div></div></template><style scoped>.stats-bar { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }.stat-entry { display: flex; flex-direction: column; gap: 8px; padding: 18px; border-radius: var(--radius-lg); background: var(--bg-elevated); }.stat-label { font-size: var(--text-base); color: var(--text-secondary); }.stat-value { font-size: var(--text-stat); font-weight: var(--font-heavy); line-height: 1.1; color: var(--text-primary); }.stat-value.has-issues { color: var(--color-warning); }.stat-note { font-size: var(--text-sm); color: var(--text-tertiary); }</style>
