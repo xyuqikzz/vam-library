@@ -31,7 +31,7 @@ withDefaults(defineProps<Props>(), {
 }
 
 .skeleton-loader.circle {
-  border-radius: 50%;
+  border-radius: var(--radius-xl)%;
 }
 
 .skeleton-loader.card {
@@ -44,9 +44,9 @@ withDefaults(defineProps<Props>(), {
   background: linear-gradient(
     90deg,
     transparent 0%,
-    rgba(255, 255, 255, 0.04) 40%,
-    rgba(255, 255, 255, 0.06) 50%,
-    rgba(255, 255, 255, 0.04) 60%,
+    var(--bg-subtle) 40%,
+    var(--border-default) 50%,
+    var(--bg-subtle) 60%,
     transparent 100%
   );
   animation: shimmer 2s ease-in-out infinite;

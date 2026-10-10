@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import PackageCard from '@/components/packages/PackageCard.vue'
+import UiModal from '@/components/ui/UiModal.vue'
+import UiButton from '@/components/ui/UiButton.vue'
+import UiInput from '@/components/ui/UiInput.vue'
 import { computed, onMounted, onActivated, onDeactivated, onBeforeUnmount, ref, watch } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { useI18n } from 'vue-i18n'
@@ -25,7 +29,7 @@ const route = useRoute()
 const items = ref<Item[]>([])
 const warnings = ref<string[]>([])
 const directory = ref('')
-const copyDialog = ref<HTMLDialogElement | null>(null)
+const copyDialog = ref<InstanceType<typeof UiModal> | null>(null)
 const gallery = ref<HTMLElement | null>(null)
 const inspectorPane = ref<HTMLElement | null>(null)
 const pendingCopy = ref<{ root: string; source: ContentRef | null; kind: GameContentKind; count: number; directory: string } | null>(null)
@@ -240,18 +244,18 @@ onBeforeUnmount(() => { active = false; cancelCopy(); ++listEpoch; ++detailEpoch
   <section class="game-content" :aria-label="title">
     <p v-if="!app.vamRootPath" class="notice">{{ t('gameContent.noGame') }} <router-link to="/settings">{{ t('sidebar.settings') }}</router-link></p>
     <div v-else class="content-toolbar">
-      <input v-model="query" type="search" :placeholder="t('gameContent.search')" :aria-label="t('gameContent.search')" />
+      <UiInput v-model="query" type="search" :placeholder="t('gameContent.search')" :aria-label="t('gameContent.search')" search />
       <select v-model="filter" :aria-label="t('gameContent.source')">
         <option value="all">{{ t('gameContent.allSources') }}</option>
         <option value="package">{{ t('gameContent.package') }}</option>
         <option value="local">{{ t('gameContent.local') }}</option>
       </select>
-      <button v-if="isScene" :class="{ 'filter-active': favoritesOnly }" :aria-pressed="favoritesOnly" :title="t('gameContent.favoriteFilterHelp')" @click="favoritesOnly = !favoritesOnly">★ {{ t('gameContent.favorites', { count: favoriteCount }) }}</button>
-      <button :disabled="loading || busy" @click="refresh(true)">{{ t('gameContent.refresh') }}</button>
-      <button :disabled="app.isScanning || busy" @click="rescan">{{ t(app.isScanning ? 'toolbar.scanning' : 'gameContent.scan') }}</button>
-      <button v-if="!isScene" class="primary" :disabled="busy || loading || !packagePresets || app.isScanning" @click="requestCopy()">
+      <UiButton v-if="isScene" :class="{ 'filter-active': favoritesOnly }" :aria-pressed="favoritesOnly" :title="t('gameContent.favoriteFilterHelp')" @click="favoritesOnly = !favoritesOnly" variant="secondary">★ {{ t('gameContent.favorites', { count: favoriteCount }) }}</UiButton>
+      <UiButton :disabled="loading || busy" @click="refresh(true)" variant="secondary">{{ t('gameContent.refresh') }}</UiButton>
+      <UiButton :disabled="app.isScanning || busy" @click="rescan" variant="secondary">{{ t(app.isScanning ? 'toolbar.scanning' : 'gameContent.scan') }}</UiButton>
+      <UiButton v-if="!isScene" class="primary" :disabled="busy || loading || !packagePresets || app.isScanning" @click="requestCopy()" variant="primary" size="lg">
         {{ t(busy ? 'gameContent.working' : 'gameContent.copyLocal') }}
-      </button>
+      </UiButton>
     </div>
     <p v-if="error" role="alert" class="error notice">{{ error }}</p>
     <p v-if="message" role="status" class="notice">{{ message }}</p>
@@ -264,54 +268,43 @@ onBeforeUnmount(() => { active = false; cancelCopy(); ++listEpoch; ++detailEpoch
       <div class="content-list">
         <p class="count" role="status">{{ loading ? t('common.loading') : t(isScene ? (favoritesOnly ? 'gameContent.favoriteCount' : 'gameContent.sceneCount') : 'gameContent.count', { count: filtered.length }) }}</p>
         <div v-if="visible.length" ref="gallery" class="content-grid">
-          <article v-for="item in visible" :key="item.key" :class="['content-card', { selected: selected?.key === item.key }]">
-            <button class="card-main" :disabled="busy" @click="select(item)">
-              <div class="preview">
-                <img v-if="images[item.key]" data-resource-preview :src="images[item.key] || undefined" :alt="item.alias || item.name" loading="lazy" />
-                <span v-else>{{ t('packages.noThumbnail') }}</span>
-                <span v-if="!item.available" class="preview-status">{{ t('gameContent.missing') }}</span>
-                <span v-else-if="imageErrors[item.key]" class="preview-status" :title="imageErrors[item.key]">{{ t('gameContent.imageFailed') }}</span>
-              </div>
-              <div class="card-text"><strong :title="item.alias || item.name">{{ item.alias || item.name }}</strong><span :title="item.source.packageId || t('gameContent.local')">{{ item.source.packageId || t('gameContent.local') }}</span></div>
-            </button>
-            <button v-if="isScene" class="favorite" :aria-pressed="item.favorite" :title="t(item.favorite ? 'gameContent.unfavoriteHelp' : 'gameContent.favorite')" :disabled="busy || (!item.available && !item.favorite)" @click="favorite(item)">{{ item.favorite ? '★' : '☆' }} {{ t(item.favorite ? 'gameContent.unfavorite' : 'gameContent.favorite') }}</button>
-          </article>
+          <PackageCard v-for="item in visible" :key="item.key" class="content-card" :item="{ id: item.key, name: item.alias || item.name, creator: item.source.packageId || t('gameContent.local'), resource_types: [isScene ? 'scene' : kind === 'appearance' ? 'appearance' : kind === 'clothing' ? 'clothing' : kind === 'hair' ? 'hair' : 'other'] }" :image="images[item.key]" :selected="selected?.key === item.key" :disabled="busy" :favorite="item.favorite" :can-favorite="isScene" :favorite-disabled="!item.available && !item.favorite" @select="select(item)" @details="select(item)" @more="select(item)" @favorite="favorite(item)"><template #badge><span v-if="!item.available || imageErrors[item.key]" class="preview-status" :title="imageErrors[item.key]">{{ t(!item.available ? 'gameContent.missing' : 'gameContent.imageFailed') }}</span></template></PackageCard>
         </div>
         <div v-else-if="!loading && app.vamRootPath" class="empty">
           <p>{{ t(isScene && favoritesOnly ? (favoriteCount ? 'gameContent.noMatchingFavorites' : 'gameContent.noFavorites') : 'gameContent.empty') }}</p>
-          <button v-if="isScene && favoritesOnly && !favoriteCount" class="browse-scenes" @click="favoritesOnly = false; query = ''; filter = 'all'; app.searchQuery = ''">{{ t('gameContent.browseScenes') }}</button>
+          <UiButton v-if="isScene && favoritesOnly && !favoriteCount" class="browse-scenes" @click="favoritesOnly = false; query = ''; filter = 'all'; app.searchQuery = ''" variant="secondary">{{ t('gameContent.browseScenes') }}</UiButton>
         </div>
-        <nav v-if="pages > 1" class="pagination" :aria-label="t('gameContent.pagination')"><button :disabled="page <= 1" @click="page--">{{ t('gameContent.previous') }}</button><span>{{ page }} / {{ pages }}</span><button :disabled="page >= pages" @click="page++">{{ t('gameContent.next') }}</button></nav>
+        <nav v-if="pages > 1" class="pagination" :aria-label="t('gameContent.pagination')"><UiButton :disabled="page <= 1" @click="page--" variant="secondary">{{ t('gameContent.previous') }}</UiButton><span>{{ page }} / {{ pages }}</span><UiButton :disabled="page >= pages" @click="page++" variant="secondary">{{ t('gameContent.next') }}</UiButton></nav>
       </div>
       <aside v-if="selected" ref="inspectorPane" class="inspector" :aria-label="t('gameContent.details')">
-        <div class="inspector-heading"><h3>{{ selected.alias || selected.name }}</h3><button :disabled="busy" :aria-label="t('gameContent.close')" @click="closeDetail">×</button></div>
+        <div class="inspector-heading"><h3>{{ selected.alias || selected.name }}</h3><UiButton :disabled="busy" :aria-label="t('gameContent.close')" @click="closeDetail" variant="secondary" icon-only>×</UiButton></div>
         <p class="path">{{ selected.source.packageId ? `${selected.source.packageId}:/` : '' }}{{ selected.source.path }}</p>
         <img v-if="detail?.image" data-resource-preview class="detail-image" :src="detail.image" :alt="selected.name" />
         <p v-if="detailLoading" role="status">{{ t('common.loading') }}</p>
         <p v-if="detailError" role="alert" class="error">{{ detailError }}</p>
         <p v-if="!selected.available" class="notice">{{ t('gameContent.missingHelp') }}</p>
         <template v-if="isScene || !selected.source.packageId">
-          <form @submit.prevent="saveName"><label for="content-name">{{ t(isScene ? 'gameContent.displayName' : 'gameContent.filename') }}</label><div class="rename-row"><input id="content-name" v-model="name" :maxlength="isScene ? 120 : 120" :required="!isScene" /><button :disabled="busy || (!isScene && !selected.available)" type="submit">{{ t('gameContent.save') }}</button></div></form>
+          <form @submit.prevent="saveName"><label for="content-name">{{ t(isScene ? 'gameContent.displayName' : 'gameContent.filename') }}</label><div class="rename-row"><UiInput id="content-name" v-model="name" :maxlength="isScene ? 120 : 120" :required="!isScene" /><UiButton :disabled="busy || (!isScene && !selected.available)" type="submit" variant="secondary">{{ t('gameContent.save') }}</UiButton></div></form>
           <p class="help">{{ t(isScene ? 'gameContent.aliasHelp' : 'gameContent.renameHelp') }}</p>
         </template>
-        <template v-else><p class="help">{{ t('gameContent.packageRenameHelp') }}</p><button class="primary" :disabled="busy || !selected.available" @click="requestCopy(selected.source)">{{ t('gameContent.copyOne') }}</button></template>
-        <button v-if="isScene" :disabled="busy || (!selected.available && !selected.favorite)" @click="favorite(selected)">{{ t(selected.favorite ? 'gameContent.unfavorite' : 'gameContent.favorite') }}</button>
+        <template v-else><p class="help">{{ t('gameContent.packageRenameHelp') }}</p><UiButton class="primary" :disabled="busy || !selected.available" @click="requestCopy(selected.source)" variant="primary" size="lg">{{ t('gameContent.copyOne') }}</UiButton></template>
+        <UiButton v-if="isScene" :disabled="busy || (!selected.available && !selected.favorite)" @click="favorite(selected)" variant="secondary">{{ t(selected.favorite ? 'gameContent.unfavorite' : 'gameContent.favorite') }}</UiButton>
         <dl class="sections"><template v-for="section in sections" :key="section.name"><dt>{{ section.name }}</dt><dd>{{ section.value }}</dd></template></dl>
         <details v-if="detail"><summary>{{ t('gameContent.raw') }}</summary><pre>{{ JSON.stringify(detail.json, null, 2) }}</pre></details>
       </aside>
     </div>
-    <dialog ref="copyDialog" class="copy-dialog" aria-labelledby="copy-title" aria-describedby="copy-description" @close="pendingCopy = null" @cancel="cancelCopy">
+    <UiModal ref="copyDialog" aria-labelledby="copy-title" aria-describedby="copy-description" @close="pendingCopy = null" @cancel="cancelCopy" imperative :show-close="false">
       <template v-if="pendingCopy">
         <h3 id="copy-title">{{ t('gameContent.copyLocal') }}</h3>
         <p id="copy-description">{{ t(pendingCopy.source ? 'gameContent.copyOneConfirm' : 'gameContent.copyAllConfirm', { count: pendingCopy.count, type: title }) }}</p>
         <p class="copy-target">{{ pendingCopy.directory }}/VAM Library</p>
         <p>{{ t('gameContent.copySafety') }}</p>
         <div class="dialog-actions">
-          <button autofocus @click="cancelCopy">{{ t('gameContent.cancel') }}</button>
-          <button class="primary" @click="confirmCopy">{{ t('gameContent.confirmCopy') }}</button>
+          <UiButton autofocus @click="cancelCopy" variant="secondary">{{ t('gameContent.cancel') }}</UiButton>
+          <UiButton class="primary" @click="confirmCopy" variant="primary" size="lg">{{ t('gameContent.confirmCopy') }}</UiButton>
         </div>
       </template>
-    </dialog>
+    </UiModal>
   </section>
 </template>
 
@@ -319,11 +312,11 @@ onBeforeUnmount(() => { active = false; cancelCopy(); ++listEpoch; ++detailEpoch
 .game-content { display: flex; flex-direction: column; gap: 12px; min-width: 0; min-height: 0; overflow: hidden; }
 .game-content > :not(.content-body):not(dialog) { flex-shrink: 0; }
 .content-toolbar, .pagination, .inspector-heading, .rename-row { display: flex; align-items: center; gap: 10px; }
-p, .help { color: var(--text-secondary); font-size: 12px; line-height: 1.7; }
-button, input, select { border: 1px solid var(--border-default, #3a3a3c); border-radius: 7px; padding: 8px 12px; font-size: 12px; background: var(--bg-surface); }
+p, .help { color: var(--text-secondary); font-size: var(--text-sm); line-height: 1.7; }
+button, input, select { border: 1px solid var(--border-default, var(--bg-control)); border-radius: var(--radius-xs); padding: 8px 12px; font-size: var(--text-sm); background: var(--bg-surface); }
 button:hover:not(:disabled) { background: var(--bg-hover); } button:disabled { opacity: .45; cursor: not-allowed; }
 button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
-button.primary { background: var(--accent-primary); color: white; border-color: transparent; white-space: nowrap; }
+button.primary { background: var(--accent-primary); color: var(--accent-ink); border-color: transparent; white-space: nowrap; }
 .content-toolbar { flex-wrap: wrap; gap: 8px; }
 .content-toolbar > input, .content-toolbar > select, .content-toolbar > button { height: 34px; padding: 0 12px; }
 /* The toolbar touches an overflow-hidden edge, so draw focus inside the controls. */
@@ -334,7 +327,7 @@ button.primary { background: var(--accent-primary); color: white; border-color: 
 .content-toolbar > .primary { margin-left: auto; }
 .content-toolbar .filter-active { color: var(--text-primary); background: var(--accent-subtle); border-color: var(--accent-primary); }
 select option { background: var(--bg-surface); }
-.notice { border: 1px solid var(--border-default, #3a3a3c); background: var(--bg-surface); border-radius: 8px; padding: 12px; font-size: 12px; overflow-wrap: anywhere; max-height: 140px; overflow-y: auto; }
+.notice { border: none; background: var(--bg-surface); border-radius: var(--radius-thumbnail); padding: 12px; font-size: var(--text-sm); overflow-wrap: anywhere; max-height: 140px; overflow-y: auto; }
 .notice li { margin-top: 6px; }.error { color: var(--color-error); }
 /* Keep page controls outside the scrolling panes; their height must never be compressed by the gallery. */
 .content-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); gap: 16px; overflow: hidden; }
@@ -343,24 +336,25 @@ select option { background: var(--bg-surface); }
 .content-list { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 /* Opening details may change the number of columns, never the card dimensions. */
 .content-grid { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; scrollbar-gutter: stable; display: grid; grid-template-columns: repeat(auto-fill, minmax(0, 190px)); grid-auto-rows: max-content; gap: 12px; align-content: start; align-items: start; padding: 2px 4px 4px 2px; }
-.content-card { border: 1px solid var(--border-default, #3a3a3c); border-radius: 10px; overflow: hidden; background: var(--bg-surface); min-width: 0; }
-.content-card.selected { border-color: var(--accent-primary); }.card-main { padding: 0; border: 0; border-radius: 0; display: block; width: 100%; text-align: left; }
+.content-card { border: none; border-radius: var(--radius-sm); overflow: hidden; background: var(--bg-surface); min-width: 0; }
+.content-card.selected { border-color: var(--accent-primary); }.card-main { padding: 0; border: none; border-radius: var(--radius-none); display: block; width: 100%; text-align: left; }
 .preview { position: relative; aspect-ratio: 4 / 3; overflow: hidden; display: grid; place-items: center; background: var(--bg-subtle); color: var(--text-tertiary); }.preview img { width: 100%; height: 100%; object-fit: cover; }
-.preview-status { position: absolute; left: 6px; right: 6px; bottom: 6px; padding: 4px 6px; border-radius: 4px; background: var(--bg-base); color: var(--color-warning); font-size: 11px; line-height: 1.4; }
-.card-text { display: flex; flex-direction: column; gap: 6px; padding: 12px; }.card-text strong, .card-text span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.card-text span { font-size: 11px; color: var(--text-secondary); }
+.preview-status { position: absolute; left: 6px; right: 6px; bottom: 6px; padding: 4px 6px; border-radius: var(--radius-progress); background: var(--bg-base); color: var(--color-warning); font-size: var(--text-xs); line-height: 1.4; }
+.card-text { display: flex; flex-direction: column; gap: 6px; padding: 12px; }.card-text strong, .card-text span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.card-text span { font-size: var(--text-xs); color: var(--text-secondary); }
 .card-text strong { line-height: 18px; }.card-text span { line-height: 16px; }
-.favorite { width: 100%; border: 0; border-top: 1px solid var(--border-default, #3a3a3c); border-radius: 0; text-align: left; }.favorite[aria-pressed="true"] { color: var(--color-warning); }
-.pagination { flex-shrink: 0; justify-content: center; padding-top: 10px; font-size: 12px; }.empty { flex: 1; min-height: 0; overflow: auto; padding: 40px 10px; text-align: center; }
+.favorite { width: 100%; border: none; border-top: 1px solid var(--border-default, var(--bg-control)); border-radius: var(--radius-none); text-align: left; }.favorite[aria-pressed="true"] { color: var(--color-warning); }
+.pagination { flex-shrink: 0; justify-content: center; padding-top: 10px; font-size: var(--text-sm); }.empty { flex: 1; min-height: 0; overflow: auto; padding: 40px 10px; text-align: center; }
 .browse-scenes { margin-top: 12px; }
-.inspector { height: 100%; min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; scrollbar-gutter: stable; border: 1px solid var(--border-default, #3a3a3c); border-radius: 10px; padding: 16px; background: var(--bg-surface); display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.inspector { height: 100%; min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; scrollbar-gutter: stable; border: none; border-radius: var(--radius-sm); padding: 16px; background: var(--bg-surface); display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 .inspector > * { flex-shrink: 0; }
-.inspector-heading { justify-content: space-between; position: sticky; top: -16px; z-index: 1; background: var(--bg-surface); padding: 8px 0; }.inspector-heading button { flex-shrink: 0; }.inspector h3 { font-size: 16px; overflow-wrap: anywhere; }.path { overflow-wrap: anywhere; user-select: text; }.detail-image { height: 160px; width: 100%; object-fit: contain; border-radius: 6px; background: var(--bg-subtle); }
-label { display: block; font-size: 12px; margin-bottom: 8px; }.rename-row input { min-width: 0; flex: 1; }.sections dt { margin: 12px 0 6px; font-size: 12px; font-weight: 600; }.sections dd { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; color: var(--text-secondary); max-height: 240px; overflow: auto; user-select: text; }
-summary { cursor: pointer; font-size: 12px; }pre { margin-top: 10px; max-height: 350px; overflow: auto; font-size: 11px; user-select: text; }
-.copy-dialog { margin: auto; width: min(520px, calc(100vw - 40px)); max-height: calc(100vh - 40px); overflow-y: auto; padding: 24px; color: var(--text-primary); background: var(--bg-surface); border: 1px solid var(--border-default, #3a3a3c); border-radius: 12px; }
-.copy-dialog::backdrop { background: rgba(0, 0, 0, .55); }
-.copy-dialog h3 { margin-bottom: 14px; font-size: 16px; }.copy-dialog p + p { margin-top: 12px; }.copy-target { overflow-wrap: anywhere; user-select: text; }
+.inspector-heading { justify-content: space-between; position: sticky; top: -16px; z-index: 1; background: var(--bg-surface); padding: 8px 0; }.inspector-heading button { flex-shrink: 0; }.inspector h3 { font-size: var(--text-lg); overflow-wrap: anywhere; }.path { overflow-wrap: anywhere; user-select: text; }.detail-image { height: 160px; width: 100%; object-fit: contain; border-radius: var(--radius-xs); background: var(--bg-subtle); }
+label { display: block; font-size: var(--text-sm); margin-bottom: 8px; }.rename-row input { min-width: 0; flex: 1; }.sections dt { margin: 12px 0 6px; font-size: var(--text-sm); font-weight: 600; }.sections dd { white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--text-xs); color: var(--text-secondary); max-height: 240px; overflow: auto; user-select: text; }
+summary { cursor: pointer; font-size: var(--text-sm); }pre { margin-top: 10px; max-height: 350px; overflow: auto; font-size: var(--text-xs); user-select: text; }
+.copy-dialog { margin: auto; width: min(520px, calc(100vw - 40px)); max-height: calc(100vh - 40px); overflow-y: auto; padding: 24px; color: var(--text-primary); background: var(--bg-surface); border: none; border-radius: var(--radius-icon); }
+.copy-dialog::backdrop { background: var(--bg-overlay); }
+.copy-dialog h3 { margin-bottom: 14px; font-size: var(--text-lg); }.copy-dialog p + p { margin-top: 12px; }.copy-target { overflow-wrap: anywhere; user-select: text; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; }
 @media (max-width: 1100px) { .content-body.inspecting { grid-template-columns: minmax(0, 1fr) 300px; }.content-grid { grid-template-columns: repeat(auto-fill, minmax(0, 160px)); } }
 @media (max-width: 900px) { .content-body.inspecting { grid-template-columns: minmax(0, 1fr); }.content-body.inspecting .content-list { display: none; } }
+.content-grid { grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 14px; }.content-card { background: var(--bg-elevated); border-radius: var(--radius-card); }.content-card.selected { box-shadow: var(--ring-selected); }.preview-status { position: absolute; top: 38px; left: 10px; z-index: 2; background: var(--bg-on-image); border-radius: var(--radius-full); color: var(--color-warning); font-size: var(--text-xs); padding: 3px 8px; }
 </style>

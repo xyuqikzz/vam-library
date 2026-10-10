@@ -1,5 +1,5 @@
 <template>
-  <div class="settings-view animate-fadeIn">
+<div class="settings-view animate-fadeIn b2-page"><PageHeader :title="$t('sidebar.settings')" ></PageHeader><div class="b2-page-body">
     <SceneBrowserModPanel />
     <!-- General -->
     <GlassPanel :title="$t('settings.general')">
@@ -10,13 +10,10 @@
         </div>
         <div class="setting-control path-control">
           <div class="path-display">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-              <path d="M3 7V5a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-              <rect x="3" y="7" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.5" />
-            </svg>
+            <Icon  :size="14" name="outline-45" />
             <span class="path-text truncate">{{ vamRootPath || $t('settings.notConfigured') }}</span>
           </div>
-          <button class="browse-btn" @click="browseDirectory">{{ $t('settings.browse') }}</button>
+          <UiButton @click="browseDirectory" variant="secondary">{{ $t('settings.browse') }}</UiButton>
         </div>
       </div>
 
@@ -28,9 +25,7 @@
           <p class="setting-description">{{ $t('settings.autoScanDesc') }}</p>
         </div>
         <div class="setting-control">
-          <button :class="['toggle-switch', { on: appStore.autoScan }]" @click="toggleAutoScan">
-            <span class="toggle-thumb" />
-          </button>
+          <UiSwitch  :model-value="appStore.autoScan" :label="$t('settings.autoScan')" @update:model-value="toggleAutoScan" />
         </div>
       </div>
     </GlassPanel>
@@ -45,33 +40,23 @@
           :key="instance.id"
           :class="['instance-row', { active: activeInstanceId === instance.id }]"
         >
-          <button class="instance-main" type="button" @click="switchInstance(instance.id)">
+          <UiButton class="instance-main" type="button" @click="switchInstance(instance.id)" variant="secondary">
             <span class="instance-name">{{ instance.name }}</span>
             <span class="instance-path truncate">{{ instance.rootPath }}</span>
-          </button>
-          <button
-            class="instance-delete"
-            type="button"
-            :title="$t('settings.deleteInstance')"
-            @click="deleteInstance(instance.id)"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path d="M3 6h18" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
-              <path d="M8 6V4h8v2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
-              <path d="M6 6l1 14h10l1-14" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" />
-              <path d="M10 10v6M14 10v6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
-            </svg>
-          </button>
+          </UiButton>
+          <UiButton class="instance-delete" type="button" :title="$t('settings.deleteInstance')" @click="deleteInstance(instance.id)" variant="danger" icon-only :aria-label="$t('settings.deleteInstance')">
+            <Icon  :size="14" name="outline-46" />
+          </UiButton>
         </div>
       </div>
 
       <div class="setting-divider" />
 
       <div class="instance-add-row">
-        <input v-model="newInstanceName" class="setting-input instance-name-input" :placeholder="$t('settings.instanceNamePlaceholder')" />
-        <button class="browse-btn" :disabled="!canAddCurrentInstance" @click="addCurrentInstance">
+        <UiInput v-model="newInstanceName" class="setting-input instance-name-input" :placeholder="$t('settings.instanceNamePlaceholder')" />
+        <UiButton :disabled="!canAddCurrentInstance" @click="addCurrentInstance" variant="secondary">
           {{ $t('settings.addCurrentInstance') }}
-        </button>
+        </UiButton>
       </div>
       <p v-if="isCurrentPathDuplicated" class="instance-tip">
         {{ $t('settings.duplicateInstancePath') }}
@@ -86,9 +71,7 @@
           <p class="setting-description">{{ $t('settings.managedModeDesc') }}</p>
         </div>
         <div class="setting-control">
-          <button :class="['toggle-switch', { on: managedEnabled }]" @click="toggleManagedMode">
-            <span class="toggle-thumb" />
-          </button>
+          <UiSwitch  :model-value="managedEnabled" :label="$t('settings.managedMode')" @update:model-value="toggleManagedMode" />
         </div>
       </div>
 
@@ -109,18 +92,7 @@
           <p id="blur-previews-description" class="setting-description">{{ $t('settings.blurPreviewsDesc') }}</p>
         </div>
         <div class="setting-control">
-          <button
-            type="button"
-            role="switch"
-            aria-labelledby="blur-previews-label"
-            aria-describedby="blur-previews-description"
-            :aria-checked="appStore.blurPreviews"
-            :class="['toggle-switch', { on: appStore.blurPreviews }]"
-            :disabled="isSavingPreviewSettings"
-            @click="togglePreviewBlur"
-          >
-            <span class="toggle-thumb" />
-          </button>
+          <UiSwitch type="button" role="switch" aria-labelledby="blur-previews-label" aria-describedby="blur-previews-description" :aria-checked="appStore.blurPreviews" :disabled="isSavingPreviewSettings" :model-value="appStore.blurPreviews" :label="$t('settings.blurPreviews')" @update:model-value="togglePreviewBlur" />
         </div>
       </div>
     </GlassPanel>
@@ -134,18 +106,12 @@
         </div>
         <div class="setting-control">
           <div class="theme-selector">
-            <button
-              :class="['theme-btn', { active: locale === 'zh-CN' }]"
-              @click="setLocale('zh-CN')"
-            >
+            <UiChip :class="['', { active: locale === 'zh-CN' }]" @click="setLocale('zh-CN')" :selected="locale === 'zh-CN'">
               中文
-            </button>
-            <button
-              :class="['theme-btn', { active: locale === 'en-US' }]"
-              @click="setLocale('en-US')"
-            >
+            </UiChip>
+            <UiChip :class="['', { active: locale === 'en-US' }]" @click="setLocale('en-US')" :selected="locale === 'en-US'">
               English
-            </button>
+            </UiChip>
           </div>
         </div>
       </div>
@@ -160,31 +126,13 @@
         </div>
         <div class="setting-control">
           <div class="stepper-control">
-            <button
-              class="stepper-btn"
-              type="button"
-              :disabled="maxConcurrentDownloads <= 1"
-              @click="changeMaxConcurrentDownloads(-1)"
-            >
+            <UiButton type="button" :disabled="maxConcurrentDownloads <= 1" @click="changeMaxConcurrentDownloads(-1)" variant="secondary">
               -
-            </button>
-            <input
-              type="number"
-              class="setting-input stepper-input"
-              v-model.number="maxConcurrentDownloads"
-              min="1"
-              max="5"
-              @blur="saveDownloadSettings"
-              @change="saveDownloadSettings"
-            />
-            <button
-              class="stepper-btn"
-              type="button"
-              :disabled="maxConcurrentDownloads >= 5"
-              @click="changeMaxConcurrentDownloads(1)"
-            >
+            </UiButton>
+            <UiInput type="number" class="setting-input stepper-input" v-model.number="maxConcurrentDownloads" min="1" max="5" @blur="saveDownloadSettings" @change="saveDownloadSettings" />
+            <UiButton type="button" :disabled="maxConcurrentDownloads >= 5" @click="changeMaxConcurrentDownloads(1)" variant="secondary">
               +
-            </button>
+            </UiButton>
           </div>
         </div>
       </div>
@@ -197,14 +145,7 @@
           <p class="setting-description">{{ $t('settings.speedLimitDesc') }}</p>
         </div>
         <div class="setting-control speed-limit-control">
-          <input
-            type="number"
-            class="setting-input"
-            v-model.number="speedLimitKb"
-            min="0"
-            step="100"
-            @change="saveDownloadSettings"
-          />
+          <UiInput type="number" class="setting-input" v-model.number="speedLimitKb" min="0" step="100" @change="saveDownloadSettings" />
           <span class="unit-label">{{ $t('settings.speedLimitUnit') }}</span>
         </div>
       </div>
@@ -260,14 +201,10 @@
           </p>
         </div>
       </div>
-      <textarea
-        v-model="hubCookieDraft"
-        class="cookie-input"
-        :placeholder="$t('settings.hubCookiePlaceholder')"
-      />
+      <UiInput v-model="hubCookieDraft" class="cookie-input" :placeholder="$t('settings.hubCookiePlaceholder')" multiline />
       <div class="hub-actions">
-        <button class="browse-btn" @click="saveHubCookie">{{ $t('settings.saveHubCookie') }}</button>
-        <button class="clear-cookie-btn" @click="clearHubCookie">{{ $t('settings.clearHubCookie') }}</button>
+        <UiButton @click="saveHubCookie" variant="secondary">{{ $t('settings.saveHubCookie') }}</UiButton>
+        <UiButton @click="clearHubCookie" variant="secondary">{{ $t('settings.clearHubCookie') }}</UiButton>
       </div>
     </GlassPanel>
 
@@ -279,9 +216,9 @@
           <p class="setting-description">{{ $t('settings.clearThumbnailsDesc') }}</p>
         </div>
         <div class="setting-control">
-          <button class="clear-cookie-btn" :disabled="isClearingThumbnails" @click="handleClearThumbnails">
+          <UiButton :disabled="isClearingThumbnails" @click="handleClearThumbnails" variant="secondary">
             {{ isClearingThumbnails ? $t('common.loading') : $t('settings.clearBtn') }}
-          </button>
+          </UiButton>
         </div>
       </div>
 
@@ -293,13 +230,13 @@
           <p class="setting-description">{{ $t('settings.clearLocalDataDesc') }}</p>
         </div>
         <div class="setting-control">
-          <button class="danger-btn" :disabled="isClearingLocalData" @click="confirmClearLocalData = true">
+          <UiButton :disabled="isClearingLocalData" @click="confirmClearLocalData = true" variant="danger">
             {{ isClearingLocalData ? $t('common.loading') : $t('settings.clearBtn') }}
-          </button>
+          </UiButton>
         </div>
       </div>
     </GlassPanel>
-    
+
     <!-- Backup & Export -->
     <GlassPanel :title="$t('settings.exportPackageList')">
       <div class="setting-row">
@@ -308,9 +245,9 @@
           <p class="setting-description">{{ $t('settings.exportPackageListDesc') }}</p>
         </div>
         <div class="setting-control">
-          <button class="browse-btn" @click="handleExportPackages">
+          <UiButton @click="handleExportPackages" variant="secondary">
             {{ $t('settings.exportPackageList') }}
-          </button>
+          </UiButton>
         </div>
       </div>
     </GlassPanel>
@@ -328,15 +265,14 @@
         </div>
         <div class="about-row">
           <span class="about-label">{{ $t('settings.repository') }}</span>
-          <button class="about-link" type="button" @click="openRepository">
+          <UiButton class="about-link" type="button" @click="openRepository" variant="secondary">
             github.com/xyuqikzz/vam-library
-          </button>
+          </UiButton>
         </div>
       </div>
     </GlassPanel>
 
-    <div v-if="confirmClearLocalData" class="modal-overlay" @click.self="closeClearLocalDataDialog">
-      <div class="confirm-dialog">
+    <UiModal v-if="confirmClearLocalData" :show-close="false"  :close-disabled="isClearingLocalData" @close="closeClearLocalDataDialog">
         <div class="confirm-dialog-header">
           <h3>{{ $t('settings.clearLocalDataConfirmTitle') }}</h3>
         </div>
@@ -344,19 +280,25 @@
           <p>{{ $t('settings.clearLocalDataConfirmDesc') }}</p>
         </div>
         <div class="confirm-dialog-actions">
-          <button class="browse-btn" :disabled="isClearingLocalData" @click="closeClearLocalDataDialog">
+          <UiButton :disabled="isClearingLocalData" @click="closeClearLocalDataDialog" variant="secondary">
             {{ $t('common.cancel') }}
-          </button>
-          <button class="danger-btn" :disabled="isClearingLocalData" @click="handleClearLocalData">
+          </UiButton>
+          <UiButton :disabled="isClearingLocalData" @click="handleClearLocalData" variant="danger">
             {{ isClearingLocalData ? $t('common.loading') : $t('common.confirm') }}
-          </button>
+          </UiButton>
         </div>
-      </div>
-    </div>
-  </div>
+      </UiModal>
+  </div></div>
 </template>
 
 <script setup lang="ts">
+import UiChip from '@/components/ui/UiChip.vue'
+import UiModal from '@/components/ui/UiModal.vue'
+import PageHeader from '@/components/layout/PageHeader.vue'
+import UiInput from '@/components/ui/UiInput.vue'
+import UiSwitch from '@/components/ui/UiSwitch.vue'
+import UiButton from '@/components/ui/UiButton.vue'
+import Icon from '@/components/ui/Icon.vue'
 import { useI18n } from 'vue-i18n'
 import { computed, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
@@ -646,7 +588,7 @@ async function handleExportPackages() {
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
   background: var(--bg-input);
-  border: 1px solid var(--border-subtle);
+  border: none;
   border-radius: var(--radius-sm);
   color: var(--text-secondary);
   font-size: var(--text-sm);
@@ -657,32 +599,13 @@ async function handleExportPackages() {
   max-width: 160px;
 }
 
-.browse-btn {
-  padding: var(--space-2) var(--space-4);
-  height: 34px;
-  background: var(--bg-elevated);
-  color: var(--text-primary);
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-subtle);
-  transition:
-    background var(--duration-fast) var(--ease),
-    border-color var(--duration-fast) var(--ease);
-}
-
-.browse-btn:hover {
-  background: var(--bg-hover);
-  border-color: var(--border-default);
-}
-
 .toggle-switch {
   position: relative;
   width: 44px;
   height: 24px;
   border-radius: var(--radius-full);
   background: var(--bg-hover);
-  border: 1px solid var(--border-subtle);
+  border: none;
   cursor: pointer;
   transition:
     background var(--duration-base) var(--ease),
@@ -700,9 +623,9 @@ async function handleExportPackages() {
   left: 2px;
   width: 18px;
   height: 18px;
-  border-radius: 50%;
-  background: white;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  border-radius: var(--radius-xl)%;
+  background: var(--text-primary);
+  box-shadow: none;
   transition: transform var(--duration-base) var(--ease);
 }
 
@@ -716,30 +639,6 @@ async function handleExportPackages() {
   border-radius: var(--radius-sm);
   padding: 2px;
   gap: 2px;
-}
-
-.theme-btn {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-1) var(--space-3);
-  height: 30px;
-  border-radius: var(--radius-xs);
-  color: var(--text-tertiary);
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-  transition:
-    color var(--duration-fast) var(--ease),
-    background var(--duration-fast) var(--ease);
-}
-
-.theme-btn:hover {
-  color: var(--text-secondary);
-}
-
-.theme-btn.active {
-  color: var(--text-primary);
-  background: var(--bg-elevated);
 }
 
 .about-content {
@@ -778,13 +677,6 @@ async function handleExportPackages() {
 
 .setting-input {
   width: 100px;
-  height: 30px;
-  padding: 0 var(--space-2);
-  background: var(--bg-input);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
-  color: var(--text-primary);
-  font-size: var(--text-sm);
   text-align: right;
   transition: border-color var(--transition-fast) var(--ease);
 }
@@ -796,43 +688,12 @@ async function handleExportPackages() {
   overflow: hidden;
   height: 32px;
   background: var(--bg-input);
-  border: 1px solid var(--border-subtle);
+  border: none;
   border-radius: var(--radius-sm);
-}
-
-.stepper-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  color: var(--text-secondary);
-  font-size: var(--text-lg);
-  line-height: 1;
-  transition:
-    background var(--duration-fast) var(--ease),
-    color var(--duration-fast) var(--ease);
-}
-
-.stepper-btn:hover:not(:disabled) {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
-.stepper-btn:disabled {
-  color: var(--text-tertiary);
-  cursor: not-allowed;
-  opacity: 0.5;
 }
 
 .stepper-input {
   width: 44px;
-  height: 30px;
-  padding: 0;
-  border-width: 0 1px;
-  border-color: var(--border-subtle);
-  border-radius: 0;
-  background: transparent;
   text-align: center;
   appearance: textfield;
   -moz-appearance: textfield;
@@ -856,9 +717,9 @@ async function handleExportPackages() {
   align-items: stretch;
   gap: var(--space-2);
   padding: var(--space-2);
-  border: 1px solid var(--border-subtle);
+  border: none;
   border-radius: var(--radius-sm);
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--bg-subtle);
 }
 
 .instance-main {
@@ -873,7 +734,7 @@ async function handleExportPackages() {
 
 .instance-row.active {
   border-color: var(--accent-primary);
-  background: rgba(110, 107, 240, 0.12);
+  background: var(--accent-muted);
 }
 
 .instance-name {
@@ -894,7 +755,7 @@ async function handleExportPackages() {
   width: 32px;
   height: 32px;
   flex-shrink: 0;
-  border: 1px solid transparent;
+  border: none;
   border-radius: var(--radius-sm);
   color: var(--text-tertiary);
   transition:
@@ -905,8 +766,8 @@ async function handleExportPackages() {
 
 .instance-delete:hover {
   color: var(--color-error);
-  background: rgba(248, 113, 113, 0.08);
-  border-color: rgba(248, 113, 113, 0.2);
+  background: var(--color-error-bg);
+  border-color: var(--color-error-bg);
 }
 
 .instance-add-row {
@@ -922,41 +783,13 @@ async function handleExportPackages() {
 .cookie-input {
   width: 100%;
   min-height: 82px;
-  padding: var(--space-3);
   resize: vertical;
-  background: var(--bg-input);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
-  color: var(--text-primary);
-  font-size: var(--text-xs);
 }
 
 .hub-actions {
   display: flex;
   gap: var(--space-2);
   margin-top: var(--space-3);
-}
-
-.clear-cookie-btn {
-  padding: var(--space-2) var(--space-4);
-  height: 34px;
-  border: 1px solid rgba(248, 113, 113, 0.2);
-  border-radius: var(--radius-sm);
-  background: rgba(248, 113, 113, 0.08);
-  color: var(--color-error);
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-}
-
-.danger-btn {
-  padding: var(--space-2) var(--space-4);
-  height: 34px;
-  border: 1px solid rgba(248, 113, 113, 0.2);
-  border-radius: var(--radius-sm);
-  background: rgba(248, 113, 113, 0.1);
-  color: var(--color-error);
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
 }
 
 .setting-select {
@@ -971,7 +804,6 @@ async function handleExportPackages() {
 }
 
 .setting-input:focus {
-  border-color: var(--accent-primary);
   outline: none;
 }
 
@@ -991,37 +823,6 @@ async function handleExportPackages() {
   margin-top: var(--space-2);
   font-size: var(--text-xs);
   color: var(--text-tertiary);
-}
-
-.browse-btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.danger-btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 720;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-6);
-  background: rgba(22, 22, 24, 0.56);
-  /* backdrop-filter removed */
-
-}
-
-.confirm-dialog {
-  width: min(460px, 100%);
-  border: 1px solid rgba(248, 113, 113, 0.18);
-  border-radius: var(--radius-lg);
-  background: rgba(20, 21, 35, 0.96);
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.35);
 }
 
 .confirm-dialog-header,
@@ -1052,4 +853,9 @@ async function handleExportPackages() {
   gap: var(--space-3);
   border-top: 1px solid var(--border-subtle);
 }
+
+.b2-page { display: flex; flex-direction: column; height: 100%; min-height: 0; max-width: none; margin: 0; padding: 0; gap: 0; overflow: hidden; }
+.b2-page-body { flex: 1; min-height: 0; min-width: 0; overflow: auto; padding: 20px 24px; display: flex; flex-direction: column; gap: 20px; }
+.b2-page :deep(.page-header) { width: 100%; }
+@media(max-width: 800px) { .b2-page-body { padding: 12px; } }
 </style>

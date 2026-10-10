@@ -1,15 +1,14 @@
 <template>
-  <div class="appearances-view animate-fadeIn">
-    <nav class="preset-type-tabs" :aria-label="t('gameContent.presetType')">
-      <button v-for="kind in presetKinds" :key="kind" :class="{ active: presetKind === kind }"
-        :aria-pressed="presetKind === kind" :disabled="managerBusy" @click="selectPresetKind(kind)">
+<div class="appearances-view animate-fadeIn b2-page"><PageHeader :title="$t('sidebar.appearances')" ><template #filters><nav class="preset-type-tabs" :aria-label="t('gameContent.presetType')">
+      <UiChip v-for="kind in presetKinds" :key="kind" :class="{ active: presetKind === kind }" :aria-pressed="presetKind === kind" :disabled="managerBusy" @click="selectPresetKind(kind)" :selected="presetKind === kind">
         {{ t(`gameContent.presetTypes.${kind}`) }}
-      </button>
-    </nav>
-    <div class="content-tabs">
-      <button :class="{ active: contentTab === 'files' }" :aria-pressed="contentTab === 'files'" :disabled="managerBusy" @click="contentTab = 'files'">{{ t('gameContent.presetFiles') }}</button>
-      <button :class="{ active: contentTab === 'packages' }" :aria-pressed="contentTab === 'packages'" :disabled="managerBusy" @click="contentTab = 'packages'">{{ t('gameContent.packageView') }}</button>
-    </div>
+      </UiChip>
+    </nav><div class="content-tabs">
+      <UiChip :class="{ active: contentTab === 'files' }" :aria-pressed="contentTab === 'files'" :disabled="managerBusy" @click="contentTab = 'files'" :selected="contentTab === 'files'">{{ t('gameContent.presetFiles') }}</UiChip>
+      <UiChip :class="{ active: contentTab === 'packages' }" :aria-pressed="contentTab === 'packages'" :disabled="managerBusy" @click="contentTab = 'packages'" :selected="contentTab === 'packages'">{{ t('gameContent.packageView') }}</UiChip>
+    </div></template></PageHeader><div class="b2-page-body">
+
+
     <GameContentManager v-show="contentTab === 'files'" :key="presetKind" :kind="presetKind"
       @loaded="presetPackageIds = new Set($event)" @busy-change="managerBusy = $event" />
     <ResourceDisplay
@@ -23,16 +22,10 @@
       @update:view-mode="viewMode = $event"
     >
       <template #actions>
-        <button
-          class="scan-btn-inline"
-          :disabled="isScanning || !vamRootPath"
-          @click="handleScan"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-            <path d="M21 12a9 9 0 1 1-6.219-8.56" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
-          </svg>
+        <UiButton :disabled="isScanning || !vamRootPath" @click="handleScan" variant="primary" size="lg">
+          <Icon  :size="14" name="outline-7" />
           <span>{{ isScanning ? t('toolbar.scanning') : t('packages.scan') }}</span>
-        </button>
+        </UiButton>
         <div class="sort-dropdown">
           <select v-model="sortBy" class="sort-select">
             <option value="name">{{ t('packages.sortByName') }}</option>
@@ -42,18 +35,20 @@
         </div>
       </template>
       <template #empty-action>
-        <button class="action-btn" @click="goToSettings">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-            <path d="M4 20h16M4 20V4h16v16M9 10h6M12 7v6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
+        <UiButton @click="goToSettings" variant="secondary">
+          <Icon  :size="16" name="outline-15" />
           {{ t('packages.selectDirectory') }}
-        </button>
+        </UiButton>
       </template>
     </ResourceDisplay>
-  </div>
+  </div></div>
 </template>
 
 <script setup lang="ts">
+import PageHeader from '@/components/layout/PageHeader.vue'
+import Icon from '@/components/ui/Icon.vue'
+import UiButton from '@/components/ui/UiButton.vue'
+import UiChip from '@/components/ui/UiChip.vue'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -142,15 +137,6 @@ function goToSettings() {
 </script>
 
 <style scoped>
-.preset-type-tabs { display: flex; flex-shrink: 0; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
-.preset-type-tabs button { padding: 7px 10px; border-radius: 7px; font-size: 13px; color: var(--text-secondary); border: 1px solid transparent; }
-.preset-type-tabs button.active { background: var(--accent-subtle); border-color: var(--accent-primary); color: var(--text-primary); }
-.preset-type-tabs button:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
-.preset-type-tabs button:disabled, .content-tabs button:disabled { opacity: .5; cursor: not-allowed; }
-.content-tabs { display: flex; flex-shrink: 0; gap: 8px; margin-bottom: 12px; }
-.content-tabs button { padding: 7px 12px; border-radius: 7px; font-size: 13px; color: var(--text-secondary); }
-.content-tabs button.active { background: var(--bg-elevated); color: var(--text-primary); }
-.content-tabs button:focus-visible { outline: 2px solid var(--accent-primary); }
 .appearances-view {
   display: flex;
   flex-direction: column;
@@ -160,25 +146,6 @@ function goToSettings() {
 }
 .appearances-view > .game-content { flex: 1; min-height: 0; overflow: hidden; }
 .appearances-view > .resource-display { flex: 1; min-height: 0; height: auto; }
-
-.scan-btn-inline {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-1) var(--space-3);
-  height: 30px;
-  border-radius: var(--radius-sm);
-  color: var(--accent-primary);
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-  transition: color var(--duration-fast) var(--ease), background var(--duration-fast) var(--ease);
-}
-
-.scan-btn-inline:hover:not(:disabled) {
-  background: rgba(110, 107, 240, 0.1);
-}
-
-.scan-btn-inline:disabled { opacity: 0.5; cursor: not-allowed; }
 
 
 .sort-select {
@@ -195,20 +162,8 @@ function goToSettings() {
 
 .sort-select:focus { border-color: var(--accent-primary); }
 
-.action-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-5);
-  height: 36px;
-  background: var(--accent-gradient);
-  color: white;
-  font-size: var(--text-sm);
-  font-weight: var(--font-semibold);
-  border-radius: var(--radius-md);
-  transition: opacity var(--duration-fast) var(--ease), transform var(--duration-fast) var(--ease);
-}
-
-.action-btn:hover { opacity: 0.9; transform: translateY(-1px); }
-.action-btn:active { transform: translateY(0); }
+.b2-page { display: flex; flex-direction: column; height: 100%; min-height: 0; max-width: none; margin: 0; padding: 0; gap: 0; overflow: hidden; }
+.b2-page-body { flex: 1; min-height: 0; min-width: 0; overflow: auto; padding: 20px 24px; display: flex; flex-direction: column; gap: 20px; }
+.b2-page :deep(.page-header) { width: 100%; }
+@media(max-width: 800px) { .b2-page-body { padding: 12px; } }
 </style>

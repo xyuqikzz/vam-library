@@ -1,22 +1,14 @@
 <template>
-  <div class="statistics-view animate-fadeIn">
-    <div class="statistics-header">
-      <div>
-        <h1 class="statistics-title">数据统计</h1>
-        <p class="statistics-subtitle">基于当前扫描入库的 .var 包生成统计概览。</p>
-      </div>
-      <button class="refresh-btn" :disabled="loading" @click="loadPackages">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-          <path d="M21 12a9 9 0 1 1-6.219-8.56" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
-        </svg>
+<div class="statistics-view animate-fadeIn b2-page"><PageHeader :title="$t('sidebar.statistics')" :subtitle="$t('ui.statisticsSubtitle')"><template #actions><UiButton :disabled="loading" @click="loadPackages" variant="secondary">
+        <Icon  :size="14" name="outline-7" />
         <span>{{ loading ? '加载中' : '刷新' }}</span>
-      </button>
-    </div>
+      </UiButton></template><template #filters><div class="statistics-tabs">
+      <UiChip :class="['', { active: activeTab === 'overview' }]" @click="activeTab = 'overview'" :selected="activeTab === 'overview'">总览概况</UiChip>
+      <UiChip :class="['', { active: activeTab === 'analysis' }]" @click="activeTab = 'analysis'" :selected="activeTab === 'analysis'">资源分析</UiChip>
+    </div></template></PageHeader><div class="b2-page-body">
 
-    <div class="statistics-tabs">
-      <button :class="['tab-btn', { active: activeTab === 'overview' }]" @click="activeTab = 'overview'">总览概况</button>
-      <button :class="['tab-btn', { active: activeTab === 'analysis' }]" @click="activeTab = 'analysis'">资源分析</button>
-    </div>
+
+
 
     <div v-if="loading" class="loading-panel glass-panel">正在加载统计数据...</div>
 
@@ -32,10 +24,7 @@
           <div class="summary-grid">
             <div class="summary-item">
               <div class="summary-icon icon-green">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                  <path d="M12 2L3 7v10l9 5 9-5V7l-9-5Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" />
-                  <path d="M12 12l9-5M12 12v10M12 12L3 7" stroke="currentColor" stroke-width="1.5" />
-                </svg>
+                <Icon  :size="18" name="outline-47" />
               </div>
               <div>
                 <span class="summary-label">总资源包数</span>
@@ -44,10 +33,7 @@
             </div>
             <div class="summary-item">
               <div class="summary-icon icon-blue">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                  <path d="M4 7a8 3 0 1 0 16 0 8 3 0 1 0-16 0ZM4 7v10a8 3 0 1 0 16 0V7" stroke="currentColor" stroke-width="1.5" />
-                  <path d="M4 12a8 3 0 1 0 16 0" stroke="currentColor" stroke-width="1.5" />
-                </svg>
+                <Icon  :size="18" name="outline-48" />
               </div>
               <div>
                 <span class="summary-label">总文件大小</span>
@@ -56,9 +42,7 @@
             </div>
             <div class="summary-item">
               <div class="summary-icon icon-purple">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                  <path d="M8 4h8v16H8zM4 8h4v12H4zM16 11h4v9h-4z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" />
-                </svg>
+                <Icon  :size="18" name="outline-49" />
               </div>
               <div>
                 <span class="summary-label">平均包大小</span>
@@ -79,9 +63,7 @@
             </div>
             <div class="directory-row root-row">
               <span class="directory-name">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                  <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
-                </svg>
+                <Icon  :size="14" name="outline-50" />
                 AddonPackages
               </span>
               <span>{{ totalPackages }}</span>
@@ -90,9 +72,7 @@
             </div>
             <div v-for="row in directoryRows" :key="row.name" class="directory-row">
               <span class="directory-name child-name">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                  <path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
-                </svg>
+                <Icon  :size="14" name="outline-51" />
                 {{ row.name }}
               </span>
               <span>{{ row.count }}</span>
@@ -190,10 +170,14 @@
         </section>
       </div>
     </template>
-  </div>
+  </div></div>
 </template>
 
 <script setup lang="ts">
+import UiChip from '@/components/ui/UiChip.vue'
+import PageHeader from '@/components/layout/PageHeader.vue'
+import Icon from '@/components/ui/Icon.vue'
+import UiButton from '@/components/ui/UiButton.vue'
 import { computed, onMounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useAppStore } from '@/stores/app'
@@ -220,15 +204,15 @@ const { packages, loading } = storeToRefs(localLibraryStore)
 const activeTab = ref<'overview' | 'analysis'>('overview')
 
 const categoryDefinitions: CategoryDefinition[] = [
-  { type: 'scene', label: '场景', color: '#ff8058' },
-  { type: 'plugin', label: '插件', color: '#56bd63' },
-  { type: 'asset', label: '资产', color: '#ffb64d' },
-  { type: 'appearance', label: '外观', color: '#f27aa6' },
-  { type: 'clothing', label: '服装', color: '#9aa4db' },
-  { type: 'hair', label: '发型', color: '#5fb2f2' },
-  { type: 'morph', label: '变形', color: '#43c6e8' },
-  { type: 'other', label: '其他', color: '#b8c4cc' },
-  { type: 'unknown', label: 'Unknown', color: '#c7d0d5' },
+  { type: 'scene', label: '场景', color: 'var(--color-scene)' },
+  { type: 'plugin', label: '插件', color: 'var(--color-plugin)' },
+  { type: 'asset', label: '资产', color: 'var(--color-asset)' },
+  { type: 'appearance', label: '外观', color: 'var(--color-appearance)' },
+  { type: 'clothing', label: '服装', color: 'var(--color-clothing)' },
+  { type: 'hair', label: '发型', color: 'var(--color-hair)' },
+  { type: 'morph', label: '变形', color: 'var(--color-morph)' },
+  { type: 'other', label: '其他', color: 'var(--text-secondary)' },
+  { type: 'unknown', label: 'Unknown', color: 'var(--text-secondary)' },
 ]
 
 const totalPackages = computed(() => packages.value.length)
@@ -271,7 +255,7 @@ const categoryRows = computed(() => {
 })
 
 const categoryDonutGradient = computed(() => {
-  if (categoryRows.value.length === 0) return '#e9edf2'
+  if (categoryRows.value.length === 0) return 'var(--text-primary)'
   let cursor = 0
   const segments = categoryRows.value.map((item) => {
     const start = cursor
@@ -426,13 +410,6 @@ function formatPercent(value: number): string {
   min-height: 0;
 }
 
-.statistics-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-4);
-}
-
 .statistics-title {
   margin: 0;
   color: var(--text-primary);
@@ -444,58 +421,6 @@ function formatPercent(value: number): string {
   margin-top: var(--space-2);
   color: var(--text-tertiary);
   font-size: var(--text-sm);
-}
-
-.refresh-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  height: 32px;
-  padding: 0 var(--space-3);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
-  color: var(--text-secondary);
-  background: var(--glass-bg);
-  font-size: var(--text-sm);
-  transition: color var(--duration-fast) var(--ease), background var(--duration-fast) var(--ease);
-}
-
-.refresh-btn:hover:not(:disabled) {
-  color: var(--text-primary);
-  background: var(--bg-hover);
-}
-
-.refresh-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.statistics-tabs {
-  display: flex;
-  gap: var(--space-5);
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.tab-btn {
-  position: relative;
-  height: 36px;
-  color: var(--text-secondary);
-  font-size: var(--text-sm);
-}
-
-.tab-btn.active {
-  color: #43c6e8;
-}
-
-.tab-btn.active::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: -1px;
-  height: 2px;
-  border-radius: var(--radius-full);
-  background: #43c6e8;
 }
 
 .statistics-content {
@@ -539,9 +464,9 @@ function formatPercent(value: number): string {
   gap: var(--space-3);
   min-height: 86px;
   padding: var(--space-4);
-  border: 1px solid var(--border-subtle);
+  border: none;
   border-radius: var(--radius-sm);
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--bg-subtle);
 }
 
 .summary-icon {
@@ -565,7 +490,7 @@ function formatPercent(value: number): string {
 
 .icon-purple {
   color: var(--accent-primary);
-  background: rgba(110, 107, 240, 0.16);
+  background: var(--accent-muted);
 }
 
 .summary-label {
@@ -583,15 +508,13 @@ function formatPercent(value: number): string {
 }
 
 .summary-value.highlight {
-  background: linear-gradient(90deg, var(--accent-secondary), #f27aa6);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  background: none;
+  color: var(--text-primary);
 }
 
 .directory-table {
   overflow: hidden;
-  border: 1px solid var(--border-subtle);
+  border: none;
   border-radius: var(--radius-sm);
 }
 
@@ -607,7 +530,7 @@ function formatPercent(value: number): string {
 
 .directory-head {
   color: var(--text-tertiary);
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--bg-subtle);
   font-size: var(--text-xs);
   font-weight: var(--font-semibold);
 }
@@ -654,8 +577,8 @@ function formatPercent(value: number): string {
   place-items: center;
   width: 126px;
   height: 126px;
-  border-radius: 50%;
-  background: conic-gradient(#d9345f 0 var(--health-angle), rgba(160, 160, 200, 0.15) var(--health-angle) 360deg);
+  border-radius: var(--radius-xl)%;
+  background: conic-gradient(var(--color-error) 0 var(--health-angle), var(--accent-muted) var(--health-angle) 360deg);
 }
 
 .health-ring-inner,
@@ -666,7 +589,7 @@ function formatPercent(value: number): string {
   justify-content: center;
   width: 98px;
   height: 98px;
-  border-radius: 50%;
+  border-radius: var(--radius-xl)%;
   background: var(--bg-surface);
   color: var(--text-primary);
 }
@@ -715,7 +638,7 @@ function formatPercent(value: number): string {
   height: 12px;
   overflow: hidden;
   border-radius: var(--radius-full);
-  background: rgba(160, 160, 200, 0.16);
+  background: var(--accent-muted);
 }
 
 .fill,
@@ -728,15 +651,15 @@ function formatPercent(value: number): string {
 }
 
 .fill.warning {
-  background: #f5a623;
+  background: var(--color-warning);
 }
 
 .fill.info {
-  background: #43c6e8;
+  background: var(--color-success);
 }
 
 .fill.danger {
-  background: #d9345f;
+  background: var(--color-error);
 }
 
 .category-grid {
@@ -752,7 +675,7 @@ function formatPercent(value: number): string {
   gap: var(--space-3);
   min-height: 34px;
   padding: 0 var(--space-3);
-  border: 1px solid var(--border-subtle);
+  border: none;
   border-radius: var(--radius-sm);
 }
 
@@ -773,7 +696,7 @@ function formatPercent(value: number): string {
 .type-dot {
   width: 9px;
   height: 9px;
-  border-radius: 50%;
+  border-radius: var(--radius-xl)%;
   flex-shrink: 0;
 }
 
@@ -816,7 +739,7 @@ function formatPercent(value: number): string {
   color: var(--text-secondary);
   font-size: var(--text-xs);
   border-bottom: 1px solid var(--border-subtle);
-  border-radius: 0;
+  border-radius: var(--radius-none);
   margin-bottom: var(--space-1);
 }
 
@@ -927,10 +850,6 @@ function formatPercent(value: number): string {
     display: none;
   }
 
-  .statistics-header {
-    flex-direction: column;
-  }
-
   .summary-grid {
     grid-template-columns: 1fr;
   }
@@ -940,4 +859,9 @@ function formatPercent(value: number): string {
     grid-template-columns: minmax(0, 1fr) 68px 88px 58px;
   }
 }
+
+.b2-page { display: flex; flex-direction: column; height: 100%; min-height: 0; max-width: none; margin: 0; padding: 0; gap: 0; overflow: hidden; }
+.b2-page-body { flex: 1; min-height: 0; min-width: 0; overflow: auto; padding: 20px 24px; display: flex; flex-direction: column; gap: 20px; }
+.b2-page :deep(.page-header) { width: 100%; }
+@media(max-width: 800px) { .b2-page-body { padding: 12px; } }
 </style>

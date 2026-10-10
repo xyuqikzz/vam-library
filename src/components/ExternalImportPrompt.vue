@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import UiButton from '@/components/ui/UiButton.vue'
+import UiModal from '@/components/ui/UiModal.vue'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -19,7 +21,7 @@ const mode = ref<ExternalImportMode>('flatten')
 const deferred = ref(false)
 const navigating = ref(false)
 const error = ref('')
-const dialog = ref<HTMLDialogElement | null>(null)
+const dialog = ref<InstanceType<typeof UiModal> | null>(null)
 const files = computed(() => batches.value[0] || [])
 const visible = computed(() => props.ready && files.value.length > 0 && !deferred.value && !ingestionStore.busy)
 const targetDir = computed(() => appStore.installContext?.realAddonDir || '')
@@ -92,7 +94,7 @@ async function openSettings() {
 </script>
 
 <template>
-  <dialog ref="dialog" class="external-import-dialog glass-panel" aria-labelledby="external-import-title" aria-describedby="external-import-description" @cancel.prevent="cancel">
+  <UiModal ref="dialog" aria-labelledby="external-import-title" aria-describedby="external-import-description" @cancel.prevent="cancel" imperative :show-close="false">
     <h3 id="external-import-title">{{ t('ingestion.externalTitle') }}</h3>
     <p id="external-import-description">{{ t('ingestion.externalQuestion', { count: files.length }) }}</p>
     <ul class="file-list">
@@ -113,23 +115,23 @@ async function openSettings() {
     <p class="help">{{ t('ingestion.externalHelp') }}</p>
     <p v-if="error" class="error" role="alert">{{ error }}</p>
     <div class="actions">
-      <button class="btn btn-secondary" :disabled="navigating" autofocus @click="cancel">{{ t('common.cancel') }}</button>
-      <button v-if="!targetDir" class="btn btn-primary" @click="openSettings">{{ t('ingestion.externalSettings') }}</button>
-      <button v-else class="btn btn-primary" :disabled="navigating" @click="previewImport">{{ t('ingestion.preview') }}</button>
+      <UiButton :disabled="navigating" autofocus @click="cancel" variant="secondary">{{ t('common.cancel') }}</UiButton>
+      <UiButton v-if="!targetDir" @click="openSettings" variant="primary" size="lg">{{ t('ingestion.externalSettings') }}</UiButton>
+      <UiButton v-else :disabled="navigating" @click="previewImport" variant="primary" size="lg">{{ t('ingestion.preview') }}</UiButton>
     </div>
-  </dialog>
+  </UiModal>
 </template>
 
 <style scoped>
-.external-import-dialog { margin: auto; width: min(560px, calc(100vw - 48px)); max-height: calc(100vh - 64px); overflow: auto; padding: var(--space-6); color: var(--text-primary); background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); }
-.external-import-dialog::backdrop { background: rgba(0, 0, 0, 0.6); }
+.external-import-dialog { margin: auto; width: min(560px, calc(100vw - 48px)); max-height: calc(100vh - 64px); overflow: auto; padding: var(--space-6); color: var(--text-primary); background: var(--bg-surface); border: none; border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); }
+.external-import-dialog::backdrop { background: var(--bg-overlay); }
 h3 { font-size: var(--text-lg); margin-bottom: var(--space-3); }
 p { font-size: var(--text-sm); line-height: 1.7; overflow-wrap: anywhere; }
 .file-list { margin: var(--space-3) 0; padding: var(--space-3) var(--space-5); max-height: 160px; overflow: auto; background: var(--bg-subtle); border-radius: var(--radius-sm); font-size: var(--text-xs); overflow-wrap: anywhere; user-select: text; }
 .target-path { color: var(--text-secondary); user-select: text; }
-fieldset { border: 0; padding: 0; margin: var(--space-4) 0; display: grid; gap: var(--space-2); }
+fieldset { border: none; padding: 0; margin: var(--space-4) 0; display: grid; gap: var(--space-2); }
 legend { font-size: var(--text-sm); margin-bottom: var(--space-2); }
-label { display: flex; gap: var(--space-3); align-items: center; padding: var(--space-3); border: 1px solid var(--border-default); border-radius: var(--radius-sm); cursor: pointer; font-size: var(--text-sm); }
+label { display: flex; gap: var(--space-3); align-items: center; padding: var(--space-3); border: none; border-radius: var(--radius-sm); cursor: pointer; font-size: var(--text-sm); }
 label.selected { border-color: var(--accent-primary); background: var(--accent-subtle); }
 label:focus-within, button:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
 input { accent-color: var(--accent-primary); }
@@ -137,6 +139,4 @@ small { display: block; color: var(--text-secondary); margin-top: var(--space-1)
 .help { color: var(--text-secondary); font-size: var(--text-xs); }
 .error { color: var(--color-error); }
 .actions { display: flex; justify-content: flex-end; gap: var(--space-2); margin-top: var(--space-4); }
-.btn { padding: var(--space-2) var(--space-4); border-radius: var(--radius-sm); font-size: var(--text-sm); }
-.btn:disabled { opacity: 0.5; cursor: not-allowed; }
 </style>

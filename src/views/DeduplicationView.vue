@@ -1,5 +1,17 @@
 <template>
-  <div class="deduplication-view animate-fadeIn">
+<div class="deduplication-view animate-fadeIn b2-page"><PageHeader :title="$t('sidebar.deduplication')" ><template #actions>
+      <UiButton :disabled="busy || !effectiveRoot" @click="handleScan" variant="primary" size="lg">
+        <span>{{ isDedupScanning ? $t('common.loading') : $t('deduplication.scanButton') }}</span>
+      </UiButton>
+      <UiButton v-if="cleanupList.length > 0 || archiveList.length > 0" :disabled="busy" @click="showCleanupPreview = true" variant="secondary">
+        <Icon  :size="14" name="outline-16" />
+        <span>{{ t('deduplication.reviewOrganize', { count: cleanupList.length, archive: archiveList.length }) }}</span>
+      </UiButton>
+      <UiButton v-if="trashList.length > 0" :disabled="isRestoring" @click="handleRestoreLatest" variant="secondary">
+        <Icon  :size="14" name="outline-17" />
+        <span>{{ $t('deduplication.restoreLatest', { count: trashList.length }) }}</span>
+      </UiButton>
+    </template></PageHeader><div class="b2-page-body">
     <!-- Summary Cards -->
     <section class="summary-grid stagger-children">
       <StatCard
@@ -8,7 +20,7 @@
         :subtitle="$t('deduplication.duplicateGroupsSub')"
         :icon="icons.duplicates"
         :trend="(dedupSummary?.duplicate_groups ?? 0) > 0 ? 'up' : 'neutral'"
-        :color="(dedupSummary?.duplicate_groups ?? 0) > 0 ? '#f59e0b' : '#3ecf8e'"
+        :color="(dedupSummary?.duplicate_groups ?? 0) > 0 ? 'var(--color-warning)' : 'var(--color-success)'"
       />
       <StatCard
         :title="$t('deduplication.wastedSpace')"
@@ -16,7 +28,7 @@
         :subtitle="$t('deduplication.wastedSpaceSub')"
         :icon="icons.space"
         trend="neutral"
-        color="#ef4444"
+        color="var(--color-error)"
       />
       <StatCard
         :title="$t('deduplication.safeToClean')"
@@ -24,15 +36,15 @@
         :subtitle="$t('deduplication.safeToCleanSub')"
         :icon="icons.clean"
         trend="neutral"
-        color="#3ecf8e"
+        color="var(--color-success)"
       />
     </section>
 
     <section class="scan-options glass-panel">
       <label for="dedup-root">{{ t('deduplication.sourceDirectory') }}</label>
       <div class="scan-directory-row">
-        <input id="dedup-root" v-model="resourceRoot" :placeholder="defaultRoot" :disabled="busy" />
-        <button class="restore-btn" :disabled="busy" @click="chooseRoot">{{ t('deduplication.browse') }}</button>
+        <UiInput id="dedup-root" v-model="resourceRoot" :placeholder="defaultRoot" :disabled="busy" />
+        <UiButton :disabled="busy" @click="chooseRoot" variant="secondary">{{ t('deduplication.browse') }}</UiButton>
       </div>
       <p class="text-sm text-secondary">{{ t('deduplication.rules') }}</p>
       <p class="text-xs text-tertiary">{{ t('deduplication.ordinaryRule') }}</p>
@@ -43,37 +55,7 @@
       </details>
     </section>
     <!-- Action Bar -->
-    <div class="action-bar">
-      <button
-        class="scan-btn"
-        :disabled="busy || !effectiveRoot"
-        @click="handleScan"
-      >
-        <span>{{ isDedupScanning ? $t('common.loading') : $t('deduplication.scanButton') }}</span>
-      </button>
-      <button
-        v-if="cleanupList.length > 0 || archiveList.length > 0"
-        class="cleanup-btn"
-        :disabled="busy"
-        @click="showCleanupPreview = true"
-      >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14M22 4L12 14.01l-3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-        <span>{{ t('deduplication.reviewOrganize', { count: cleanupList.length, archive: archiveList.length }) }}</span>
-      </button>
-      <button
-        v-if="trashList.length > 0"
-        class="restore-btn"
-        :disabled="isRestoring"
-        @click="handleRestoreLatest"
-      >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-          <path d="M3 7h18M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-.8 12A2 2 0 0 1 16.2 21H7.8a2 2 0 0 1-2-2L5 7m5 5 2-2 2 2m-2-2v7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-        <span>{{ $t('deduplication.restoreLatest', { count: trashList.length }) }}</span>
-      </button>
-    </div>
+
 
     <!-- Keep groups at their natural height; paginate large scan results. -->
     <section v-if="duplicateGroups.length > 0" class="dedup-content glass-panel">
@@ -82,13 +64,13 @@
         <span class="text-xs text-tertiary">{{ t('deduplication.filteredGroups', { count: filteredGroups.length, total: duplicateGroups.length }) }}</span>
       </div>
       <div class="dedup-search">
-        <input v-model="groupSearch" type="search" :aria-label="t('deduplication.searchPaths')" :placeholder="t('deduplication.searchPaths')" />
+        <UiInput v-model="groupSearch" type="search" :aria-label="t('deduplication.searchPaths')" :placeholder="t('deduplication.searchPaths')" search />
         <span class="text-xs text-tertiary">{{ t('deduplication.pathsHint') }}</span>
       </div>
       <div ref="groupListEl" class="dedup-body">
         <article v-for="group in visibleGroups" :key="group.id" class="dup-group">
           <div class="dup-group-header">
-            <button class="dup-group-toggle" :aria-expanded="!collapsedGroups.has(group.id)" @click="toggleGroup(group.id)">
+            <UiButton class="dup-group-toggle" :aria-expanded="!collapsedGroups.has(group.id)" @click="toggleGroup(group.id)" variant="secondary">
               <span class="dup-expand-icon">{{ collapsedGroups.has(group.id) ? '▸' : '▾' }}</span>
               <span class="dup-group-info">
                 <span class="dup-group-path text-sm">{{ group.resource_path }}</span>
@@ -96,11 +78,11 @@
                   {{ t('deduplication.copies', { count: group.file_count }) }} · {{ t('deduplication.wasted', { size: formatSize(group.total_wasted_bytes) }) }}
                 </span>
               </span>
-            </button>
+            </UiButton>
             <div class="dup-group-actions">
-              <button class="dup-action-btn text-xs" @click="copyPaths(group.instances.map(i => i.file_path))">{{ t('deduplication.copyGroupPaths') }}</button>
-              <button v-if="!allSelectedFor(group)" class="dup-action-btn dup-action-keep text-xs" :disabled="busy" @click="selectAllForKeep(group)">{{ t('deduplication.keepAll') }}</button>
-              <button v-else class="dup-action-btn dup-action-clean text-xs" :disabled="busy" @click="selectRecommendedForKeep(group)">{{ t('deduplication.keepRecommended') }}</button>
+              <UiButton class="text-xs" @click="copyPaths(group.instances.map(i => i.file_path))" variant="secondary">{{ t('deduplication.copyGroupPaths') }}</UiButton>
+              <UiButton v-if="!allSelectedFor(group)" class="dup-action-keep text-xs" :disabled="busy" @click="selectAllForKeep(group)" variant="secondary">{{ t('deduplication.keepAll') }}</UiButton>
+              <UiButton v-else class="dup-action-clean text-xs" :disabled="busy" @click="selectRecommendedForKeep(group)" variant="secondary">{{ t('deduplication.keepRecommended') }}</UiButton>
             </div>
           </div>
           <div v-if="!collapsedGroups.has(group.id)" class="dup-instances">
@@ -124,7 +106,7 @@
                 <span class="dup-inst-meta text-xs text-tertiary">{{ formatSize(instance.size_bytes) }} · {{ t('deduplication.modified') }}: {{ new Date(instance.modified_time).toLocaleString() }}</span>
                 <span v-if="instance.archive_destination" class="dup-file-path text-xs text-secondary">{{ t('deduplication.archiveTarget') }}: {{ instance.archive_destination }}</span>
               </div>
-              <button class="dup-copy-btn text-xs" :aria-label="t('deduplication.copyFilePath', { path: instance.file_path })" @click="copyPaths([instance.file_path])">{{ t('deduplication.copyPath') }}</button>
+              <UiButton class="text-xs" :aria-label="t('deduplication.copyFilePath', { path: instance.file_path })" @click="copyPaths([instance.file_path])" variant="ghost">{{ t('deduplication.copyPath') }}</UiButton>
             </div>
           </div>
         </article>
@@ -133,8 +115,8 @@
       <nav class="dedup-pagination" :aria-label="t('deduplication.groupPages')">
         <span class="text-xs text-tertiary">{{ t('deduplication.pageInfo', { page: currentPage, total: pageCount, size: pageSize }) }}</span>
         <div class="dup-group-actions">
-          <button class="dup-page-btn" :disabled="currentPage <= 1" @click="currentPage--">{{ t('deduplication.previousPage') }}</button>
-          <button class="dup-page-btn" :disabled="currentPage >= pageCount" @click="currentPage++">{{ t('deduplication.nextPage') }}</button>
+          <UiButton :disabled="currentPage <= 1" @click="currentPage--" variant="ghost">{{ t('deduplication.previousPage') }}</UiButton>
+          <UiButton :disabled="currentPage >= pageCount" @click="currentPage++" variant="ghost">{{ t('deduplication.nextPage') }}</UiButton>
         </div>
       </nav>
     </section>
@@ -161,21 +143,15 @@
     </div>
 
     <!-- Cleanup Preview Modal -->
-    <Transition name="fade">
-      <div v-if="showCleanupPreview" class="modal-overlay" @click.self="showCleanupPreview = false">
-        <div class="modal-container glass-panel animate-scaleUp">
+    <UiModal v-if="showCleanupPreview" :show-close="false"  :close-disabled="isCleaning" @close="showCleanupPreview = false">
           <div class="modal-header">
             <h3 class="modal-title">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" class="title-icon">
-                <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
+              <Icon class="title-icon" :size="18" name="outline-18" />
               {{ $t('deduplication.confirmModalTitle') }}
             </h3>
-            <button class="close-btn" :disabled="isCleaning" @click="showCleanupPreview = false">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
-              </svg>
-            </button>
+            <UiButton :disabled="isCleaning" @click="showCleanupPreview = false" variant="ghost" icon-only :aria-label="$t('common.close')">
+              <Icon  :size="16" name="outline-9" />
+            </UiButton>
           </div>
           <div class="modal-body">
             <p class="share-desc text-secondary text-sm">
@@ -205,22 +181,25 @@
               </span>
             </div>
             <div class="action-footer">
-              <button class="action-btn secondary-btn" :disabled="isCleaning" @click="showCleanupPreview = false">
+              <UiButton :disabled="isCleaning" @click="showCleanupPreview = false" variant="secondary">
                 {{ $t('common.cancel') }}
-              </button>
-              <button class="action-btn cleanup-confirm-btn" :disabled="isCleaning" @click="handleCleanup">
+              </UiButton>
+              <UiButton :disabled="isCleaning" @click="handleCleanup" variant="danger">
                 <span v-if="isCleaning" class="spinner"></span>
                 <span>{{ isCleaning ? $t('deduplication.cleaning') : $t('deduplication.confirmCleanup') }}</span>
-              </button>
+              </UiButton>
             </div>
           </div>
-        </div>
-      </div>
-    </Transition>
-  </div>
+        </UiModal>
+  </div></div>
 </template>
 
 <script setup lang="ts">
+import UiModal from '@/components/ui/UiModal.vue'
+import PageHeader from '@/components/layout/PageHeader.vue'
+import Icon from '@/components/ui/Icon.vue'
+import UiButton from '@/components/ui/UiButton.vue'
+import UiInput from '@/components/ui/UiInput.vue'
 import { formatSize } from '@/utils/bytes'
 import { nextTick, onMounted, ref, reactive, computed, watch } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
@@ -510,7 +489,7 @@ const icons = {
 <style scoped>
 .scan-options { padding: 16px; display: flex; flex-direction: column; gap: 10px; }
 .scan-directory-row { display: flex; gap: 8px; }
-.scan-directory-row input { flex: 1; min-width: 0; padding: 9px 12px; background: var(--bg-base); border: 1px solid var(--border-subtle); border-radius: 6px; color: var(--text-primary); }
+.scan-directory-row input { flex: 1; min-width: 0; padding: 9px 12px; background: var(--bg-base); border: 1px solid var(--border-subtle); border-radius: var(--radius-xs); color: var(--text-primary); }
 .scan-options details { max-height: 160px; overflow: auto; overflow-wrap: anywhere; }
 
 .deduplication-view {
@@ -530,56 +509,10 @@ const icons = {
   .summary-grid { grid-template-columns: 1fr; }
 }
 
-.action-bar {
-  display: flex;
-  gap: var(--space-3);
-}
-
-.scan-btn,
-.cleanup-btn,
-.restore-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-4);
-  height: 34px;
-  font-size: var(--text-sm);
-  font-weight: var(--font-semibold);
-  border-radius: var(--radius-md);
-  transition:
-    opacity var(--duration-fast) var(--ease),
-    transform var(--duration-fast) var(--ease);
-}
-
-.scan-btn {
-  background: var(--accent-gradient);
-  color: white;
-}
-
-.scan-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-
-.scan-btn:not(:disabled):hover { opacity: 0.9; transform: translateY(-1px); }
-
 .spin-icon {
   animation: spin 1s linear infinite;
   transform-origin: center;
 }
-
-.cleanup-btn {
-  background: var(--color-success);
-  color: white;
-}
-
-.cleanup-btn:hover { opacity: 0.9; transform: translateY(-1px); }
-
-.restore-btn {
-  background: rgba(96, 165, 250, 0.14);
-  color: var(--color-info);
-  border: 1px solid rgba(96, 165, 250, 0.28);
-}
-
-.restore-btn:hover:not(:disabled) { background: rgba(96, 165, 250, 0.22); transform: translateY(-1px); }
-.restore-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .dedup-content {
   flex: 1 0 auto;
@@ -613,7 +546,7 @@ const icons = {
 .dedup-search { display: flex; align-items: center; gap: 12px; padding: 12px 16px; flex-wrap: wrap; }
 .dedup-search input { flex: 1 1 280px; min-width: 0; padding: 8px 10px; background: var(--bg-input); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); }
 .dedup-body { min-height: 260px; max-height: 65vh; overflow-y: auto; padding: 12px; display: block; }
-.dup-group { border: 1px solid var(--border-subtle); border-radius: var(--radius-md); overflow: hidden; }
+.dup-group { border: none; border-radius: var(--radius-md); overflow: hidden; }
 .dup-group + .dup-group { margin-top: 12px; }
 .dup-group-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px; background: var(--bg-hover); flex-wrap: wrap; }
 .dup-group-toggle { display: flex; align-items: center; gap: 8px; text-align: left; flex: 1 1 260px; min-width: 0; }
@@ -621,11 +554,8 @@ const icons = {
 .dup-group-path { color: var(--text-primary); font-weight: var(--font-semibold); overflow-wrap: anywhere; }
 .dup-group-meta, .dup-inst-meta { font-variant-numeric: tabular-nums; }
 .dup-group-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.dup-action-btn, .dup-page-btn, .dup-copy-btn { padding: 5px 10px; border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); white-space: nowrap; }
-.dup-action-btn:hover, .dup-page-btn:hover:not(:disabled), .dup-copy-btn:hover { background: var(--bg-hover); }
 .dup-action-keep { color: var(--color-success); }
 .dup-action-clean { color: var(--accent-primary); }
-.dup-page-btn:disabled, .dup-action-btn:disabled { opacity: .4; cursor: not-allowed; }
 .dup-expand-icon { color: var(--text-tertiary); flex: 0 0 14px; }
 .dup-instances { border-top: 1px solid var(--border-subtle); }
 .dup-instance { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; align-items: start; gap: 12px; padding: 14px; }
@@ -636,46 +566,17 @@ const icons = {
 .dup-inst-name { font-weight: var(--font-medium); overflow-wrap: anywhere; }
 .dup-file-path, .dup-inst-name { -webkit-user-select: text; user-select: text; }
 .dup-file-path { display: block; overflow-wrap: anywhere; white-space: normal; line-height: 1.65; color: var(--text-secondary); }
-.dup-status, .dup-source-badge { padding: 2px 7px; border-radius: 4px; font-size: var(--text-xs); white-space: nowrap; }
-.dup-status.keep { color: var(--color-success); background: rgba(62, 207, 142, .1); }
-.dup-status.recycle { color: var(--color-error); background: rgba(239, 68, 68, .1); }
-.dup-status.archive, .dup-source-badge { color: var(--color-info); background: rgba(96, 165, 250, .1); }
+.dup-status, .dup-source-badge { padding: 2px 7px; border-radius: var(--radius-progress); font-size: var(--text-xs); white-space: nowrap; }
+.dup-status.keep { color: var(--color-success); background: var(--color-success-bg); }
+.dup-status.recycle { color: var(--color-error); background: var(--color-error-bg); }
+.dup-status.archive, .dup-source-badge { color: var(--color-info); background: var(--color-info-bg); }
 .dedup-pagination { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 12px 16px; border-top: 1px solid var(--border-subtle); }
 .dedup-no-match { padding: 24px; text-align: center; }
 @media (max-width: 700px) {
   .dup-instance { grid-template-columns: 16px minmax(0, 1fr); }
-  .dup-copy-btn { grid-column: 2; justify-self: start; }
-  .action-bar { flex-wrap: wrap; }
 }
 
 /* ── Cleanup Modal ────────────────────────────────────────── */
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  background: rgba(0, 0, 0, 0.45);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-
-.modal-container {
-  width: 520px;
-  max-width: 90vw;
-  max-height: 85vh;
-  display: flex;
-  flex-direction: column;
-  background: rgba(28, 28, 30, 0.88);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.4);
-  overflow: hidden;
-}
 
 .modal-header {
   display: flex;
@@ -699,30 +600,6 @@ const icons = {
   color: var(--accent-primary);
 }
 
-.close-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-sm);
-  color: var(--text-tertiary);
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.close-btn:hover:not(:disabled) {
-  color: var(--text-primary);
-  background: var(--bg-hover);
-}
-
-.close-btn:disabled {
-  opacity: 0.3;
-  cursor: not-allowed;
-}
-
 .modal-body {
   padding: var(--space-5);
   overflow-y: auto;
@@ -740,9 +617,9 @@ const icons = {
 .cleanup-scroll-list {
   max-height: 200px;
   overflow-y: auto;
-  border: 1px solid var(--border-subtle);
+  border: none;
   border-radius: var(--radius-md);
-  background: rgba(0, 0, 0, 0.15);
+  background: var(--border-subtle);
   padding: var(--space-1) 0;
 }
 
@@ -751,7 +628,7 @@ const icons = {
   flex-direction: column;
   gap: 2px;
   padding: var(--space-2) var(--space-3);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid var(--bg-subtle);
 }
 
 .cleanup-preview-item:last-child {
@@ -783,58 +660,12 @@ const icons = {
   margin-top: var(--space-2);
 }
 
-.action-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 var(--space-5);
-  height: 38px;
-  font-size: var(--text-sm);
-  font-weight: var(--font-semibold);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  border: none;
-  transition: all var(--transition-fast);
-}
-
-.secondary-btn {
-  background: transparent;
-  color: var(--text-primary);
-  border: 1px solid var(--border-default);
-}
-
-.secondary-btn:hover:not(:disabled) {
-  background: var(--bg-hover);
-}
-
-.secondary-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.cleanup-confirm-btn {
-  background: var(--accent-gradient);
-  color: white;
-  box-shadow: 0 4px 12px rgba(110, 107, 240, 0.3);
-  gap: var(--space-2);
-}
-
-.cleanup-confirm-btn:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 16px rgba(110, 107, 240, 0.4);
-}
-
-.cleanup-confirm-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
 .spinner {
   width: 16px;
   height: 16px;
-  border: 2px solid rgba(255, 255, 255, 0.2);
-  border-top-color: white;
-  border-radius: 50%;
+  border: none;
+  border-top-color: var(--text-primary);
+  border-radius: var(--radius-xl)%;
   animation: spin 1s linear infinite;
 }
 
@@ -847,12 +678,12 @@ const icons = {
 }
 
 .list-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--border-default);
   border-radius: var(--radius-full);
 }
 
 .list-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.15);
+  background: var(--border-strong);
 }
 
 @keyframes spin {
@@ -860,9 +691,6 @@ const icons = {
 }
 
 /* Modal Animations */
-.animate-scaleUp {
-  animation: scaleUp 0.30s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
-}
 
 @keyframes scaleUp {
   from { transform: scale(0.92); opacity: 0; }
@@ -876,4 +704,9 @@ const icons = {
 .fade-enter-from, .fade-leave-to {
   opacity: 0;
 }
+
+.b2-page { display: flex; flex-direction: column; height: 100%; min-height: 0; max-width: none; margin: 0; padding: 0; gap: 0; overflow: hidden; }
+.b2-page-body { flex: 1; min-height: 0; min-width: 0; overflow: auto; padding: 20px 24px; display: flex; flex-direction: column; gap: 20px; }
+.b2-page :deep(.page-header) { width: 100%; }
+@media(max-width: 800px) { .b2-page-body { padding: 12px; } }
 </style>

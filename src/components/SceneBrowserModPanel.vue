@@ -19,9 +19,9 @@
         <p v-if="status.reason" role="alert">{{ status.reason }}</p>
       </template>
       <div class="actions">
-        <button :disabled="busy || !app.vamRootPath" @click="refresh">{{ t('sceneBrowserMod.refresh') }}</button>
-        <button :disabled="busy || !status?.compatible || status?.conflict || status?.installed" @click="change('install')">{{ t(status?.updateAvailable ? 'sceneBrowserMod.update' : 'sceneBrowserMod.install') }}</button>
-        <button :disabled="busy || !(status?.installed || status?.updateAvailable)" @click="change('uninstall')">{{ t('sceneBrowserMod.uninstall') }}</button>
+        <UiButton :disabled="busy || !app.vamRootPath" @click="refresh" variant="secondary">{{ t('sceneBrowserMod.refresh') }}</UiButton>
+        <UiButton :disabled="busy || !status?.compatible || status?.conflict || status?.installed" @click="change('install')" variant="secondary">{{ t(status?.updateAvailable ? 'sceneBrowserMod.update' : 'sceneBrowserMod.install') }}</UiButton>
+        <UiButton :disabled="busy || !(status?.installed || status?.updateAvailable)" @click="change('uninstall')" variant="secondary">{{ t('sceneBrowserMod.uninstall') }}</UiButton>
         <span v-if="busy" role="status">{{ t('common.loading') }}</span>
       </div>
     </div>
@@ -29,6 +29,7 @@
 </template>
 
 <script setup lang="ts">
+import UiButton from '@/components/ui/UiButton.vue'
 import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { invoke } from '@tauri-apps/api/core'
@@ -98,6 +99,6 @@ watch(() => app.vamRootPath, refresh, { immediate: true })
 .plugin-path { overflow-wrap: anywhere; }
 p { margin: 0; line-height: 1.6; }
 .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
-button { padding: 8px 16px; border: 1px solid var(--border-subtle); border-radius: 6px; background: var(--bg-surface); color: var(--text-primary); cursor: pointer; }
+button { padding: 8px 16px; border: none; border-radius: var(--radius-xs); background: var(--bg-surface); color: var(--text-primary); cursor: pointer; }
 button:disabled { opacity: .45; cursor: default; }
 </style>

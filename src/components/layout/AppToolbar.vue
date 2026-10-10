@@ -4,31 +4,19 @@
       <h1 class="toolbar-title">{{ pageTitle }}</h1>
     </div>
     <div class="toolbar-right">
-      <button
-        class="toolbar-btn"
-        :class="{ 'is-refreshing': isRefreshing }"
-        :title="isRefreshing ? t('toolbar.refreshing') : t('toolbar.refresh')"
-        :disabled="isRefreshing || isLibraryLoading"
-        @click="handleRefresh"
-      >
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          :class="{ 'spin-icon': isRefreshing || isLibraryLoading }"
-        >
-          <path d="M21 12a9 9 0 1 1-6.219-8.56" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
-        </svg>
+      <UiButton :class="{ 'is-refreshing': isRefreshing }" :title="isRefreshing ? t('toolbar.refreshing') : t('toolbar.refresh')" :disabled="isRefreshing || isLibraryLoading" @click="handleRefresh" variant="secondary">
+        <Icon :class="{ 'spin-icon': isRefreshing || isLibraryLoading }" :size="14" name="outline-7" />
         <span class="toolbar-btn-label">
           {{ isRefreshing || isLibraryLoading ? t('toolbar.refreshing') : t('toolbar.refresh') }}
         </span>
-      </button>
+      </UiButton>
     </div>
   </header>
 </template>
 
 <script setup lang="ts">
+import Icon from '@/components/ui/Icon.vue'
+import UiButton from '@/components/ui/UiButton.vue'
 import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -118,44 +106,6 @@ async function handleRefresh() {
   gap: var(--space-2);
   min-width: 0;
   -webkit-app-region: no-drag;
-}
-
-.toolbar-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  height: 28px;
-  padding: 0 10px;
-  border-radius: var(--radius-sm);
-  background: var(--bg-subtle);
-  border: 1px solid var(--border-subtle);
-  color: var(--text-tertiary);
-  font-size: var(--text-xs);
-  font-weight: var(--font-medium);
-  cursor: pointer;
-  transition:
-    color var(--duration-fast) var(--ease),
-    background var(--duration-fast) var(--ease),
-    border-color var(--duration-fast) var(--ease);
-}
-
-.toolbar-btn:hover:not(:disabled) {
-  color: var(--text-secondary);
-  background: var(--bg-hover);
-  border-color: var(--border-default);
-}
-
-.toolbar-btn:active:not(:disabled) {
-  transform: scale(0.98);
-}
-
-.toolbar-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.toolbar-btn.is-refreshing {
-  color: var(--accent-primary);
 }
 
 .toolbar-btn-label {

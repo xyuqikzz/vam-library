@@ -1,5 +1,15 @@
 <template>
-  <div class="trash-view animate-fadeIn">
+<div class="trash-view animate-fadeIn b2-page"><PageHeader :title="$t('sidebar.trash')" ><template #actions>
+      <UiButton :disabled="isLoading" @click="loadTrash" variant="secondary">
+        <Icon :class="['refresh-icon', { 'spin': isLoading }]" :size="14" name="outline-52" />
+        <span>{{ $t('common.refresh') }}</span>
+      </UiButton>
+
+      <UiButton v-if="trashList.length > 0" :disabled="isOperating" @click="confirmEmptyTrash" variant="danger">
+        <Icon  :size="14" name="outline-18" />
+        <span>{{ $t('trash.emptyBtn') }}</span>
+      </UiButton>
+    </template></PageHeader><div class="b2-page-body">
     <section class="trash-toolbar">
       <dl class="summary-grid">
         <div class="summary-item">
@@ -11,30 +21,7 @@
           <dd>{{ formatSize(totalSize) }}</dd>
         </div>
       </dl>
-    <div class="action-bar">
-      <button
-        class="refresh-btn"
-        :disabled="isLoading"
-        @click="loadTrash"
-      >
-        <svg :class="['refresh-icon', { 'spin': isLoading }]" width="14" height="14" viewBox="0 0 24 24" fill="none">
-          <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l.73-.73" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-        <span>{{ $t('common.refresh') }}</span>
-      </button>
 
-      <button
-        v-if="trashList.length > 0"
-        class="empty-btn"
-        :disabled="isOperating"
-        @click="confirmEmptyTrash"
-      >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-          <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-        <span>{{ $t('trash.emptyBtn') }}</span>
-      </button>
-    </div>
     </section>
 
     <!-- Trash Content -->
@@ -79,22 +66,12 @@
               </td>
               <td class="col-actions">
                 <div class="action-buttons">
-                  <button
-                    class="action-btn-mini restore"
-                    :disabled="isOperating"
-                    :title="$t('common.restore')"
-                    @click="handleRestore(item)"
-                  >
+                  <UiButton class="restore" :disabled="isOperating" :title="$t('common.restore')" @click="handleRestore(item)" variant="secondary">
                     {{ $t('common.restore') || '恢复' }}
-                  </button>
-                  <button
-                    class="action-btn-mini delete"
-                    :disabled="isOperating"
-                    :title="$t('common.delete')"
-                    @click="confirmDelete(item)"
-                  >
+                  </UiButton>
+                  <UiButton class="delete" :disabled="isOperating" :title="$t('common.delete')" @click="confirmDelete(item)" variant="danger">
                     {{ $t('common.delete') || '永久删除' }}
-                  </button>
+                  </UiButton>
                 </div>
               </td>
             </tr>
@@ -115,21 +92,15 @@
     </div>
 
     <!-- Confirm Delete Modal -->
-    <Transition name="fade">
-      <div v-if="confirmDialog.show" class="modal-overlay" @click.self="closeConfirmDialog">
-        <div class="modal-container glass-panel animate-scaleUp max-w-md">
+    <UiModal v-if="confirmDialog.show" :show-close="false"  :close-disabled="isOperating" @close="closeConfirmDialog">
           <div class="modal-header">
             <h3 class="modal-title">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" class="title-icon text-error">
-                <path d="M12 9v4m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
+              <Icon class="title-icon text-error" :size="18" name="outline-14" />
               {{ confirmDialog.title }}
             </h3>
-            <button class="close-btn" :disabled="isOperating" @click="closeConfirmDialog">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
-              </svg>
-            </button>
+            <UiButton :disabled="isOperating" @click="closeConfirmDialog" variant="ghost" icon-only :aria-label="$t('common.close')">
+              <Icon  :size="16" name="outline-9" />
+            </UiButton>
           </div>
           <div class="modal-body text-sm text-secondary">
             <p>{{ confirmDialog.message }}</p>
@@ -137,27 +108,24 @@
               {{ confirmDialog.detail }}
             </p>
             <div class="action-footer mt-4">
-              <button class="action-btn secondary-btn" :disabled="isOperating" @click="closeConfirmDialog">
+              <UiButton :disabled="isOperating" @click="closeConfirmDialog" variant="secondary">
                 {{ $t('common.cancel') }}
-              </button>
-              <button
-                class="action-btn confirm-btn"
-                :class="{ 'danger': confirmDialog.isDanger }"
-                :disabled="isOperating"
-                @click="executeConfirmedAction"
-              >
+              </UiButton>
+              <UiButton :class="{ 'danger': confirmDialog.isDanger }" :disabled="isOperating" @click="executeConfirmedAction" variant="danger">
                 <span v-if="isOperating" class="spinner-mini"></span>
                 <span>{{ $t('common.confirm') }}</span>
-              </button>
+              </UiButton>
             </div>
           </div>
-        </div>
-      </div>
-    </Transition>
-  </div>
+        </UiModal>
+  </div></div>
 </template>
 
 <script setup lang="ts">
+import UiModal from '@/components/ui/UiModal.vue'
+import PageHeader from '@/components/layout/PageHeader.vue'
+import Icon from '@/components/ui/Icon.vue'
+import UiButton from '@/components/ui/UiButton.vue'
 import { formatSize } from '@/utils/bytes'
 import { ref, computed, onMounted } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
@@ -258,7 +226,7 @@ async function executeConfirmedAction() {
   if (isOperating.value) return
   isOperating.value = true
   const { actionType, targetItem } = confirmDialog.value
-  
+
   try {
     if (actionType === 'delete' && targetItem) {
       await invoke('delete_cleanup_trash_item', { trashId: targetItem.id })
@@ -281,25 +249,25 @@ function getRemainingTime(createdAtStr: string): string {
   const utcStr = createdAtStr.replace(' ', 'T') + 'Z'
   const createdTime = new Date(utcStr).getTime()
   if (isNaN(createdTime)) return ''
-  
+
   const expiryTime = createdTime + 24 * 60 * 60 * 1000 // 24 hours
   const now = Date.now()
   const diffMs = expiryTime - now
-  
+
   if (diffMs <= 0) {
     return t('trash.purgingSoon')
   }
-  
+
   const diffHours = Math.floor(diffMs / (60 * 60 * 1000))
   if (diffHours >= 1) {
     return t('trash.hoursLeft', { count: diffHours })
   }
-  
+
   const diffMins = Math.floor(diffMs / (60 * 1000))
   if (diffMins >= 1) {
     return t('trash.minutesLeft', { count: diffMins })
   }
-  
+
   return t('trash.purgingSoon')
 }
 
@@ -311,7 +279,7 @@ function formatDate(dateStr: string): string {
     const formatted = dateStr.replace(' ', 'T')
     const date = new Date(formatted + (dateStr.includes('Z') ? '' : 'Z'))
     if (isNaN(date.getTime())) return dateStr.slice(0, 16)
-    
+
     // Add local timezone offset manually to print native local time
     const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000)
     return localDate.toISOString().slice(0, 16).replace('T', ' ')
@@ -345,7 +313,7 @@ const icons = {
   flex-wrap: wrap;
   flex-shrink: 0;
   padding: var(--space-4) var(--space-5);
-  border: 1px solid var(--border-subtle);
+  border: none;
   border-radius: var(--radius-md);
   background: var(--bg-surface);
 }
@@ -373,58 +341,6 @@ const icons = {
   font-weight: var(--font-semibold);
   font-variant-numeric: tabular-nums;
   color: var(--text-primary);
-}
-
-.action-bar {
-  display: flex;
-  gap: var(--space-3);
-  align-items: center;
-}
-
-.refresh-btn,
-.empty-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-4);
-  height: 34px;
-  white-space: nowrap;
-  flex-shrink: 0;
-  font-size: var(--text-sm);
-  font-weight: var(--font-semibold);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: all var(--transition-fast) var(--ease);
-}
-
-.refresh-btn {
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--text-primary);
-  border: 1px solid var(--border-subtle);
-}
-
-.refresh-btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: var(--border-default);
-  transform: translateY(-1px);
-}
-
-.empty-btn {
-  background: var(--color-error-bg);
-  color: var(--color-error);
-  border: 1px solid color-mix(in srgb, var(--color-error) 25%, transparent);
-}
-
-.empty-btn:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--color-error) 18%, transparent);
-}
-
-.empty-btn:disabled,
-.refresh-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  transform: none;
-  box-shadow: none;
 }
 
 .refresh-icon.spin {
@@ -554,76 +470,7 @@ const icons = {
   justify-content: flex-end;
 }
 
-.action-btn-mini {
-  flex-shrink: 0;
-  white-space: nowrap;
-  min-height: 30px;
-  padding: 4px 10px;
-  border-radius: var(--radius-sm);
-  font-size: var(--text-xs);
-  font-weight: var(--font-semibold);
-  cursor: pointer;
-  border: 1px solid transparent;
-  transition: all var(--transition-fast) var(--ease);
-}
-
-.action-btn-mini.restore {
-  background: var(--bg-subtle);
-  color: var(--text-primary);
-  border-color: var(--border-default);
-}
-
-.action-btn-mini.restore:hover:not(:disabled) {
-  background: var(--bg-hover);
-}
-
-.action-btn-mini.delete {
-  background: rgba(248, 113, 113, 0.1);
-  color: var(--color-error);
-  border-color: rgba(248, 113, 113, 0.2);
-}
-
-.action-btn-mini.delete:hover:not(:disabled) {
-  background: rgba(248, 113, 113, 0.2);
-  transform: translateY(-1px);
-}
-
-.action-btn-mini:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  transform: none !important;
-}
-
 /* ── Modal Overlay & Container ────────────────────────────── */
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-
-.modal-container {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  background: rgba(28, 28, 30, 0.9);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--glass-shadow);
-  overflow: hidden;
-}
-
-.max-w-md {
-  max-width: 440px;
-}
 
 .modal-header {
   display: flex;
@@ -642,30 +489,6 @@ const icons = {
   color: var(--text-primary);
 }
 
-.close-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-sm);
-  color: var(--text-tertiary);
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.close-btn:hover:not(:disabled) {
-  color: var(--text-primary);
-  background: var(--bg-hover);
-}
-
-.close-btn:disabled {
-  opacity: 0.3;
-  cursor: not-allowed;
-}
-
 .modal-body {
   padding: var(--space-5);
 }
@@ -676,61 +499,12 @@ const icons = {
   gap: var(--space-3);
 }
 
-.action-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 36px;
-  padding: 0 var(--space-4);
-  font-size: var(--text-sm);
-  font-weight: var(--font-semibold);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: all var(--transition-fast) var(--ease);
-}
-
-.secondary-btn {
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--text-primary);
-  border: 1px solid var(--border-subtle);
-}
-
-.secondary-btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: var(--border-default);
-}
-
-.confirm-btn {
-  background: var(--accent-gradient);
-  color: white;
-  border: none;
-}
-
-.confirm-btn:hover:not(:disabled) {
-  opacity: 0.95;
-  box-shadow: 0 4px 12px rgba(110, 107, 240, 0.3);
-}
-
-.confirm-btn.danger {
-  background: var(--color-error);
-}
-
-.confirm-btn.danger:hover:not(:disabled) {
-  box-shadow: 0 4px 12px rgba(248, 113, 113, 0.3);
-}
-
-.confirm-btn:disabled,
-.secondary-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
 .spinner-mini {
   width: 14px;
   height: 14px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  border-top-color: white;
-  border-radius: 50%;
+  border: none;
+  border-top-color: var(--text-primary);
+  border-radius: var(--radius-xl)%;
   animation: spin 0.8s linear infinite;
   margin-right: var(--space-2);
 }
@@ -742,4 +516,9 @@ const icons = {
 
 .mt-2 { margin-top: var(--space-2); }
 .mt-4 { margin-top: var(--space-4); }
+
+.b2-page { display: flex; flex-direction: column; height: 100%; min-height: 0; max-width: none; margin: 0; padding: 0; gap: 0; overflow: hidden; }
+.b2-page-body { flex: 1; min-height: 0; min-width: 0; overflow: auto; padding: 20px 24px; display: flex; flex-direction: column; gap: 20px; }
+.b2-page :deep(.page-header) { width: 100%; }
+@media(max-width: 800px) { .b2-page-body { padding: 12px; } }
 </style>

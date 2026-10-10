@@ -5,8 +5,8 @@
         <strong>启动遇到问题</strong>
         <p>{{ visibleStartupError }}</p>
         <div class="startup-error-actions">
-          <button class="startup-error-btn primary" @click="retryStartup">重试</button>
-          <button class="startup-error-btn" @click="openSettings">打开设置</button>
+          <UiButton class="primary" @click="retryStartup" variant="primary" size="lg">重试</UiButton>
+          <UiButton @click="openSettings" variant="secondary">打开设置</UiButton>
         </div>
       </div>
     </div>
@@ -48,6 +48,7 @@
 </template>
 
 <script setup lang="ts">
+import UiButton from '@/components/ui/UiButton.vue'
 import { computed, onMounted, ref, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
@@ -234,16 +235,16 @@ onMounted(async () => {
   align-items: center;
   justify-content: center;
   padding: var(--space-6);
-  background: rgba(22, 22, 24, 0.78);
+  background: var(--bg-overlay);
 }
 
 .startup-error-card {
   width: min(460px, 100%);
   padding: var(--space-5);
-  border: 1px solid rgba(255, 69, 58, 0.28);
+  border: none;
   border-radius: var(--radius-lg);
   background: var(--bg-surface);
-  box-shadow: var(--shadow-lg);
+  box-shadow: none;
 }
 
 .startup-error-card strong {
@@ -267,21 +268,6 @@ onMounted(async () => {
   gap: var(--space-2);
 }
 
-.startup-error-btn {
-  height: 32px;
-  padding: 0 var(--space-4);
-  border-radius: var(--radius-sm);
-  background: var(--bg-hover);
-  color: var(--text-primary);
-  font-size: var(--text-sm);
-  font-weight: var(--font-semibold);
-}
-
-.startup-error-btn.primary {
-  background: var(--accent-gradient);
-  color: #ffffff;
-}
-
 .global-loading-overlay {
   position: absolute;
   inset: 0;
@@ -290,16 +276,16 @@ onMounted(async () => {
   align-items: center;
   justify-content: center;
   padding: var(--space-6);
-  background: rgba(22, 22, 24, 0.6);
+  background: var(--bg-overlay);
 }
 
 .global-loading-card {
   width: min(420px, 100%);
   padding: var(--space-5);
-  border: 1px solid var(--border-default);
+  border: none;
   border-radius: var(--radius-xl);
   background: var(--bg-surface);
-  box-shadow: var(--shadow-lg);
+  box-shadow: none;
 }
 
 .global-loading-head {
@@ -331,7 +317,7 @@ onMounted(async () => {
   overflow: hidden;
   height: 6px;
   border-radius: var(--radius-full);
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--border-default);
 }
 
 .global-loading-progress-bar {

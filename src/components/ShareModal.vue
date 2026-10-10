@@ -1,21 +1,15 @@
 <template>
-  <Transition name="fade">
-    <div v-if="visible" class="modal-overlay" @click.self="handleClose">
-      <div class="modal-container glass-panel animate-scaleUp">
-        
+  <UiModal v-if="visible" :show-close="false"  :close-disabled="isZipping" @close="handleClose">
+
         <!-- Header -->
         <div class="modal-header">
           <h3 class="modal-title">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" class="title-icon">
-              <path d="M7.217 10.907a2.25 2.25 0 100 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186l9.566-5.314m0 0a2.25 2.25 0 102.217-3.9 2.25 2.25 0 00-2.217 3.9zm0 0L7.5 12m9.283 1.093L7.217 18.4m9.283-5.307a2.25 2.25 0 102.217 3.9 2.25 2.25 0 00-2.217-3.9z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
+            <Icon class="title-icon" :size="18" name="outline-8" />
             {{ $t('share.title') }}
           </h3>
-          <button class="close-btn" :disabled="isZipping" @click="handleClose">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-              <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
-            </svg>
-          </button>
+          <UiButton :disabled="isZipping" @click="handleClose" variant="ghost" icon-only :aria-label="$t('common.close')">
+            <Icon  :size="16" name="outline-9" />
+          </UiButton>
         </div>
 
         <!-- Body -->
@@ -33,10 +27,7 @@
           <!-- Error Phase State -->
           <div v-else-if="phase === 'error'" class="status-panel error-panel">
             <div class="status-icon-wrapper error">
-              <svg width="36" height="36" viewBox="0 0 24 24" fill="none">
-                <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.5" />
-                <path d="M12 8v4m0 3h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
-              </svg>
+              <Icon  :size="36" name="outline-10" />
             </div>
             <h4 class="text-sm font-semibold text-primary" style="margin-top: var(--space-2);">
               {{ $t('common.error') }}
@@ -44,18 +35,15 @@
             <p class="text-secondary text-xs" style="margin-top: var(--space-1); text-align: center; max-width: 90%;">
               {{ $t('share.failed', { error: progressError || 'Unknown Error' }) }}
             </p>
-            <button class="action-btn retry-btn" @click="fetchPreview">
+            <UiButton @click="fetchPreview" variant="secondary">
               {{ $t('download.actions.retry') }}
-            </button>
+            </UiButton>
           </div>
 
           <!-- Done Phase State -->
           <div v-else-if="phase === 'done'" class="status-panel success-panel">
             <div class="status-icon-wrapper success">
-              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" class="checkmark">
-                <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.5" />
-                <path d="M8.5 12.5l2.5 2.5 5-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-              </svg>
+              <Icon class="checkmark" :size="36" name="outline-11" />
             </div>
             <h4 class="text-sm font-semibold text-primary" style="margin-top: var(--space-2);">
               {{ $t('share.successTitle') }}
@@ -64,12 +52,12 @@
               {{ $t('share.successDesc') }}
             </p>
             <div class="success-actions">
-              <button class="action-btn secondary-btn" @click="revealZip">
+              <UiButton @click="revealZip" variant="secondary">
                 {{ $t('share.reveal') }}
-              </button>
-              <button class="action-btn primary-btn" @click="handleClose">
+              </UiButton>
+              <UiButton @click="handleClose" variant="primary" size="lg">
                 {{ $t('share.close') }}
-              </button>
+              </UiButton>
             </div>
           </div>
 
@@ -94,7 +82,7 @@
 
           <!-- Preview & Action State -->
           <div v-else class="preview-layout animate-fadeIn">
-            
+
             <!-- Summary Stats Card -->
             <div class="summary-stats-card">
               <div class="stat-column">
@@ -111,16 +99,12 @@
             <!-- Exclusion List Panel -->
             <div class="exclusion-list-card">
               <div v-if="!excludeListPath" class="exclusion-import-trigger" @click="handleImportExcludeList">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" class="import-icon">
-                  <path d="M12 4v16m8-8H4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-                </svg>
+                <Icon class="import-icon" :size="14" name="outline-12" />
                 <span class="text-xs">{{ $t('share.importExcludeBtn') }}</span>
               </div>
               <div v-else class="exclusion-active-state">
                 <div class="exclusion-info-wrapper">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" class="active-icon">
-                    <path d="M9 12l2 2 4-4M7.83 12a4 4 0 110-8h8.34a4 4 0 110 8H7.83z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                  </svg>
+                  <Icon class="active-icon" :size="14" name="outline-13" />
                   <div class="exclusion-text">
                     <p class="exclusion-title text-xs truncate" :title="excludeListName">
                       {{ $t('share.importedExcludeList', { name: excludeListName }) }}
@@ -130,9 +114,9 @@
                     </p>
                   </div>
                 </div>
-                <button class="clear-exclude-btn text-xs" @click="handleClearExcludeList">
+                <UiButton class="text-xs" @click="handleClearExcludeList" variant="secondary">
                   {{ $t('share.clearExcludeList') }}
-                </button>
+                </UiButton>
               </div>
             </div>
 
@@ -181,28 +165,27 @@
 
             <!-- Warning Banner -->
             <div v-if="missingDependencies.length > 0" class="warning-banner text-xs">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" class="warn-icon">
-                <path d="M12 9v4m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
+              <Icon class="warn-icon" :size="14" name="outline-14" />
               <span>{{ $t('share.missingCount', { count: missingDependencies.length }) }}</span>
             </div>
 
             <!-- Confirm Button -->
             <div class="action-footer">
-              <button class="action-btn confirm-btn" @click="startSharing">
+              <UiButton @click="startSharing" variant="primary" size="lg">
                 {{ $t('share.confirmBtn') }}
-              </button>
+              </UiButton>
             </div>
 
           </div>
         </div>
 
-      </div>
-    </div>
-  </Transition>
+      </UiModal>
 </template>
 
 <script setup lang="ts">
+import UiModal from '@/components/ui/UiModal.vue'
+import UiButton from '@/components/ui/UiButton.vue'
+import Icon from '@/components/ui/Icon.vue'
 import { formatSize } from '@/utils/bytes'
 import { ref, watch, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -307,7 +290,7 @@ async function startSharing() {
   try {
     // 1. Choose Save Location using Native Save Dialog
     const { save } = await import('@tauri-apps/plugin-dialog')
-    
+
     // Suggested filename from package id
     const cleanPackageId = props.packageId.replace(/[\/\\:\*\?"<>\|]/g, '_')
     const defaultFilename = `${cleanPackageId}_shared.zip`
@@ -419,34 +402,6 @@ function handleClose() {
 </script>
 
 <style scoped>
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  background: rgba(0, 0, 0, 0.45);
-  /* backdrop-filter removed */
-
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-
-.modal-container {
-  width: 520px;
-  max-width: 90vw;
-  max-height: 85vh;
-  display: flex;
-  flex-direction: column;
-  background: rgba(28, 28, 30, 0.88);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.4);
-  overflow: hidden;
-}
-
 /* Header */
 .modal-header {
   display: flex;
@@ -468,27 +423,6 @@ function handleClose() {
 
 .title-icon {
   color: var(--accent-primary);
-}
-
-.close-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-sm);
-  color: var(--text-tertiary);
-  transition: all var(--transition-fast);
-}
-
-.close-btn:hover:not(:disabled) {
-  color: var(--text-primary);
-  background: var(--bg-hover);
-}
-
-.close-btn:disabled {
-  opacity: 0.3;
-  cursor: not-allowed;
 }
 
 /* Body */
@@ -518,9 +452,9 @@ function handleClose() {
 .spinner {
   width: 32px;
   height: 32px;
-  border: 3px solid rgba(255, 255, 255, 0.06);
+  border: none;
   border-top-color: var(--accent-primary);
-  border-radius: 50%;
+  border-radius: var(--radius-xl)%;
   animation: spin 1s linear infinite;
 }
 
@@ -530,8 +464,8 @@ function handleClose() {
   align-items: center;
   justify-content: center;
   padding: var(--space-6) var(--space-4);
-  background: rgba(255, 255, 255, 0.01);
-  border: 1px solid var(--border-subtle);
+  background: var(--bg-subtle);
+  border: none;
   border-radius: var(--radius-md);
 }
 
@@ -541,16 +475,16 @@ function handleClose() {
   justify-content: center;
   width: 60px;
   height: 60px;
-  border-radius: 50%;
+  border-radius: var(--radius-xl)%;
 }
 
 .status-icon-wrapper.success {
-  background: rgba(52, 211, 153, 0.1);
+  background: var(--color-success-bg);
   color: var(--color-success);
 }
 
 .status-icon-wrapper.error {
-  background: rgba(248, 113, 113, 0.1);
+  background: var(--color-error-bg);
   color: var(--color-error);
 }
 
@@ -574,7 +508,7 @@ function handleClose() {
 
 .progress-track {
   height: 8px;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--bg-subtle);
   border-radius: var(--radius-full);
   overflow: hidden;
 }
@@ -606,8 +540,8 @@ function handleClose() {
 
 .summary-stats-card {
   display: flex;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid var(--border-subtle);
+  background: var(--bg-subtle);
+  border: none;
   border-radius: var(--radius-md);
   padding: var(--space-3) 0;
 }
@@ -647,7 +581,7 @@ function handleClose() {
 }
 
 .selected-target-wrapper {
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--bg-subtle);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
   padding: var(--space-2) var(--space-3);
@@ -664,15 +598,15 @@ function handleClose() {
 }
 
 .count-badge {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--border-default);
   padding: 1px 6px;
   border-radius: var(--radius-full);
-  font-size: 10px;
+  font-size: var(--text-xs);
   color: var(--text-secondary);
 }
 
 .count-badge.missing {
-  background: rgba(248, 113, 113, 0.15);
+  background: var(--color-error-bg);
   color: var(--color-error);
 }
 
@@ -686,7 +620,7 @@ function handleClose() {
 .type-dot {
   width: 8px;
   height: 8px;
-  border-radius: 50%;
+  border-radius: var(--radius-xl)%;
 }
 
 .type-dot.type-scene {
@@ -703,17 +637,17 @@ function handleClose() {
 .empty-list-hint {
   padding: var(--space-3);
   text-align: center;
-  border: 1px dashed var(--border-subtle);
+  border: none;
   border-radius: var(--radius-sm);
-  background: rgba(255, 255, 255, 0.01);
+  background: var(--bg-subtle);
 }
 
 .list-content {
   flex: 1;
   overflow-y: auto;
-  border: 1px solid var(--border-subtle);
+  border: none;
   border-radius: var(--radius-sm);
-  background: rgba(0, 0, 0, 0.15);
+  background: var(--border-subtle);
   padding: var(--space-1) 0;
 }
 
@@ -722,7 +656,7 @@ function handleClose() {
   justify-content: space-between;
   align-items: center;
   padding: var(--space-2) var(--space-3);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid var(--bg-subtle);
 }
 
 .list-item-row:last-child {
@@ -734,12 +668,12 @@ function handleClose() {
 }
 
 .missing-list {
-  border-color: rgba(248, 113, 113, 0.15);
-  background: rgba(248, 113, 113, 0.02);
+  border-color: var(--color-error-bg);
+  background: var(--color-error-bg);
 }
 
 .missing-row {
-  border-bottom-color: rgba(248, 113, 113, 0.05);
+  border-bottom-color: var(--color-error-bg);
 }
 
 /* Warning Banner */
@@ -748,8 +682,8 @@ function handleClose() {
   align-items: flex-start;
   gap: var(--space-2);
   padding: var(--space-3);
-  background: rgba(251, 191, 36, 0.08);
-  border: 1px solid rgba(251, 191, 36, 0.15);
+  background: var(--color-warning-bg);
+  border: none;
   border-radius: var(--radius-sm);
   color: var(--color-warning);
   line-height: 1.4;
@@ -766,67 +700,6 @@ function handleClose() {
   margin-top: var(--space-2);
 }
 
-.action-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 var(--space-5);
-  height: 38px;
-  font-size: var(--text-sm);
-  font-weight: var(--font-semibold);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.confirm-btn {
-  width: 100%;
-  background: var(--accent-gradient);
-  color: white;
-  border: none;
-  box-shadow: 0 4px 12px rgba(110, 107, 240, 0.3);
-}
-
-.confirm-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 16px rgba(110, 107, 240, 0.4);
-}
-
-.confirm-btn:active {
-  transform: translateY(0);
-}
-
-.primary-btn {
-  background: var(--accent-gradient);
-  color: white;
-  border: none;
-}
-
-.primary-btn:hover {
-  filter: brightness(1.1);
-}
-
-.secondary-btn {
-  background: transparent;
-  color: var(--text-primary);
-  border: 1px solid var(--border-strong);
-}
-
-.secondary-btn:hover {
-  background: var(--bg-hover);
-}
-
-.retry-btn {
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-strong);
-  color: var(--text-primary);
-  margin-top: var(--space-4);
-}
-
-.retry-btn:hover {
-  background: var(--bg-hover);
-}
-
 /* Scrollbar styling */
 .list-scrollbar::-webkit-scrollbar {
   width: 6px;
@@ -837,12 +710,12 @@ function handleClose() {
 }
 
 .list-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--border-default);
   border-radius: var(--radius-full);
 }
 
 .list-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.15);
+  background: var(--border-strong);
 }
 
 /* Animations */
@@ -866,10 +739,6 @@ function handleClose() {
   opacity: 0;
 }
 
-.animate-scaleUp {
-  animation: scaleUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
-}
-
 @keyframes scaleUp {
   from { transform: scale(0.95); opacity: 0; }
   to { transform: scale(1); opacity: 1; }
@@ -881,16 +750,16 @@ function handleClose() {
 
 /* Exclusion List Panel styling */
 .exclusion-list-card {
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px dashed var(--border-subtle);
+  background: var(--bg-subtle);
+  border: none;
   border-radius: var(--radius-md);
   padding: var(--space-3);
   transition: all var(--transition-normal);
 }
 
 .exclusion-list-card:hover {
-  background: rgba(255, 255, 255, 0.04);
-  border-color: rgba(255, 255, 255, 0.15);
+  background: var(--bg-subtle);
+  border-color: var(--border-strong);
 }
 
 .exclusion-import-trigger {
@@ -946,22 +815,6 @@ function handleClose() {
 
 .exclusion-subtitle {
   color: var(--text-secondary);
-  font-size: 11px;
-}
-
-.clear-exclude-btn {
-  background: rgba(248, 113, 113, 0.08);
-  border: 1px solid rgba(248, 113, 113, 0.2);
-  color: var(--color-error);
-  border-radius: var(--radius-sm);
-  padding: 4px 8px;
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: all var(--transition-fast);
-}
-
-.clear-exclude-btn:hover {
-  background: rgba(248, 113, 113, 0.15);
-  border-color: rgba(248, 113, 113, 0.3);
+  font-size: var(--text-xs);
 }
 </style>

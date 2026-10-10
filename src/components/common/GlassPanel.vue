@@ -4,23 +4,9 @@
       <slot name="header">
         <h3 class="panel-title">{{ title }}</h3>
       </slot>
-      <button v-if="collapsible" class="collapse-toggle" :aria-label="isCollapsed ? 'Expand' : 'Collapse'">
-        <svg
-          width="16"
-          height="16"
-          viewBox="0 0 16 16"
-          fill="none"
-          :class="['collapse-icon', { rotated: isCollapsed }]"
-        >
-          <path
-            d="M4 6L8 10L12 6"
-            stroke="currentColor"
-            stroke-width="1.5"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          />
-        </svg>
-      </button>
+      <UiButton v-if="collapsible" class="collapse-toggle" :aria-label="isCollapsed ? 'Expand' : 'Collapse'" variant="secondary" icon-only>
+        <Icon :class="['collapse-icon', { rotated: isCollapsed }]" :size="16" name="outline-1" />
+      </UiButton>
     </div>
     <Transition name="collapse">
       <div v-show="!isCollapsed" class="panel-content">
@@ -31,6 +17,8 @@
 </template>
 
 <script setup lang="ts">
+import Icon from '@/components/ui/Icon.vue'
+import UiButton from '@/components/ui/UiButton.vue'
 import { ref, watch } from 'vue'
 
 interface Props {
@@ -61,9 +49,9 @@ function toggleCollapse() {
 <style scoped>
 .glass-panel-component {
   background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
+  border: none;
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
+  box-shadow: none;
   overflow: hidden;
 }
 

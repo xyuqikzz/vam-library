@@ -99,6 +99,7 @@
   --space-16: 64px;
 
   /* ── Border Radius ─────────────────────────────────────────── */
+  --radius-none: 0; /* Flat table edges and layout resets retain their existing geometry. */
   --radius-xs: 6px;
   --radius-sm: 10px;
   --radius-md: 14px;

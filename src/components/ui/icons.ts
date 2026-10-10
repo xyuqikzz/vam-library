@@ -1,4 +1,6 @@
+import { migratedIcons } from './iconPaths'
 export const icons = {
+  ...migratedIcons,
   package: 'M12 2 3 7v10l9 5 9-5V7L12 2ZM3 7l9 5 9-5M12 12v10M7.5 4.5l9 5',
   dashboard: 'M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z',
   chart: 'M4 20h16M6 16v-5M12 16V4M18 16V8',

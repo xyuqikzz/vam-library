@@ -1,30 +1,24 @@
 <template>
-  <div class="vam-prefs-view animate-fadeIn">
-    <div class="view-header">
-      <h1 class="view-title">{{ $t('vamPrefs.title') }}</h1>
-      <p class="view-subtitle">{{ $t('vamPrefs.subtitle') }}</p>
-    </div>
+<div class="vam-prefs-view animate-fadeIn b2-page"><PageHeader :title="$t('vamPrefs.title')" :subtitle="$t('vamPrefs.subtitle')"><template #actions>
+          <UiButton type="button" @click="selectVamRoot" variant="secondary">
+            {{ $t('vamPrefs.selectRoot') }}
+          </UiButton>
+          <UiButton type="button" :disabled="!canRead || isLoading" @click="loadPrefs" variant="secondary">
+            {{ isLoading ? $t('common.loading') : $t('common.refresh') }}
+          </UiButton>
+          <UiButton type="button" :disabled="!canSave" @click="savePrefs" variant="primary" size="lg">
+            {{ isSaving ? $t('common.loading') : $t('vamPrefs.saveWithBackup') }}
+          </UiButton>
+        </template></PageHeader><div class="b2-page-body">
+
 
     <GlassPanel :title="$t('vamPrefs.currentFile')">
       <div class="prefs-toolbar">
         <div class="path-display">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" />
-            <path d="M14 2v6h6" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" />
-          </svg>
+          <Icon  :size="14" name="outline-53" />
           <span class="path-text truncate">{{ prefsPath || $t('vamPrefs.pathPending') }}</span>
         </div>
-        <div class="toolbar-actions">
-          <button class="btn btn-secondary" type="button" @click="selectVamRoot">
-            {{ $t('vamPrefs.selectRoot') }}
-          </button>
-          <button class="btn btn-secondary" type="button" :disabled="!canRead || isLoading" @click="loadPrefs">
-            {{ isLoading ? $t('common.loading') : $t('common.refresh') }}
-          </button>
-          <button class="btn btn-primary" type="button" :disabled="!canSave" @click="savePrefs">
-            {{ isSaving ? $t('common.loading') : $t('vamPrefs.saveWithBackup') }}
-          </button>
-        </div>
+
       </div>
 
       <div class="status-grid">
@@ -46,27 +40,19 @@
     <GlassPanel :title="$t('vamPrefs.editor')">
       <div class="editor-actions">
         <div class="mode-selector">
-          <button
-            :class="['mode-btn', { active: editorMode === 'visual' }]"
-            type="button"
-            @click="editorMode = 'visual'"
-          >
+          <UiChip :class="['', { active: editorMode === 'visual' }]" type="button" @click="editorMode = 'visual'" :selected="editorMode === 'visual'">
             {{ $t('vamPrefs.visualMode') }}
-          </button>
-          <button
-            :class="['mode-btn', { active: editorMode === 'json' }]"
-            type="button"
-            @click="editorMode = 'json'"
-          >
+          </UiChip>
+          <UiChip :class="['', { active: editorMode === 'json' }]" type="button" @click="editorMode = 'json'" :selected="editorMode === 'json'">
             {{ $t('vamPrefs.jsonMode') }}
-          </button>
+          </UiChip>
         </div>
-        <button v-if="editorMode === 'json'" class="btn btn-secondary" type="button" :disabled="!prefsContent" @click="formatContent">
+        <UiButton v-if="editorMode === 'json'" type="button" :disabled="!prefsContent" @click="formatContent" variant="secondary">
           {{ $t('vamPrefs.formatJson') }}
-        </button>
-        <button class="btn btn-secondary" type="button" :disabled="!prefsContent" @click="copyContent">
+        </UiButton>
+        <UiButton type="button" :disabled="!prefsContent" @click="copyContent" variant="secondary">
           {{ $t('common.copy') }}
-        </button>
+        </UiButton>
       </div>
 
       <div v-if="editorMode === 'visual'" class="visual-editor-shell">
@@ -81,14 +67,7 @@
         </div>
       </div>
 
-      <textarea
-        v-else
-        v-model="prefsContent"
-        class="prefs-editor"
-        spellcheck="false"
-        :placeholder="$t('vamPrefs.editorPlaceholder')"
-        @input="syncJsonContent"
-      />
+      <UiInput v-else v-model="prefsContent" class="prefs-editor" spellcheck="false" :placeholder="$t('vamPrefs.editorPlaceholder')" @input="syncJsonContent" multiline />
 
       <div class="editor-footer">
         <span :class="['validation-message', jsonError ? 'error' : 'ok']">
@@ -101,10 +80,15 @@
     <GlassPanel v-if="lastBackupPath" :title="$t('vamPrefs.lastBackup')">
       <p class="backup-path">{{ lastBackupPath }}</p>
     </GlassPanel>
-  </div>
+  </div></div>
 </template>
 
 <script setup lang="ts">
+import UiChip from '@/components/ui/UiChip.vue'
+import PageHeader from '@/components/layout/PageHeader.vue'
+import UiInput from '@/components/ui/UiInput.vue'
+import UiButton from '@/components/ui/UiButton.vue'
+import Icon from '@/components/ui/Icon.vue'
 import { computed, onMounted, ref } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { useI18n } from 'vue-i18n'
@@ -277,10 +261,6 @@ function stringifyPrefsValue() {
   max-width: 980px;
 }
 
-.view-header {
-  margin-bottom: var(--space-1);
-}
-
 .view-title {
   margin-bottom: var(--space-1);
   color: var(--text-primary);
@@ -307,7 +287,7 @@ function stringifyPrefsValue() {
   flex: 1;
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--border-subtle);
+  border: none;
   border-radius: var(--radius-sm);
   background: var(--bg-input);
   color: var(--text-secondary);
@@ -318,52 +298,11 @@ function stringifyPrefsValue() {
   min-width: 0;
 }
 
-.toolbar-actions,
+
 .editor-actions {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-}
-
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 34px;
-  padding: 0 var(--space-4);
-  border-radius: var(--radius-sm);
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-  transition:
-    background var(--duration-fast) var(--ease),
-    border-color var(--duration-fast) var(--ease),
-    opacity var(--duration-fast) var(--ease);
-}
-
-.btn:disabled {
-  cursor: not-allowed;
-  opacity: 0.45;
-}
-
-.btn-secondary {
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-elevated);
-  color: var(--text-primary);
-}
-
-.btn-secondary:hover:not(:disabled) {
-  border-color: var(--border-default);
-  background: var(--bg-hover);
-}
-
-.btn-primary {
-  border: 1px solid transparent;
-  background: var(--accent-primary);
-  color: white;
-}
-
-.btn-primary:hover:not(:disabled) {
-  background: var(--accent-primary-hover);
 }
 
 .status-grid {
@@ -379,7 +318,7 @@ function stringifyPrefsValue() {
   gap: var(--space-1);
   min-width: 0;
   padding: var(--space-3);
-  border: 1px solid var(--border-subtle);
+  border: none;
   border-radius: var(--radius-sm);
   background: var(--bg-subtle);
 }
@@ -435,24 +374,6 @@ function stringifyPrefsValue() {
   background: var(--bg-base);
 }
 
-.mode-btn {
-  height: 30px;
-  padding: 0 var(--space-3);
-  border-radius: var(--radius-xs);
-  color: var(--text-tertiary);
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-}
-
-.mode-btn:hover {
-  color: var(--text-secondary);
-}
-
-.mode-btn.active {
-  background: var(--bg-elevated);
-  color: var(--text-primary);
-}
-
 .visual-editor-shell {
   max-height: 620px;
   overflow: auto;
@@ -464,7 +385,7 @@ function stringifyPrefsValue() {
   align-items: center;
   justify-content: center;
   min-height: 260px;
-  border: 1px dashed var(--border-subtle);
+  border: none;
   border-radius: var(--radius-md);
   color: var(--text-tertiary);
   font-size: var(--text-sm);
@@ -474,19 +395,12 @@ function stringifyPrefsValue() {
   width: 100%;
   min-height: 520px;
   resize: vertical;
-  padding: var(--space-4);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  background: rgba(0, 0, 0, 0.16);
-  color: var(--text-primary);
   font-family: var(--font-mono);
-  font-size: 12px;
   line-height: 1.65;
   outline: none;
 }
 
 .prefs-editor:focus {
-  border-color: var(--accent-primary);
 }
 
 .editor-footer {
@@ -523,8 +437,7 @@ function stringifyPrefsValue() {
 }
 
 @media (max-width: 760px) {
-  .prefs-toolbar,
-  .toolbar-actions {
+  .prefs-toolbar {
     align-items: stretch;
     flex-direction: column;
   }
@@ -533,4 +446,9 @@ function stringifyPrefsValue() {
     grid-template-columns: 1fr;
   }
 }
+
+.b2-page { display: flex; flex-direction: column; height: 100%; min-height: 0; max-width: none; margin: 0; padding: 0; gap: 0; overflow: hidden; }
+.b2-page-body { flex: 1; min-height: 0; min-width: 0; overflow: auto; padding: 20px 24px; display: flex; flex-direction: column; gap: 20px; }
+.b2-page :deep(.page-header) { width: 100%; }
+@media(max-width: 800px) { .b2-page-body { padding: 12px; } }
 </style>

@@ -1,5 +1,15 @@
 <template>
-  <div class="dependency-completion-view animate-fadeIn">
+<div class="dependency-completion-view animate-fadeIn b2-page"><PageHeader :title="$t('sidebar.dependencyCompletion')" ><template #actions>
+        <span v-if="lastRefreshedText" class="toolbar-hint">{{ lastRefreshedText }}</span>
+        <UiButton :disabled="busy || !appStore.vamRootPath" @click="refreshLibrary" variant="secondary">
+          <Icon  :size="14" name="outline-7" />
+          <span>{{ localLibraryStore.loading ? '加载中...' : '重新读取' }}</span>
+        </UiButton>
+        <UiButton class="primary" :disabled="!dependencyGroups.length || busy" @click="openPreview" variant="primary" size="lg">
+          <Icon  :size="14" name="outline-19" />
+          <span>生成补全方案</span>
+        </UiButton>
+      </template></PageHeader><div class="b2-page-body">
     <section v-if="!localLibraryStore.loading" class="stats-row">
       <StatCard
         title="缺失依赖条目"
@@ -7,7 +17,7 @@
         subtitle="未满足的依赖记录总数"
         icon="M12 8v4m0 4h.01M10.29 3.86l-7.43 12.88A2 2 0 0 0 4.58 19h14.84a2 2 0 0 0 1.72-3.02L13.71 3.86a2 2 0 0 0-3.42 0z"
         trend="neutral"
-        color="#f59e0b"
+        color="var(--color-warning)"
       />
       <StatCard
         title="去重后包数"
@@ -15,7 +25,7 @@
         subtitle="按 creator + package 去重"
         icon="M4 7h16M4 12h10M4 17h7"
         trend="neutral"
-        color="#6e6bf0"
+        color="var(--accent-primary)"
       />
       <StatCard
         title="受影响资源包"
@@ -23,7 +33,7 @@
         subtitle="这些包引用了缺失依赖"
         icon="M12 3l8 4v10l-8 4-8-4V7l8-4z"
         trend="neutral"
-        color="#5b8def"
+        color="var(--color-info)"
       />
       <StatCard
         title="版本过低"
@@ -31,7 +41,7 @@
         subtitle="本地已装但版本不够"
         icon="M12 19V5m0 0 4 4m-4-4-4 4"
         trend="neutral"
-        color="#34d399"
+        color="var(--color-success)"
       />
     </section>
 
@@ -43,27 +53,7 @@
       </div>
     </section>
 
-    <div class="toolbar glass-panel">
-      <div class="toolbar-left">
-        <span class="toolbar-label">本地缺失依赖</span>
-        <span class="toolbar-count">{{ dependencyGroups.length }} 组</span>
-      </div>
-      <div class="toolbar-right">
-        <span v-if="lastRefreshedText" class="toolbar-hint">{{ lastRefreshedText }}</span>
-        <button class="toolbar-btn" :disabled="busy || !appStore.vamRootPath" @click="refreshLibrary">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-            <path d="M21 12a9 9 0 1 1-6.219-8.56" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
-          </svg>
-          <span>{{ localLibraryStore.loading ? '加载中...' : '重新读取' }}</span>
-        </button>
-        <button class="toolbar-btn primary" :disabled="!dependencyGroups.length || busy" @click="openPreview">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-            <path d="M4 12h10m0 0-4-4m4 4-4 4M14 7h4a2 2 0 0 1 2 2v6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
-          <span>生成补全方案</span>
-        </button>
-      </div>
-    </div>
+
 
     <div class="content-panel glass-panel">
       <div class="panel-header">
@@ -98,13 +88,10 @@
           </div>
 
           <div class="group-actions">
-            <button class="copy-btn" @click="copyIdentifier(group)">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                <rect x="9" y="9" width="10" height="10" rx="2" stroke="currentColor" stroke-width="1.5" />
-                <rect x="5" y="5" width="10" height="10" rx="2" stroke="currentColor" stroke-width="1.5" opacity="0.45" />
-              </svg>
+            <UiButton @click="copyIdentifier(group)" variant="ghost">
+              <Icon  :size="14" name="outline-20" />
               <span>复制标识</span>
-            </button>
+            </UiButton>
           </div>
         </div>
       </div>
@@ -116,17 +103,15 @@
         :description="emptyDescription"
       >
         <template v-if="!appStore.vamRootPath" #action>
-          <button class="toolbar-btn primary" @click="goSettings">
+          <UiButton class="primary" @click="goSettings" variant="primary" size="lg">
             去设置目录
-          </button>
+          </UiButton>
         </template>
       </EmptyState>
     </div>
 
     <Teleport to="body">
-      <Transition name="fade">
-        <div v-if="previewOpen" class="preview-overlay" @click.self="closePreview">
-          <div class="preview-modal glass-panel">
+      <UiModal v-if="previewOpen" :show-close="false" wide  @close="closePreview">
             <div class="preview-header">
               <div>
                 <h3 class="preview-title">补全依赖弹窗</h3>
@@ -134,21 +119,19 @@
                   已按包名去重，并按当前策略从 VaM Hub 查询可下载版本。没有来源的包会保留在列表里，但不会进入下载队列。
                 </p>
               </div>
-              <button class="preview-close" @click="closePreview">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                  <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
-                </svg>
-              </button>
+              <UiButton class="preview-close" @click="closePreview" variant="ghost" icon-only :aria-label="$t('common.close')">
+                <Icon  :size="16" name="outline-9" />
+              </UiButton>
             </div>
 
             <div class="preview-body">
               <div class="mode-bar">
-                <button :class="['mode-btn', { active: resolutionMode === 'required' }]" @click="resolutionMode = 'required'">
+                <UiButton :class="['', { active: resolutionMode === 'required' }]" @click="resolutionMode = 'required'" variant="secondary">
                   按要求版本
-                </button>
-                <button :class="['mode-btn', { active: resolutionMode === 'latest' }]" @click="resolutionMode = 'latest'">
+                </UiButton>
+                <UiButton :class="['', { active: resolutionMode === 'latest' }]" @click="resolutionMode = 'latest'" variant="secondary">
                   直接下载最新
-                </button>
+                </UiButton>
                 <span class="mode-hint">
                   当前会排除 Hub 找不到的包。
                 </span>
@@ -187,13 +170,10 @@
                   </div>
 
                   <div class="preview-side">
-                    <button class="copy-btn" @click="copyIdentifier(group)">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                        <rect x="9" y="9" width="10" height="10" rx="2" stroke="currentColor" stroke-width="1.5" />
-                        <rect x="5" y="5" width="10" height="10" rx="2" stroke="currentColor" stroke-width="1.5" opacity="0.45" />
-                      </svg>
+                    <UiButton @click="copyIdentifier(group)" variant="ghost">
+                      <Icon  :size="14" name="outline-20" />
                       <span>复制标识</span>
-                    </button>
+                    </UiButton>
                     <span v-if="group.selectedFile" class="download-ready">可加入队列</span>
                     <span v-else class="download-empty">不会下载</span>
                   </div>
@@ -207,20 +187,22 @@
                 <span v-if="missingSourceCount > 0">已排除：{{ missingSourceCount }} 组无来源包</span>
               </div>
               <div class="footer-actions">
-                <button class="toolbar-btn" @click="closePreview">取消</button>
-                <button class="toolbar-btn primary" :disabled="!downloadCandidates.length || previewLoading" @click="downloadCandidatesToQueue">
+                <UiButton @click="closePreview" variant="secondary">取消</UiButton>
+                <UiButton class="primary" :disabled="!downloadCandidates.length || previewLoading" @click="downloadCandidatesToQueue" variant="primary" size="lg">
                   {{ resolutionMode === 'latest' ? '下载最新版本' : '下载要求版本' }}
-                </button>
+                </UiButton>
               </div>
             </div>
-          </div>
-        </div>
-      </Transition>
+          </UiModal>
     </Teleport>
-  </div>
+  </div></div>
 </template>
 
 <script setup lang="ts">
+import UiModal from '@/components/ui/UiModal.vue'
+import PageHeader from '@/components/layout/PageHeader.vue'
+import Icon from '@/components/ui/Icon.vue'
+import UiButton from '@/components/ui/UiButton.vue'
 import { parseHubFiles, parsePackageId as parseDependencyId, selectHubFile as selectCandidate, type HubFile, type HubFileCandidate } from '@/utils/hubFiles'
 import { formatSize } from '@/utils/bytes'
 import { computed, onMounted, ref } from 'vue'
@@ -625,7 +607,7 @@ function chunkArray<T>(list: T[], size: number) {
   min-height: 100%;
 }
 
-.toolbar,
+
 .content-panel {
   border-radius: var(--radius-lg);
 }
@@ -636,46 +618,6 @@ function chunkArray<T>(list: T[], size: number) {
   align-items: center;
   gap: var(--space-2);
   flex-wrap: wrap;
-}
-
-.toolbar-btn,
-.copy-btn,
-.mode-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
-  border-radius: var(--radius-md);
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-  transition: all var(--duration-fast) var(--ease);
-  white-space: nowrap;
-}
-
-.toolbar-btn {
-  height: 34px;
-  padding: 0 var(--space-4);
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
-.toolbar-btn.primary {
-  background: var(--accent-gradient);
-  color: #fff;
-  border-color: transparent;
-}
-
-.toolbar-btn:hover:not(:disabled),
-.copy-btn:hover {
-  transform: translateY(-1px);
-  border-color: var(--border-strong);
-}
-
-.toolbar-btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-  transform: none;
 }
 
 .stats-row {
@@ -691,7 +633,7 @@ function chunkArray<T>(list: T[], size: number) {
 .skeleton-line {
   height: 10px;
   border-radius: var(--radius-full);
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--border-default);
 }
 
 .skeleton-line.short {
@@ -707,14 +649,6 @@ function chunkArray<T>(list: T[], size: number) {
 .skeleton-line.tiny {
   margin-top: var(--space-2);
   width: 70%;
-}
-
-.toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  padding: var(--space-4) var(--space-5);
 }
 
 .toolbar-left {
@@ -786,8 +720,8 @@ function chunkArray<T>(list: T[], size: number) {
   gap: var(--space-4);
   padding: var(--space-4);
   border-radius: var(--radius-md);
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: var(--bg-subtle);
+  border: none;
 }
 
 .group-main {
@@ -822,31 +756,31 @@ function chunkArray<T>(list: T[], size: number) {
   justify-content: center;
   padding: 2px 8px;
   border-radius: var(--radius-full);
-  font-size: 10px;
+  font-size: var(--text-xs);
   font-weight: var(--font-semibold);
 }
 
 .group-tag.ok,
 .preview-badge.ok {
-  background: rgba(52, 211, 153, 0.12);
+  background: var(--color-success-bg);
   color: var(--color-success);
 }
 
 .group-tag.warn,
 .preview-badge.warn {
-  background: rgba(251, 191, 36, 0.12);
+  background: var(--color-warning-bg);
   color: var(--color-warning);
 }
 
 .group-tag.danger,
 .preview-badge.danger {
-  background: rgba(248, 113, 113, 0.12);
+  background: var(--color-error-bg);
   color: var(--color-error);
 }
 
 .group-tag.pending,
 .preview-badge.pending {
-  background: rgba(96, 165, 250, 0.12);
+  background: var(--color-info-bg);
   color: var(--color-info);
 }
 
@@ -877,7 +811,7 @@ function chunkArray<T>(list: T[], size: number) {
   border-radius: var(--radius-full);
   background: var(--bg-hover);
   color: var(--text-secondary);
-  font-size: 10px;
+  font-size: var(--text-xs);
 }
 
 .source-pill {
@@ -894,34 +828,6 @@ function chunkArray<T>(list: T[], size: number) {
   justify-content: space-between;
   gap: var(--space-2);
   flex-shrink: 0;
-}
-
-.copy-btn {
-  height: 32px;
-  padding: 0 var(--space-3);
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
-.preview-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: calc(var(--z-overlay) + 5);
-  background: rgba(22, 22, 24, 0.6);
-  /* backdrop-filter removed */
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-6);
-}
-
-.preview-modal {
-  width: min(1080px, 100%);
-  max-height: min(88vh, 960px);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
 }
 
 .preview-header {
@@ -973,20 +879,6 @@ function chunkArray<T>(list: T[], size: number) {
   flex-wrap: wrap;
 }
 
-.mode-btn {
-  height: 34px;
-  padding: 0 var(--space-4);
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
-.mode-btn.active {
-  background: rgba(110, 107, 240, 0.16);
-  color: var(--accent-primary);
-  border-color: rgba(110, 107, 240, 0.3);
-}
-
 .mode-hint {
   font-size: var(--text-xs);
   color: var(--text-tertiary);
@@ -1004,14 +896,14 @@ function chunkArray<T>(list: T[], size: number) {
   align-items: center;
   padding: 4px 10px;
   border-radius: var(--radius-full);
-  background: rgba(52, 211, 153, 0.1);
+  background: var(--color-success-bg);
   color: var(--color-success);
-  font-size: 10px;
+  font-size: var(--text-xs);
   font-weight: var(--font-semibold);
 }
 
 .summary-chip.warn {
-  background: rgba(251, 191, 36, 0.12);
+  background: var(--color-warning-bg);
   color: var(--color-warning);
 }
 
@@ -1027,8 +919,8 @@ function chunkArray<T>(list: T[], size: number) {
 .loader {
   width: 28px;
   height: 28px;
-  border-radius: 50%;
-  border: 2px solid var(--accent-primary);
+  border-radius: var(--radius-xl)%;
+  border: none;
   border-top-color: transparent;
   animation: spin 0.9s linear infinite;
 }
@@ -1050,8 +942,8 @@ function chunkArray<T>(list: T[], size: number) {
   gap: var(--space-4);
   padding: var(--space-4);
   border-radius: var(--radius-md);
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: var(--bg-subtle);
+  border: none;
 }
 
 .preview-main {
@@ -1072,13 +964,13 @@ function chunkArray<T>(list: T[], size: number) {
 
 .download-ready {
   color: var(--color-success);
-  font-size: 10px;
+  font-size: var(--text-xs);
   font-weight: var(--font-semibold);
 }
 
 .download-empty {
   color: var(--color-warning);
-  font-size: 10px;
+  font-size: var(--text-xs);
   font-weight: var(--font-semibold);
 }
 
@@ -1123,7 +1015,7 @@ function chunkArray<T>(list: T[], size: number) {
 }
 
 @media (max-width: 720px) {
-  .toolbar,
+
   .preview-header,
   .preview-footer {
     flex-direction: column;
@@ -1138,10 +1030,10 @@ function chunkArray<T>(list: T[], size: number) {
   .footer-actions {
     width: 100%;
   }
-
-  .toolbar-btn,
-  .copy-btn {
-    width: 100%;
-  }
 }
+
+.b2-page { display: flex; flex-direction: column; height: 100%; min-height: 0; max-width: none; margin: 0; padding: 0; gap: 0; overflow: hidden; }
+.b2-page-body { flex: 1; min-height: 0; min-width: 0; overflow: auto; padding: 20px 24px; display: flex; flex-direction: column; gap: 20px; }
+.b2-page :deep(.page-header) { width: 100%; }
+@media(max-width: 800px) { .b2-page-body { padding: 12px; } }
 </style>

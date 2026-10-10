@@ -2,20 +2,12 @@
   <div class="stat-card glass-card-component" :style="{ '--stat-color': color }">
     <div class="stat-header">
       <div class="stat-icon-wrapper">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-          <path :d="icon" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
+        <Icon  :size="20" :path="icon" />
       </div>
       <div v-if="trend" :class="['stat-trend', `trend-${trend}`]">
-        <svg v-if="trend === 'up'" width="12" height="12" viewBox="0 0 12 12" fill="none">
-          <path d="M2 8L6 4L10 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-        <svg v-else-if="trend === 'down'" width="12" height="12" viewBox="0 0 12 12" fill="none">
-          <path d="M2 4L6 8L10 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-        <svg v-else width="12" height="12" viewBox="0 0 12 12" fill="none">
-          <path d="M2 6H10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
-        </svg>
+        <Icon v-if="trend === 'up'" :size="12" name="outline-4" />
+        <Icon v-else-if="trend === 'down'" :size="12" name="outline-5" />
+        <Icon v-else :size="12" name="outline-6" />
       </div>
     </div>
     <div class="stat-value">{{ value }}</div>
@@ -25,6 +17,7 @@
 </template>
 
 <script setup lang="ts">
+import Icon from '@/components/ui/Icon.vue'
 interface Props {
   title: string
   value: string | number
@@ -43,9 +36,9 @@ withDefaults(defineProps<Props>(), {
 <style scoped>
 .stat-card {
   background: var(--bg-surface);
-  border: 1px solid var(--border-default);
+  border: none;
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
+  box-shadow: none;
   padding: var(--space-5);
   transition:
     transform var(--duration-base) var(--ease),

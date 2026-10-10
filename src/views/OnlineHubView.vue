@@ -1,16 +1,12 @@
 <template>
-  <div class="online-hub-view animate-fadeIn">
-    <!-- Header Controls -->
-    <div class="hub-header-bar glass-panel">
-      <div class="header-title-group">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-          <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.5" />
-          <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" stroke="currentColor" stroke-width="1.5" />
-        </svg>
-        <h2 class="view-title">在线资源库</h2>
-      </div>
-
-      <div class="hub-filters">
+<div class="online-hub-view animate-fadeIn b2-page"><PageHeader :title="$t('sidebar.onlineHub')" ><template #actions><div class="hub-search-bar">
+          <UiInput v-model="searchQuery" type="text" class="hub-search-input" placeholder="搜索关键字或包名 (例如 macgruber.Life.latest)" @keyup.enter="handleSearch" search />
+          <UiButton :disabled="loading" @click="handleSearch" variant="secondary">
+            <Icon v-if="loading" class="spinner" :size="14" name="outline-34" />
+            <Icon v-else :size="14" name="outline-35" />
+            <span>搜索</span>
+          </UiButton>
+        </div></template><template #filters>
         <!-- Pricing Filter -->
         <div class="filter-group">
           <select v-model="selectedPricing" class="hub-select" @change="resetAndSearch">
@@ -51,36 +47,14 @@
         </div>
 
         <!-- Search Bar -->
-        <div class="hub-search-bar">
-          <input
-            v-model="searchQuery"
-            type="text"
-            class="hub-search-input"
-            placeholder="搜索关键字或包名 (例如 macgruber.Life.latest)"
-            @keyup.enter="handleSearch"
-          />
-          <button
-            class="hub-search-btn"
-            :disabled="loading"
-            @click="handleSearch"
-          >
-            <svg v-if="loading" class="spinner" width="14" height="14" viewBox="0 0 24 24" fill="none">
-              <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" stroke-dasharray="32" stroke-linecap="round" />
-            </svg>
-            <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none">
-              <path d="M21 21l-6-6m2-5a7 7 0 1 1-14 0 7 7 0 0 1 14 0z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-            </svg>
-            <span>搜索</span>
-          </button>
-        </div>
-      </div>
-    </div>
+
+      </template></PageHeader><div class="b2-page-body">
+    <!-- Header Controls -->
+
 
     <!-- Error State -->
     <div v-if="error" class="hub-error-msg animate-fadeIn">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-        <path d="M12 9v4m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-      </svg>
+      <Icon  :size="18" name="outline-14" />
       <span>{{ error }}</span>
     </div>
 
@@ -102,68 +76,12 @@
 
         <!-- Resources Grid -->
         <div v-else-if="filteredAndSortedResources.length > 0" class="resources-grid">
-          <div
-            v-for="item in filteredAndSortedResources"
-            :key="item.resource_id"
-            class="resource-grid-card glass-card"
-            @click="openPackageDetail(item)"
-          >
-            <!-- Thumbnail Area -->
-            <div class="card-thumb-area">
-              <img data-resource-preview v-if="item.image_url" :src="item.image_url" class="card-img" alt="cover" loading="lazy" />
-              <img data-resource-preview v-else-if="item.icon_url" :src="item.icon_url" class="card-icon-img" alt="icon" loading="lazy" />
-              <div v-else class="card-placeholder">
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
-                  <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-                </svg>
-              </div>
-              <!-- Resource Type Badge (top-left) -->
-              <span class="card-type-badge" v-if="item.type" :class="getTypeBadgeClass(item.type)">{{ translateType(item.type) }}</span>
-              <!-- Pricing Badge (top-right) -->
-              <span class="card-pricing-badge" v-if="item.category" :class="item.category === 'Free' ? 'pricing-free' : 'pricing-paid'">{{ item.category === 'Free' ? '免费' : '付费' }}</span>
-            </div>
-
-            <!-- Card Details -->
-            <div class="card-info-area">
-              <h3 class="card-title" :title="item.title">{{ item.title || '未命名资源' }}</h3>
-              <div class="card-creator text-xs text-secondary">
-                作者: <span class="creator-name">{{ item.username || '匿名' }}</span>
-              </div>
-              
-              <p class="card-tagline text-xs text-secondary" v-if="item.tag_line" :title="item.tag_line">
-                {{ item.tag_line }}
-              </p>
-
-              <div class="card-stats">
-                <div class="card-stat" :title="'下载次数: ' + item.download_count">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-                    <path d="M4 16v1a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-                  </svg>
-                  <span>{{ formatCompactNumber(item.download_count) }}</span>
-                </div>
-                <div class="card-stat" :title="'浏览量: ' + item.view_count">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-                    <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-                  </svg>
-                  <span>{{ formatCompactNumber(item.view_count) }}</span>
-                </div>
-                <div class="card-stat rating" v-if="item.rating_avg" :title="'平均评分: ' + item.rating_avg">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" fill="currentColor" />
-                  </svg>
-                  <span>{{ parseFloat(item.rating_avg).toFixed(1) }}</span>
-                </div>
-              </div>
-            </div>
-          </div>
+          <PackageCard v-for="item in filteredAndSortedResources" :key="item.resource_id" :item="{ id: String(item.resource_id), name: item.title || $t('ui.untitled'), creator: item.username || $t('ui.unknown'), resource_types: [hubCardType(item.type)] }" :type-label="translateType(item.type)" :image="item.image_url || item.icon_url" :title="item.tag_line" @select="openPackageDetail(item)" @details="openPackageDetail(item)" @more="openPackageDetail(item)"><template #meta><span>{{ item.username }}</span><span :title="$t('ui.hubMetrics', { downloads: item.download_count, views: item.view_count, rating: item.rating_avg || '—' })"><Icon name="download" :size="12" />{{ formatCompactNumber(item.download_count) }}</span></template><template #badge><span v-if="item.category" class="hub-pricing">{{ $t(item.category === 'Free' ? 'ui.free' : 'ui.premium') }}</span></template></PackageCard>
         </div>
 
         <!-- Empty State -->
         <div v-else-if="!loading" class="hub-empty-state animate-fadeIn">
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none">
-            <path d="M21 21l-6-6m2-5a7 7 0 1 1-14 0 7 7 0 0 1 14 0z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
+          <Icon  :size="48" name="outline-35" />
           <h3>未找到任何在线包</h3>
           <p class="text-secondary text-sm">尝试在上方搜索其他关键字，或更改分类选项。</p>
         </div>
@@ -173,45 +91,28 @@
 
     <!-- Keep pagination outside the scroll area so it stays visible without covering cards. -->
     <div v-if="filteredAndSortedResources.length > 0 && totalPages > 1" class="hub-pagination-bar glass-panel">
-      <button
-        class="page-btn"
-        :disabled="currentPage <= 1 || loading"
-        @click="changePage(currentPage - 1)"
-      >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-          <path d="M15 19l-7-7 7-7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
+      <UiButton :disabled="currentPage <= 1 || loading" @click="changePage(currentPage - 1)" variant="ghost">
+        <Icon  :size="14" name="outline-40" />
         <span>上一页</span>
-      </button>
+      </UiButton>
 
       <span class="page-indicator">第 {{ currentPage }} 页 / 共 {{ totalPages }} 页 (找到 {{ totalFound }} 项)</span>
 
-      <button
-        class="page-btn"
-        :disabled="currentPage >= totalPages || loading"
-        @click="changePage(currentPage + 1)"
-      >
+      <UiButton :disabled="currentPage >= totalPages || loading" @click="changePage(currentPage + 1)" variant="ghost">
         <span>下一页</span>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-          <path d="M9 5l7 7-7 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-      </button>
+        <Icon  :size="14" name="outline-41" />
+      </UiButton>
     </div>
 
     <!-- Background dim overlay for detail panel -->
-    <Transition name="fade">
-      <div v-if="detailPanelOpen" class="panel-overlay" @click="closeDetailPanel"></div>
-    </Transition>
+
 
     <!-- Slide-over Detail Panel -->
-    <Transition name="slide-panel">
-      <div v-if="detailPanelOpen" class="detail-slide-panel glass-panel">
+    <UiModal v-if="detailPanelOpen" wide :show-close="false" @close="closeDetailPanel">
         <div class="panel-header">
-          <button class="panel-close-btn" @click="closeDetailPanel">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-              <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-            </svg>
-          </button>
+          <UiButton @click="closeDetailPanel" variant="ghost" icon-only :aria-label="$t('common.close')">
+            <Icon  :size="18" name="outline-9" />
+          </UiButton>
           <div class="panel-title-wrap">
             <span class="panel-category-tag" v-if="detailPackage.category" :class="detailPackage.category === 'Free' ? 'pricing-free' : 'pricing-paid'">
               {{ detailPackage.category === 'Free' ? '免费资源' : '付费资源' }}
@@ -234,9 +135,7 @@
                   <img data-resource-preview v-if="detailPackage.image_url" :src="detailPackage.image_url" class="panel-cover-img" alt="cover" />
                   <img data-resource-preview v-else-if="detailPackage.icon_url" :src="detailPackage.icon_url" class="panel-icon-img" alt="icon" />
                   <div v-else class="panel-img-placeholder">
-                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none">
-                      <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-                    </svg>
+                    <Icon  :size="40" name="outline-36" />
                   </div>
                 </div>
 
@@ -264,13 +163,9 @@
 
               <!-- Batch download action button -->
               <div class="panel-actions-row">
-                <button
-                  class="batch-download-btn"
-                  :disabled="detailLoading"
-                  @click="openBatchDownloadModal"
-                >
+                <UiButton :disabled="detailLoading" @click="openBatchDownloadModal" variant="primary" size="lg">
                   <span>一键下载</span>
-                </button>
+                </UiButton>
               </div>
             </div>
 
@@ -288,9 +183,7 @@
             <!-- Files list -->
             <div class="panel-section">
               <h4 class="section-title">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                  <path d="M7 18H17M7 14H17M7 10H12M4 22V2h16v20" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-                </svg>
+                <Icon  :size="14" name="outline-42" />
                 <span>包含的 .var 包 ({{ detailPackage.hubFiles?.length || 0 }})</span>
               </h4>
 
@@ -320,14 +213,10 @@
                     </div>
 
                     <!-- If not downloading / completed / error -->
-                    <button
-                      v-else-if="!downloadStates[file.filename] || downloadStates[file.filename].status === 'idle'"
-                      class="download-btn-sm"
-                      @click="handleDownload(file)"
-                    >
+                    <UiButton v-else-if="!downloadStates[file.filename] || downloadStates[file.filename].status === 'idle'" @click="handleDownload(file)" variant="primary" size="lg">
                       <span>下载</span>
-                    </button>
-                    
+                    </UiButton>
+
                     <!-- If downloading -->
                     <div v-else-if="downloadStates[file.filename].status === 'downloading'" class="download-progress-container">
                       <div class="progress-bar-wrapper">
@@ -335,16 +224,11 @@
                       </div>
                       <span class="progress-percentage text-xs text-accent">{{ Math.round(downloadStates[file.filename].progress) }}%</span>
                     </div>
-                    
+
                     <!-- If error -->
-                    <button 
-                      v-else-if="downloadStates[file.filename].status === 'error'"
-                      class="download-btn-sm error"
-                      :title="downloadStates[file.filename].errorMsg"
-                      @click="handleDownload(file)"
-                    >
+                    <UiButton v-else-if="downloadStates[file.filename].status === 'error'" class="error" :title="downloadStates[file.filename].errorMsg" @click="handleDownload(file)" variant="primary" size="lg">
                       <span>重试</span>
-                    </button>
+                    </UiButton>
                   </div>
                 </div>
               </div>
@@ -354,9 +238,7 @@
             <!-- Dependencies list -->
             <div class="panel-section">
               <h4 class="section-title">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                  <path d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-                </svg>
+                <Icon  :size="14" name="outline-43" />
                 <span>依赖关系分析 ({{ uniqueDependencies.length }}，直接 {{ directDependencies.length }} / 子依赖 {{ subDependencies.length }})</span>
               </h4>
 
@@ -388,13 +270,9 @@
                     <!-- Upgrade Badge (installed but version too low) -->
                     <div v-else-if="getDependencyInstallStatus(dep) === 'upgrade'" class="dep-status-download">
                       <template v-if="dep.downloadUrl">
-                        <button
-                          v-if="!downloadStates[dep.filename || getFilenameFromUrl(dep.downloadUrl)] || downloadStates[dep.filename || getFilenameFromUrl(dep.downloadUrl)].status === 'idle'"
-                          class="download-btn-sm upgrade"
-                          @click="handleDownloadDependency(dep)"
-                        >
+                        <UiButton v-if="!downloadStates[dep.filename || getFilenameFromUrl(dep.downloadUrl)] || downloadStates[dep.filename || getFilenameFromUrl(dep.downloadUrl)].status === 'idle'" class="upgrade" @click="handleDownloadDependency(dep)" variant="primary" size="lg">
                           <span>升级</span>
-                        </button>
+                        </UiButton>
 
                         <div v-else-if="downloadStates[dep.filename || getFilenameFromUrl(dep.downloadUrl)].status === 'downloading'" class="download-progress-container mini">
                           <div class="progress-bar-wrapper">
@@ -407,29 +285,21 @@
                           <span class="badge success">已安装</span>
                         </div>
 
-                        <button
-                          v-else-if="downloadStates[dep.filename || getFilenameFromUrl(dep.downloadUrl)].status === 'error'"
-                          class="download-btn-sm error"
-                          @click="handleDownloadDependency(dep)"
-                        >
+                        <UiButton v-else-if="downloadStates[dep.filename || getFilenameFromUrl(dep.downloadUrl)].status === 'error'" class="error" @click="handleDownloadDependency(dep)" variant="primary" size="lg">
                           <span>重试</span>
-                        </button>
+                        </UiButton>
                       </template>
                       <span v-else class="badge upgrade">需升级</span>
                     </div>
-                    
+
                     <!-- Not Installed / Download Action -->
                     <div v-else class="dep-status-download">
                       <template v-if="dep.downloadUrl">
                         <!-- Direct download if URL exists and we are not downloading it -->
-                        <button
-                          v-if="!downloadStates[dep.filename || getFilenameFromUrl(dep.downloadUrl)] || downloadStates[dep.filename || getFilenameFromUrl(dep.downloadUrl)].status === 'idle'"
-                          class="download-btn-sm secondary"
-                          @click="handleDownloadDependency(dep)"
-                        >
+                        <UiButton v-if="!downloadStates[dep.filename || getFilenameFromUrl(dep.downloadUrl)] || downloadStates[dep.filename || getFilenameFromUrl(dep.downloadUrl)].status === 'idle'" class="secondary" @click="handleDownloadDependency(dep)" variant="primary" size="lg">
                           <span>下载</span>
-                        </button>
-                        
+                        </UiButton>
+
                         <!-- Downloading state for dependency -->
                         <div v-else-if="downloadStates[dep.filename || getFilenameFromUrl(dep.downloadUrl)].status === 'downloading'" class="download-progress-container mini">
                           <div class="progress-bar-wrapper">
@@ -437,22 +307,18 @@
                           </div>
                           <span class="progress-percentage text-xs text-accent">{{ Math.round(downloadStates[dep.filename || getFilenameFromUrl(dep.downloadUrl)].progress) }}%</span>
                         </div>
-                        
+
                         <!-- Completed state -->
                         <div v-else-if="downloadStates[dep.filename || getFilenameFromUrl(dep.downloadUrl)].status === 'completed'" class="dep-status installed text-success text-xs">
                           <span class="badge success">已安装</span>
                         </div>
-                        
+
                         <!-- Error state -->
-                        <button
-                          v-else-if="downloadStates[dep.filename || getFilenameFromUrl(dep.downloadUrl)].status === 'error'"
-                          class="download-btn-sm error"
-                          @click="handleDownloadDependency(dep)"
-                        >
+                        <UiButton v-else-if="downloadStates[dep.filename || getFilenameFromUrl(dep.downloadUrl)].status === 'error'" class="error" @click="handleDownloadDependency(dep)" variant="primary" size="lg">
                           <span>重试</span>
-                        </button>
+                        </UiButton>
                       </template>
-                      
+
                       <!-- No direct download URL -->
                       <span v-else class="badge warning">未安装</span>
                     </div>
@@ -465,32 +331,25 @@
             </div>
           </div>
         </div>
-      </div>
-    </Transition>
+      </UiModal>
 
     <!-- Batch Download Modal -->
-    <Transition name="fade">
-      <div v-if="batchModalOpen" class="batch-modal-backdrop" @click="closeBatchModal">
-        <div class="batch-modal-container glass-panel" @click.stop>
+    <UiModal v-if="batchModalOpen" :show-close="false" wide  @close="closeBatchModal">
           <div class="batch-modal-header">
             <h3 class="batch-modal-title">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" style="color: var(--accent-primary);">
-                <path d="M4 16v1a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-              </svg>
+              <Icon style="color: var(--accent-primary);" :size="20" name="outline-37" />
               <span>{{ $t('download.modal.title') }}</span>
             </h3>
-            <button class="batch-modal-close-btn" @click="closeBatchModal">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-              </svg>
-            </button>
+            <UiButton @click="closeBatchModal" variant="ghost" icon-only :aria-label="$t('common.close')">
+              <Icon  :size="18" name="outline-9" />
+            </UiButton>
           </div>
 
           <div class="batch-modal-body">
             <div v-if="batchResolving" class="batch-modal-loading">
               <div class="loading-spinner"></div>
               <p class="text-secondary text-sm">{{ $t('download.modal.loading') }}</p>
-              
+
               <!-- Real-time Dependency Analysis Progress Bar -->
               <div class="resolve-progress-container">
                 <div class="progress-bar-wrapper">
@@ -530,7 +389,7 @@
                     <span class="group-dot to-download"></span>
                     <span class="group-title text-sm font-semibold">{{ $t('download.modal.groupToDownload', { count: needDownloadGroup.length }) }}</span>
                     <span class="expand-arrow" :class="{ 'collapsed': collapsedGroups.need_download }">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                      <Icon stroke-linecap="round" stroke-linejoin="round" :size="12" name="outline-44" />
                     </span>
                   </div>
                   <div v-show="!collapsedGroups.need_download" class="group-items">
@@ -555,7 +414,7 @@
                     <span class="group-dot upgraded"></span>
                     <span class="group-title text-sm font-semibold">{{ $t('download.modal.groupUpgraded', { count: upgradedGroup.length }) }}</span>
                     <span class="expand-arrow" :class="{ 'collapsed': collapsedGroups.upgraded }">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                      <Icon stroke-linecap="round" stroke-linejoin="round" :size="12" name="outline-44" />
                     </span>
                   </div>
                   <div v-show="!collapsedGroups.upgraded" class="group-items">
@@ -580,7 +439,7 @@
                     <span class="group-dot queued"></span>
                     <span class="group-title text-sm font-semibold">{{ $t('download.modal.groupInQueue', { count: queuedGroup.length }) }}</span>
                     <span class="expand-arrow" :class="{ 'collapsed': collapsedGroups.queued }">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                      <Icon stroke-linecap="round" stroke-linejoin="round" :size="12" name="outline-44" />
                     </span>
                   </div>
                   <div v-show="!collapsedGroups.queued" class="group-items">
@@ -605,7 +464,7 @@
                     <span class="group-dot installed"></span>
                     <span class="group-title text-sm font-semibold">{{ $t('download.modal.groupInstalled', { count: installedGroup.length }) }}</span>
                     <span class="expand-arrow" :class="{ 'collapsed': collapsedGroups.installed }">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                      <Icon stroke-linecap="round" stroke-linejoin="round" :size="12" name="outline-44" />
                     </span>
                   </div>
                   <div v-show="!collapsedGroups.installed" class="group-items">
@@ -624,7 +483,7 @@
                     <span class="group-dot no-source"></span>
                     <span class="group-title text-sm font-semibold">{{ $t('download.modal.groupNoSource', { count: noSourceGroup.length }) }}</span>
                     <span class="expand-arrow" :class="{ 'collapsed': collapsedGroups.no_source }">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                      <Icon stroke-linecap="round" stroke-linejoin="round" :size="12" name="outline-44" />
                     </span>
                   </div>
                   <div v-show="!collapsedGroups.no_source" class="group-items">
@@ -632,9 +491,9 @@
                       <input type="checkbox" :checked="false" :disabled="true" class="item-checkbox" />
                       <span class="item-filename text-sm" :title="item.filename">{{ item.filename }}</span>
                       <span class="item-badge text-xs">{{ $t('download.modal.actionNoDownloadable') }}</span>
-                      <button class="manual-mark-btn" type="button" @click.stop.prevent="copyManualDependency(item)">
+                      <UiButton type="button" @click.stop.prevent="copyManualDependency(item)" variant="secondary">
                         {{ $t('download.modal.manualMark') }}
-                      </button>
+                      </UiButton>
                     </label>
                   </div>
                 </div>
@@ -649,23 +508,23 @@
               <span>预计下载大小: <strong class="text-success font-semibold" style="color: var(--color-success);">{{ formattedCheckedSize }}</strong></span>
             </div>
             <div class="footer-actions">
-              <button class="action-btn-cancel" @click="closeBatchModal">{{ $t('common.cancel') }}</button>
-              <button 
-                class="action-btn-confirm" 
-                :disabled="checkedCount === 0"
-                @click="confirmBatchDownload"
-              >
+              <UiButton @click="closeBatchModal" variant="secondary">{{ $t('common.cancel') }}</UiButton>
+              <UiButton :disabled="checkedCount === 0" @click="confirmBatchDownload" variant="secondary">
                 <span>{{ $t('download.modal.action') }}</span>
-              </button>
+              </UiButton>
             </div>
           </div>
-        </div>
-      </div>
-    </Transition>
-  </div>
+        </UiModal>
+  </div></div>
 </template>
 
 <script setup lang="ts">
+import PackageCard from '@/components/packages/PackageCard.vue'
+import UiModal from '@/components/ui/UiModal.vue'
+import PageHeader from '@/components/layout/PageHeader.vue'
+import UiButton from '@/components/ui/UiButton.vue'
+import UiInput from '@/components/ui/UiInput.vue'
+import Icon from '@/components/ui/Icon.vue'
 import { parseSizeValue as parseSizeStringToBytes } from '@/utils/bytes'
 import { formatDescription } from '@/utils/hubDescription'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
@@ -876,7 +735,7 @@ function handleSearch() {
 async function searchOnlineResources() {
   loading.value = true
   error.value = null
-  
+
   if (scrollContainer.value) {
     scrollContainer.value.scrollTop = 0
   }
@@ -935,11 +794,11 @@ async function openPackageDetail(item: any) {
   detailLoading.value = false // Instant panel open, no giant loading blocker
   descLoading.value = true
   dependenciesLoading.value = true
-  
+
   const searchName = item.resource_id ? `${item.username}.${item.title.replace(/\s+/g, '_')}.latest` : ''
   const queryName = item.resource_id || searchName || item.title
   currentLoadingPkgName.value = queryName
-  
+
   // 1. Fetch basic info first (extremely fast, ~100ms)
   try {
     const basicDetail = await invoke<any>('fetch_hub_package_info_basic', {
@@ -1032,7 +891,7 @@ function closeDetailPanel() {
 // 拉平并去重详情中的依赖列表，保留官网 Direct/Sub-dependencies 标记。
 const uniqueDependencies = computed(() => {
   if (!detailPackage.value || !detailPackage.value.dependencies) return []
-  
+
   const map: Record<string, any> = {}
   for (const [_, depList] of Object.entries(detailPackage.value.dependencies)) {
     if (Array.isArray(depList)) {
@@ -1135,11 +994,11 @@ async function handleDownload(file: any) {
     notify.error('VAM 根目录未配置，请先在设置中配置')
     return
   }
-  
+
   const filename = file.filename
   const url = file.urlHosted
   const parsed = parsePackageMeta(filename)
-  
+
   const item = {
     id: `${parsed.creator}.${parsed.name}.${parsed.version}`,
     url,
@@ -1149,7 +1008,7 @@ async function handleDownload(file: any) {
     version: parsed.version,
     total_bytes: parseSizeStringToBytes(file.file_size)
   }
-  
+
   try {
     const results = await downloadStore.addItems([item])
     if (results && results[0] && typeof results[0] === 'object' && results[0].Skipped) {
@@ -1174,12 +1033,12 @@ async function handleDownloadDependency(dep: any) {
     notify.error('VAM 根目录未配置，请先在设置中配置')
     return
   }
-  
+
   const url = dep.downloadUrl
   const filename = dep.filename || getFilenameFromUrl(url)
   const parsed = parsePackageMeta(filename)
   const version = resolveDependencyVersion(dep, parsed.version)
-  
+
   const item = {
     id: `${parsed.creator}.${parsed.name}.${version}`,
     url,
@@ -1189,7 +1048,7 @@ async function handleDownloadDependency(dep: any) {
     version,
     total_bytes: parseSizeStringToBytes(dep.file_size)
   }
-  
+
   try {
     const results = await downloadStore.addItems([item])
     if (results && results[0] && typeof results[0] === 'object' && results[0].Skipped) {
@@ -1222,7 +1081,7 @@ async function openBatchDownloadModal() {
     notify.warning('此资源没有可供下载的文件包 (可能是外部链接或付费资源)')
     return
   }
-  
+
   batchModalOpen.value = true
   batchResolving.value = true
   checklistItems.value = []
@@ -1233,27 +1092,27 @@ async function openBatchDownloadModal() {
     installed: true,
     no_source: true
   }
-  
+
   resolveProgress.value = {
     resolved: 0,
     total: 0,
     percentage: 0,
     currentPackage: ''
   }
-  
+
   const pkgName = detailPackage.value.resource_id || getPackageIdentifier()
   try {
     const res = await invoke<any>('resolve_hub_dependencies', { packageName: pkgName })
     const items: any[] = []
-    
+
     // 1. Add main files from detailPackage
     if (detailPackage.value.hubFiles && Array.isArray(detailPackage.value.hubFiles)) {
       for (const file of detailPackage.value.hubFiles) {
         if (!file.filename) continue
-        
+
         const filename = file.filename
         const parsed = parsePackageMeta(filename)
-        
+
         // Check if installed and get installed version
         const creatorLower = parsed.creator.toLowerCase()
         const nameLower = parsed.name.toLowerCase()
@@ -1264,7 +1123,7 @@ async function openBatchDownloadModal() {
           )
           if (matchedPkg) installedVer = matchedPkg.version
         }
-        
+
         // Check if queued
         let queuedVer: number | null = null
         for (const q of downloadStore.queue) {
@@ -1274,7 +1133,7 @@ async function openBatchDownloadModal() {
             break
           }
         }
-        
+
         let status = 'need_download'
         if (installedVer !== null && installedVer >= parsed.version) {
           status = 'installed'
@@ -1290,7 +1149,7 @@ async function openBatchDownloadModal() {
         } else if (!file.urlHosted) {
           status = 'no_source'
         }
-        
+
         items.push({
           id: `${parsed.creator}.${parsed.name}.${parsed.version}`,
           filename,
@@ -1307,7 +1166,7 @@ async function openBatchDownloadModal() {
         })
       }
     }
-    
+
     // 2. Add dependencies
     if (res.dependencies && Array.isArray(res.dependencies)) {
       for (const dep of res.dependencies) {
@@ -1318,7 +1177,7 @@ async function openBatchDownloadModal() {
         })
       }
     }
-    
+
     checklistItems.value = items
   } catch (err: any) {
     console.error('Failed to resolve dependencies:', err)
@@ -1429,12 +1288,12 @@ async function confirmBatchDownload() {
         total_bytes: parseSizeStringToBytes(item.file_size)
       }
     })
-  
+
   if (!itemsToEnqueue.length) return
-  
+
   try {
     const results = await downloadStore.addItems(itemsToEnqueue)
-    
+
     let addedCount = 0
     let skippedCount = 0
     if (Array.isArray(results)) {
@@ -1445,14 +1304,14 @@ async function confirmBatchDownload() {
     } else {
       addedCount = itemsToEnqueue.length
     }
-    
+
     if (addedCount > 0) {
       notify.success(t('download.toast.added', { count: addedCount }))
     }
     if (skippedCount > 0) {
       notify.info(`跳过了 ${skippedCount} 个已存在或已安装的任务`)
     }
-    
+
     batchModalOpen.value = false
     detailPanelOpen.value = false
     router.push('/download')
@@ -1565,6 +1424,7 @@ function translateType(type: string): string {
   if (t.includes('audio')) return '音频'
   return type
 }
+function hubCardType(type: string) { const key = getTypeBadgeClass(type); const types: Record<string, string> = { 'type-scenes': 'scene', 'type-looks': 'appearance', 'type-clothing': 'clothing', 'type-hair': 'hair', 'type-plugins': 'plugin', 'type-morphs': 'morph', 'type-assets': 'asset' }; return types[key] || 'other' }
 </script>
 
 <style scoped>
@@ -1579,24 +1439,8 @@ function translateType(type: string): string {
 }
 
 /* ── Header Controls ── */
-.hub-header-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-4) var(--space-5);
-  background: var(--glass-bg);
-  backdrop-filter: var(--glass-blur);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  flex-shrink: 0;
-  gap: var(--space-4);
-}
 
 @media (max-width: 900px) {
-  .hub-header-bar {
-    flex-direction: column;
-    align-items: stretch;
-  }
 }
 
 .header-title-group {
@@ -1657,40 +1501,11 @@ function translateType(type: string): string {
 
 .hub-search-input {
   flex: 1;
-  height: 38px;
-  padding: 0 var(--space-4);
-  background: var(--bg-base);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  color: var(--text-primary);
-  font-size: var(--text-sm);
   transition: all var(--duration-fast) var(--ease);
 }
 
 .hub-search-input:focus {
-  border-color: var(--accent-primary);
-  box-shadow: 0 0 0 2px rgba(110, 107, 240, 0.15);
   outline: none;
-}
-
-.hub-search-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: 0 var(--space-4);
-  height: 38px;
-  background: var(--accent-gradient);
-  color: white;
-  font-size: var(--text-sm);
-  font-weight: var(--font-semibold);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  border: none;
-  transition: opacity var(--duration-fast) var(--ease);
-}
-
-.hub-search-btn:hover {
-  opacity: 0.9;
 }
 
 .spinner {
@@ -1709,8 +1524,8 @@ function translateType(type: string): string {
   align-items: center;
   gap: var(--space-3);
   padding: var(--space-3) var(--space-4);
-  background: rgba(248, 113, 113, 0.15);
-  border: 1px solid rgba(248, 113, 113, 0.35);
+  background: var(--color-error-bg);
+  border: none;
   border-radius: var(--radius-md);
   color: var(--color-error);
   font-size: var(--text-sm);
@@ -1748,7 +1563,7 @@ function translateType(type: string): string {
   align-items: center;
   justify-content: center;
   padding: var(--space-6);
-  background: rgba(22, 22, 24, 0.28);
+  background: var(--border-subtle);
   /* backdrop-filter removed */
 
 }
@@ -1759,10 +1574,10 @@ function translateType(type: string): string {
   align-items: center;
   gap: var(--space-3);
   padding: var(--space-5) var(--space-6);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: none;
   border-radius: var(--radius-lg);
-  background: rgba(22, 24, 40, 0.88);
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
+  background: var(--bg-overlay);
+  box-shadow: none;
 }
 
 .hub-content-scroll::-webkit-scrollbar {
@@ -1790,7 +1605,7 @@ function translateType(type: string): string {
 .loading-spinner {
   width: 32px;
   height: 32px;
-  border: 3px solid rgba(255, 255, 255, 0.1);
+  border: none;
   border-top-color: var(--accent-primary);
   border-radius: var(--radius-full);
   animation: rotate 0.8s linear infinite;
@@ -1821,7 +1636,7 @@ function translateType(type: string): string {
   display: flex;
   flex-direction: column;
   background: var(--glass-bg);
-  border: 1px solid var(--border-default);
+  border: none;
   border-radius: var(--radius-lg);
   overflow: hidden;
   height: 330px;
@@ -1830,7 +1645,7 @@ function translateType(type: string): string {
 
 .card-thumb-area {
   height: 180px;
-  background: #000;
+  background: var(--bg-base);
   position: relative;
   display: flex;
   align-items: center;
@@ -1869,70 +1684,70 @@ function translateType(type: string): string {
   padding: 2px 8px;
   border-radius: var(--radius-sm);
   /* backdrop-filter removed */
-  font-size: 10px;
+  font-size: var(--text-xs);
   font-weight: var(--font-bold);
   letter-spacing: 0.3px;
   z-index: 2;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  text-shadow: 0 1px 2px var(--border-subtle);
 }
 
 .card-type-badge.type-scenes {
-  background: rgba(244, 114, 182, 0.8);
-  border: 1px solid rgba(244, 114, 182, 0.5);
-  color: #fff;
+  background: var(--color-error-bg);
+  border: none;
+  color: var(--text-primary);
 }
 
 .card-type-badge.type-looks {
-  background: rgba(167, 139, 250, 0.8);
-  border: 1px solid rgba(167, 139, 250, 0.5);
-  color: #fff;
+  background: var(--accent-muted);
+  border: none;
+  color: var(--text-primary);
 }
 
 .card-type-badge.type-clothing {
-  background: rgba(251, 191, 36, 0.8);
-  border: 1px solid rgba(251, 191, 36, 0.5);
-  color: #1a1a2e;
+  background: var(--color-warning-bg);
+  border: none;
+  color: var(--text-disabled);
 }
 
 .card-type-badge.type-hair {
-  background: rgba(45, 212, 191, 0.8);
-  border: 1px solid rgba(45, 212, 191, 0.5);
-  color: #1a1a2e;
+  background: var(--color-success-bg);
+  border: none;
+  color: var(--text-disabled);
 }
 
 .card-type-badge.type-plugins {
-  background: rgba(96, 165, 250, 0.8);
-  border: 1px solid rgba(96, 165, 250, 0.5);
-  color: #fff;
+  background: var(--color-info-bg);
+  border: none;
+  color: var(--text-primary);
 }
 
 .card-type-badge.type-morphs {
-  background: rgba(52, 211, 153, 0.8);
-  border: 1px solid rgba(52, 211, 153, 0.5);
-  color: #1a1a2e;
+  background: var(--color-success-bg);
+  border: none;
+  color: var(--text-disabled);
 }
 
 .card-type-badge.type-assets {
-  background: rgba(248, 113, 113, 0.8);
-  border: 1px solid rgba(248, 113, 113, 0.5);
-  color: #fff;
+  background: var(--color-error-bg);
+  border: none;
+  color: var(--text-primary);
 }
 
 .card-type-badge.type-toolkits {
-  background: rgba(139, 92, 246, 0.8);
-  border: 1px solid rgba(139, 92, 246, 0.5);
-  color: #fff;
+  background: var(--accent-muted);
+  border: none;
+  color: var(--text-primary);
 }
 
 .card-type-badge.type-audio {
-  background: rgba(251, 146, 60, 0.8);
-  border: 1px solid rgba(251, 146, 60, 0.5);
-  color: #fff;
+  background: var(--color-warning-bg);
+  border: none;
+  color: var(--text-primary);
 }
 
 .card-type-badge.type-default {
-  background: rgba(22, 22, 24, 0.7);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--bg-overlay);
+  border: none;
   color: var(--text-primary);
 }
 
@@ -1944,23 +1759,23 @@ function translateType(type: string): string {
   padding: 2px 8px;
   border-radius: var(--radius-sm);
   /* backdrop-filter removed */
-  font-size: 10px;
+  font-size: var(--text-xs);
   font-weight: var(--font-bold);
   letter-spacing: 0.3px;
   z-index: 2;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  text-shadow: 0 1px 2px var(--border-subtle);
 }
 
 .card-pricing-badge.pricing-free {
-  background: rgba(52, 211, 153, 0.8);
-  border: 1px solid rgba(52, 211, 153, 0.5);
-  color: #fff;
+  background: var(--color-success-bg);
+  border: none;
+  color: var(--text-primary);
 }
 
 .card-pricing-badge.pricing-paid {
-  background: rgba(251, 191, 36, 0.85);
-  border: 1px solid rgba(251, 191, 36, 0.5);
-  color: #1a1a2e;
+  background: var(--color-warning-bg);
+  border: none;
+  color: var(--text-disabled);
 }
 
 .card-info-area {
@@ -2004,14 +1819,14 @@ function translateType(type: string): string {
   align-items: center;
   gap: var(--space-3);
   padding-top: var(--space-2);
-  border-top: 1px solid rgba(255, 255, 255, 0.03);
+  border-top: 1px solid var(--bg-subtle);
 }
 
 .card-stat {
   display: flex;
   align-items: center;
   gap: 3px;
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-secondary);
 }
 
@@ -2035,35 +1850,9 @@ function translateType(type: string): string {
   justify-content: space-between;
   padding: var(--space-3) var(--space-5);
   background: var(--glass-bg);
-  border: 1px solid var(--border-default);
+  border: none;
   border-radius: var(--radius-md);
   flex-shrink: 0;
-}
-
-.page-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: 6px var(--space-4);
-  height: 32px;
-  background: var(--bg-hover);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
-  color: var(--text-primary);
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-  cursor: pointer;
-  transition: all var(--duration-fast) var(--ease);
-}
-
-.page-btn:hover:not(:disabled) {
-  background: var(--bg-surface);
-  border-color: var(--accent-primary);
-}
-
-.page-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
 }
 
 .page-indicator {
@@ -2073,34 +1862,8 @@ function translateType(type: string): string {
 }
 
 /* ── Panel Overlay ── */
-.panel-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.55);
-  /* backdrop-filter removed */
-  z-index: 100;
-}
 
 /* ── Slide-over Detail Panel ── */
-.detail-slide-panel {
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: 580px;
-  max-width: 100%;
-  height: 100%;
-  background: var(--bg-surface);
-  backdrop-filter: var(--glass-blur-heavy);
-  border-left: 1px solid var(--border-default);
-  box-shadow: -10px 0 40px rgba(0, 0, 0, 0.5);
-  z-index: 101;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
 
 .panel-header {
   display: flex;
@@ -2109,25 +1872,6 @@ function translateType(type: string): string {
   padding: var(--space-5);
   border-bottom: 1px solid var(--border-default);
   flex-shrink: 0;
-}
-
-.panel-close-btn {
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-full);
-  color: var(--text-secondary);
-  background: var(--bg-hover);
-  cursor: pointer;
-  border: none;
-  transition: all var(--duration-fast) var(--ease);
-}
-
-.panel-close-btn:hover {
-  color: var(--text-primary);
-  background: rgba(255, 255, 255, 0.1);
 }
 
 .panel-title-wrap {
@@ -2141,25 +1885,25 @@ function translateType(type: string): string {
 .panel-category-tag {
   align-self: flex-start;
   padding: 1px 6px;
-  background: rgba(110, 107, 240, 0.15);
+  background: var(--accent-muted);
   color: var(--accent-primary);
-  border: 1px solid rgba(110, 107, 240, 0.25);
+  border: none;
   border-radius: var(--radius-sm);
-  font-size: 10px;
+  font-size: var(--text-xs);
   font-weight: var(--font-bold);
   text-transform: uppercase;
 }
 
 .panel-category-tag.pricing-free {
-  background: rgba(52, 211, 153, 0.12);
+  background: var(--color-success-bg);
   color: var(--color-success);
-  border-color: rgba(52, 211, 153, 0.25);
+  border-color: var(--color-success-bg);
 }
 
 .panel-category-tag.pricing-paid {
-  background: rgba(251, 191, 36, 0.12);
+  background: var(--color-warning-bg);
   color: var(--color-warning);
-  border-color: rgba(251, 191, 36, 0.25);
+  border-color: var(--color-warning-bg);
 }
 
 .panel-title {
@@ -2222,12 +1966,12 @@ function translateType(type: string): string {
   height: 90px;
   border-radius: var(--radius-md);
   overflow: hidden;
-  background: #000;
+  background: var(--bg-base);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  border: 1px solid var(--border-subtle);
+  border: none;
 }
 
 .panel-cover-img {
@@ -2260,7 +2004,7 @@ function translateType(type: string): string {
   font-size: var(--text-xs);
   font-weight: var(--font-bold);
   color: var(--accent-primary);
-  background: rgba(110, 107, 240, 0.12);
+  background: var(--accent-muted);
   padding: 2px 8px;
   border-radius: var(--radius-full);
 }
@@ -2281,7 +2025,7 @@ function translateType(type: string): string {
 }
 
 .badge-stat {
-  font-size: 10px;
+  font-size: var(--text-xs);
   padding: 2px 6px;
   background: var(--bg-hover);
   color: var(--text-secondary);
@@ -2290,7 +2034,7 @@ function translateType(type: string): string {
 
 .badge-stat.rating {
   color: var(--color-warning);
-  background: rgba(251, 191, 36, 0.08);
+  background: var(--color-warning-bg);
 }
 
 .panel-tagline {
@@ -2346,8 +2090,8 @@ function translateType(type: string): string {
   align-items: center;
   justify-content: space-between;
   padding: var(--space-3) var(--space-4);
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: var(--bg-subtle);
+  border: none;
   border-radius: var(--radius-md);
   gap: var(--space-3);
 }
@@ -2393,48 +2137,6 @@ function translateType(type: string): string {
   color: var(--color-warning);
 }
 
-.download-btn-sm {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding: 5px 12px;
-  height: 28px;
-  background: var(--accent-gradient);
-  color: white;
-  font-size: var(--text-xs);
-  font-weight: var(--font-semibold);
-  border-radius: var(--radius-sm);
-  border: none;
-  cursor: pointer;
-  transition: all var(--duration-fast) var(--ease);
-}
-
-.download-btn-sm:hover:not(:disabled) {
-  opacity: 0.95;
-  transform: translateY(-1px);
-}
-
-.download-btn-sm:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.download-btn-sm.secondary {
-  background: rgba(110, 107, 240, 0.1);
-  color: var(--accent-primary);
-  border: 1px solid rgba(110, 107, 240, 0.3);
-}
-
-.download-btn-sm.secondary:hover {
-  background: rgba(110, 107, 240, 0.2);
-}
-
-.download-btn-sm.error {
-  background: rgba(248, 113, 113, 0.12);
-  color: var(--color-error);
-  border: 1px solid rgba(248, 113, 113, 0.3);
-}
-
 .download-progress-container {
   display: flex;
   align-items: center;
@@ -2449,7 +2151,7 @@ function translateType(type: string): string {
 .progress-bar-wrapper {
   flex: 1;
   height: 4px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--border-default);
   border-radius: var(--radius-full);
   overflow: hidden;
 }
@@ -2487,39 +2189,29 @@ function translateType(type: string): string {
 }
 
 .badge.success {
-  background: rgba(52, 211, 153, 0.15);
+  background: var(--color-success-bg);
   color: var(--color-success);
-  border: 1px solid rgba(52, 211, 153, 0.25);
+  border: none;
 }
 
 .badge.warning {
-  background: rgba(251, 191, 36, 0.15);
+  background: var(--color-warning-bg);
   color: var(--color-warning);
-  border: 1px solid rgba(251, 191, 36, 0.25);
+  border: none;
 }
 
 .badge.upgrade {
-  background: rgba(251, 146, 60, 0.15);
-  color: #fb923c;
-  border: 1px solid rgba(251, 146, 60, 0.3);
-}
-
-.download-btn-sm.upgrade {
-  background: rgba(251, 146, 60, 0.15);
-  color: #fb923c;
-  border: 1px solid rgba(251, 146, 60, 0.35);
-}
-
-.download-btn-sm.upgrade:hover {
-  background: rgba(251, 146, 60, 0.25);
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+  border: none;
 }
 
 .empty-list-info {
   width: 100%;
   padding: var(--space-4);
   text-align: center;
-  background: rgba(255, 255, 255, 0.01);
-  border: 1px dashed rgba(255, 255, 255, 0.05);
+  background: var(--bg-subtle);
+  border: none;
   border-radius: var(--radius-md);
   font-style: italic;
 }
@@ -2546,68 +2238,7 @@ function translateType(type: string): string {
   justify-content: stretch;
 }
 
-.batch-download-btn {
-  flex: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
-  height: 40px;
-  background: var(--accent-gradient);
-  color: white;
-  font-size: var(--text-sm);
-  font-weight: var(--font-bold);
-  border-radius: var(--radius-md);
-  border: none;
-  cursor: pointer;
-  box-shadow: 0 4px 15px rgba(110, 107, 240, 0.25);
-  transition: all var(--transition-normal);
-}
-
-.batch-download-btn:hover:not(:disabled) {
-  opacity: 0.95;
-  transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(110, 107, 240, 0.35);
-}
-
-.batch-download-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  box-shadow: none;
-}
-
 /* ── Batch Download Modal Backdrop & Container ── */
-.batch-modal-backdrop {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(22, 22, 24, 0.65);
-  /* backdrop-filter removed */
-
-  z-index: 200;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-6);
-}
-
-.batch-modal-container {
-  width: 500px;
-  max-width: 100%;
-  max-height: 90%;
-  background: var(--bg-surface);
-  backdrop-filter: var(--glass-blur-heavy);
-  -webkit-backdrop-filter: var(--glass-blur-heavy);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  animation: modal-enter 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
 
 @keyframes modal-enter {
   from {
@@ -2637,25 +2268,6 @@ function translateType(type: string): string {
   font-size: var(--text-md);
   font-weight: var(--font-bold);
   color: var(--text-primary);
-}
-
-.batch-modal-close-btn {
-  width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-full);
-  color: var(--text-secondary);
-  background: transparent;
-  cursor: pointer;
-  border: none;
-  transition: all var(--transition-fast);
-}
-
-.batch-modal-close-btn:hover {
-  color: var(--text-primary);
-  background: var(--bg-hover);
 }
 
 .batch-modal-body {
@@ -2720,12 +2332,12 @@ function translateType(type: string): string {
 
 .group-dot.to-download {
   background: var(--color-info);
-  box-shadow: 0 0 8px var(--color-info);
+  box-shadow: none;
 }
 
 .group-dot.upgraded {
   background: var(--color-success);
-  box-shadow: 0 0 8px var(--color-success);
+  box-shadow: none;
 }
 
 .group-dot.queued {
@@ -2756,16 +2368,16 @@ function translateType(type: string): string {
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.04);
+  background: var(--bg-subtle);
+  border: none;
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition: all var(--transition-fast);
 }
 
 .checklist-item-row:hover:not(.text-disabled) {
-  background: rgba(255, 255, 255, 0.04);
-  border-color: rgba(110, 107, 240, 0.15);
+  background: var(--bg-subtle);
+  border-color: var(--accent-muted);
 }
 
 .checklist-item-row.text-disabled {
@@ -2802,29 +2414,13 @@ function translateType(type: string): string {
 }
 
 .item-badge {
-  font-size: 10px;
+  font-size: var(--text-xs);
   padding: 1px 6px;
-  background: rgba(248, 113, 113, 0.12);
+  background: var(--color-error-bg);
   color: var(--color-error);
-  border: 1px solid rgba(248, 113, 113, 0.25);
+  border: none;
   border-radius: var(--radius-sm);
   font-weight: var(--font-bold);
-}
-
-.manual-mark-btn {
-  flex-shrink: 0;
-  height: 24px;
-  padding: 0 var(--space-2);
-  border: 1px solid rgba(251, 191, 36, 0.25);
-  border-radius: var(--radius-sm);
-  background: rgba(251, 191, 36, 0.1);
-  color: var(--color-warning);
-  font-size: 10px;
-  font-weight: var(--font-bold);
-}
-
-.manual-mark-btn:hover {
-  background: rgba(251, 191, 36, 0.18);
 }
 
 /* ── Batch Download Modal Footer ── */
@@ -2834,7 +2430,7 @@ function translateType(type: string): string {
   justify-content: space-between;
   padding: var(--space-4) var(--space-5);
   border-top: 1px solid var(--border-subtle);
-  background: rgba(22, 22, 24, 0.25);
+  background: var(--border-subtle);
   flex-shrink: 0;
 }
 
@@ -2853,50 +2449,6 @@ function translateType(type: string): string {
 .footer-actions {
   display: flex;
   gap: var(--space-2);
-}
-
-.action-btn-cancel,
-.action-btn-confirm {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 var(--space-4);
-  height: 32px;
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.action-btn-cancel {
-  color: var(--text-primary);
-  background: var(--bg-hover);
-  border: 1px solid var(--border-subtle);
-}
-
-.action-btn-cancel:hover {
-  background: var(--bg-surface);
-  border-color: var(--border-default);
-}
-
-.action-btn-confirm {
-  background: var(--accent-gradient);
-  color: white;
-  border: none;
-  font-weight: var(--font-semibold);
-  box-shadow: 0 2px 8px rgba(110, 107, 240, 0.2);
-}
-
-.action-btn-confirm:hover:not(:disabled) {
-  opacity: 0.95;
-  box-shadow: 0 4px 12px rgba(110, 107, 240, 0.3);
-}
-
-.action-btn-confirm:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  box-shadow: none;
 }
 
 /* ── Expand/Collapse Chevron and Loaders ── */
@@ -2923,7 +2475,7 @@ function translateType(type: string): string {
 .loading-spinner-sm {
   width: 14px;
   height: 14px;
-  border: 2px solid rgba(255, 255, 255, 0.1);
+  border: none;
   border-top-color: var(--accent-primary);
   border-radius: var(--radius-full);
   animation: rotate 0.8s linear infinite;
@@ -2943,10 +2495,10 @@ function translateType(type: string): string {
 .resolve-progress-container .progress-bar-wrapper {
   width: 100%;
   height: 6px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--border-default);
   border-radius: var(--radius-full);
   overflow: hidden;
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
+  box-shadow: none;
 }
 
 .resolve-progress-container .progress-bar-fill {
@@ -2967,4 +2519,10 @@ function translateType(type: string): string {
   font-style: italic;
   opacity: 0.85;
 }
+
+.b2-page { display: flex; flex-direction: column; height: 100%; min-height: 0; max-width: none; margin: 0; padding: 0; gap: 0; overflow: hidden; }
+.b2-page-body { flex: 1; min-height: 0; min-width: 0; overflow: auto; padding: 20px 24px; display: flex; flex-direction: column; gap: 20px; }
+.b2-page :deep(.page-header) { width: 100%; }
+@media(max-width: 800px) { .b2-page-body { padding: 12px; } }
+.resources-grid { grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 14px; }.hub-pricing { position: absolute; z-index: 2; top: 10px; right: 10px; padding: 3px 8px; border-radius: var(--radius-full); background: var(--bg-on-image); color: var(--text-primary); font-size: var(--text-xs); font-weight: var(--font-bold); pointer-events: none; }.resources-grid :deep(.package-meta span:last-child) { display: flex; align-items: center; gap: 4px; }
 </style>

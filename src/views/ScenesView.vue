@@ -1,9 +1,9 @@
 <template>
-  <div class="scenes-view animate-fadeIn">
-    <div class="content-tabs">
-      <button :class="{ active: contentTab === 'files' }" :aria-pressed="contentTab === 'files'" :disabled="managerBusy" @click="contentTab = 'files'">{{ t('gameContent.scenes') }}</button>
-      <button :class="{ active: contentTab === 'packages' }" :aria-pressed="contentTab === 'packages'" :disabled="managerBusy" @click="contentTab = 'packages'">{{ t('gameContent.packageView') }}</button>
-    </div>
+<div class="scenes-view animate-fadeIn b2-page"><PageHeader :title="$t('sidebar.scenes')" ><template #filters><div class="content-tabs">
+      <UiChip :class="{ active: contentTab === 'files' }" :aria-pressed="contentTab === 'files'" :disabled="managerBusy" @click="contentTab = 'files'" :selected="contentTab === 'files'">{{ t('gameContent.scenes') }}</UiChip>
+      <UiChip :class="{ active: contentTab === 'packages' }" :aria-pressed="contentTab === 'packages'" :disabled="managerBusy" @click="contentTab = 'packages'" :selected="contentTab === 'packages'">{{ t('gameContent.packageView') }}</UiChip>
+    </div></template></PageHeader><div class="b2-page-body">
+
     <GameContentManager v-show="contentTab === 'files'" kind="scene" @busy-change="managerBusy = $event" />
     <ResourceDisplay
       v-if="contentTab === 'packages'"
@@ -16,13 +16,9 @@
       @update:view-mode="viewMode = $event"
     >
       <template #actions>
-        <button
-          class="scan-btn-inline"
-          :disabled="isScanning || !vamRootPath"
-          @click="handleScan"
-        >
+        <UiButton :disabled="isScanning || !vamRootPath" @click="handleScan" variant="primary" size="lg">
           <span>{{ isScanning ? t('toolbar.scanning') : t('packages.scan') }}</span>
-        </button>
+        </UiButton>
         <div class="sort-dropdown">
           <select v-model="sortBy" class="sort-select">
             <option value="name">{{ t('packages.sortByName') }}</option>
@@ -32,18 +28,20 @@
         </div>
       </template>
       <template #empty-action>
-        <button class="action-btn" @click="goToSettings">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-            <path d="M4 20h16M4 20V4h16v16M9 10h6M12 7v6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
+        <UiButton @click="goToSettings" variant="secondary">
+          <Icon  :size="16" name="outline-15" />
           {{ t('packages.selectDirectory') }}
-        </button>
+        </UiButton>
       </template>
     </ResourceDisplay>
-  </div>
+  </div></div>
 </template>
 
 <script setup lang="ts">
+import PageHeader from '@/components/layout/PageHeader.vue'
+import Icon from '@/components/ui/Icon.vue'
+import UiButton from '@/components/ui/UiButton.vue'
+import UiChip from '@/components/ui/UiChip.vue'
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -117,11 +115,6 @@ function goToSettings() {
 </script>
 
 <style scoped>
-.content-tabs { display: flex; flex-shrink: 0; gap: 8px; margin-bottom: 12px; }
-.content-tabs button { padding: 7px 12px; border-radius: 7px; font-size: 13px; color: var(--text-secondary); }
-.content-tabs button.active { background: var(--bg-elevated); color: var(--text-primary); }
-.content-tabs button:focus-visible { outline: 2px solid var(--accent-primary); }
-.content-tabs button:disabled { opacity: .5; cursor: not-allowed; }
 .scenes-view {
   display: flex;
   flex-direction: column;
@@ -131,25 +124,6 @@ function goToSettings() {
 }
 .scenes-view > .game-content { flex: 1; min-height: 0; overflow: hidden; }
 .scenes-view > .resource-display { flex: 1; min-height: 0; height: auto; }
-
-.scan-btn-inline {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-1) var(--space-3);
-  height: 30px;
-  border-radius: var(--radius-sm);
-  color: var(--accent-primary);
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-  transition: color var(--duration-fast) var(--ease), background var(--duration-fast) var(--ease);
-}
-
-.scan-btn-inline:hover:not(:disabled) {
-  background: rgba(110, 107, 240, 0.1);
-}
-
-.scan-btn-inline:disabled { opacity: 0.5; cursor: not-allowed; }
 
 
 .sort-select {
@@ -166,20 +140,8 @@ function goToSettings() {
 
 .sort-select:focus { border-color: var(--accent-primary); }
 
-.action-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-5);
-  height: 36px;
-  background: var(--accent-gradient);
-  color: white;
-  font-size: var(--text-sm);
-  font-weight: var(--font-semibold);
-  border-radius: var(--radius-md);
-  transition: opacity var(--duration-fast) var(--ease), transform var(--duration-fast) var(--ease);
-}
-
-.action-btn:hover { opacity: 0.9; transform: translateY(-1px); }
-.action-btn:active { transform: translateY(0); }
+.b2-page { display: flex; flex-direction: column; height: 100%; min-height: 0; max-width: none; margin: 0; padding: 0; gap: 0; overflow: hidden; }
+.b2-page-body { flex: 1; min-height: 0; min-width: 0; overflow: auto; padding: 20px 24px; display: flex; flex-direction: column; gap: 20px; }
+.b2-page :deep(.page-header) { width: 100%; }
+@media(max-width: 800px) { .b2-page-body { padding: 12px; } }
 </style>

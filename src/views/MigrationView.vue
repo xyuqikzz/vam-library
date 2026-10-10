@@ -1,88 +1,60 @@
 <template>
-  <div class="migration-view animate-fadeIn">
-    <!-- Top Action Bar -->
-    <div class="migration-header-bar glass-panel">
-      <!-- Step Indicator -->
-      <div class="step-indicator">
+<div class="migration-view animate-fadeIn b2-page"><PageHeader :title="$t('sidebar.migration')" ><template #actions>
+        <!-- Step 0 Actions -->
+        <template v-if="currentStep === 0">
+          <UiButton :disabled="isRestoringAll" @click="handleRestoreAll" variant="ghost">
+            {{ isRestoringAll ? $t('migration.restoringAll') : $t('migration.restoreAll') }}
+          </UiButton>
+          <UiButton :disabled="!selectedMode" @click="currentStep = 1" variant="primary" size="lg">
+            {{ $t('common.next') }}
+          </UiButton>
+        </template>
+
+        <!-- Step 1 Actions -->
+        <template v-else-if="currentStep === 1">
+          <UiButton @click="currentStep = 0" variant="ghost">
+            {{ $t('common.back') }}
+          </UiButton>
+          <UiButton @click="handlePreview" variant="primary" size="lg">
+            {{ $t('common.next') }}
+          </UiButton>
+        </template>
+
+        <!-- Step 2 Actions -->
+        <template v-else-if="currentStep === 2">
+          <UiButton @click="currentStep = 1" variant="ghost">
+            {{ $t('common.back') }}
+          </UiButton>
+          <UiButton v-if="preview?.plan_id && (preview.operations.length > 0 || preview.cleanup_empty_dirs)" @click="handleExecute" variant="secondary">
+            {{ $t('common.confirm') }}
+          </UiButton>
+        </template>
+
+        <!-- Step 3 Actions -->
+        <template v-else-if="currentStep === 3 && migrationResult">
+          <UiButton @click="resetWizard" variant="ghost">
+            {{ $t('migration.startNew') }}
+          </UiButton>
+          <UiButton v-if="migrationResult.rollback_available" :disabled="isRollingBack" @click="handleRollback" variant="ghost">
+            {{ isRollingBack ? $t('migration.rollingBack') : $t('migration.rollback') }}
+          </UiButton>
+        </template>
+      </template><template #filters><div class="step-indicator">
         <div
           v-for="(step, index) in steps"
           :key="index"
           :class="['step', { active: currentStep === index, completed: currentStep > index }]"
         >
           <div class="step-number">
-            <svg v-if="currentStep > index" width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <path d="M3 7L6 10L11 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-            </svg>
+            <Icon v-if="currentStep > index" :size="14" name="outline-30" />
             <span v-else>{{ index + 1 }}</span>
           </div>
           <span class="step-label">{{ step }}</span>
           <div v-if="index < steps.length - 1" class="step-connector" />
         </div>
-      </div>
+      </div></template></PageHeader><div class="b2-page-body">
+    <!-- Top Action Bar -->
 
-      <!-- Navigation Actions (Moved to Top) -->
-      <div class="step-actions">
-        <!-- Step 0 Actions -->
-        <template v-if="currentStep === 0">
-          <button
-            class="step-rollback-btn"
-            :disabled="isRestoringAll"
-            @click="handleRestoreAll"
-          >
-            {{ isRestoringAll ? $t('migration.restoringAll') : $t('migration.restoreAll') }}
-          </button>
-          <button
-            class="step-next-btn"
-            :disabled="!selectedMode"
-            @click="currentStep = 1"
-          >
-            {{ $t('common.next') }}
-          </button>
-        </template>
-
-        <!-- Step 1 Actions -->
-        <template v-else-if="currentStep === 1">
-          <button class="step-back-btn" @click="currentStep = 0">
-            {{ $t('common.back') }}
-          </button>
-          <button
-            class="step-next-btn"
-            @click="handlePreview"
-          >
-            {{ $t('common.next') }}
-          </button>
-        </template>
-
-        <!-- Step 2 Actions -->
-        <template v-else-if="currentStep === 2">
-          <button class="step-back-btn" @click="currentStep = 1">
-            {{ $t('common.back') }}
-          </button>
-          <button
-            v-if="preview?.plan_id && (preview.operations.length > 0 || preview.cleanup_empty_dirs)"
-            class="step-execute-btn"
-            @click="handleExecute"
-          >
-            {{ $t('common.confirm') }}
-          </button>
-        </template>
-
-        <!-- Step 3 Actions -->
-        <template v-else-if="currentStep === 3 && migrationResult">
-          <button class="step-back-btn" @click="resetWizard">
-            {{ $t('migration.startNew') }}
-          </button>
-          <button
-            v-if="migrationResult.rollback_available"
-            class="step-rollback-btn"
-            :disabled="isRollingBack"
-            @click="handleRollback"
-          >
-            {{ isRollingBack ? $t('migration.rollingBack') : $t('migration.rollback') }}
-          </button>
-        </template>
-      </div>
-    </div>
 
     <!-- Step 0: Mode Selection -->
     <div v-if="currentStep === 0" class="step-content">
@@ -90,26 +62,16 @@
       <p class="step-description text-secondary">{{ $t('migration.chooseModeDesc') }}</p>
 
       <div class="mode-grid stagger-children">
-        <button
-          v-for="mode in modes"
-          :key="mode.id"
-          :class="['mode-card glass-card-component', { selected: selectedMode === mode.id }]"
-          @click="selectedMode = mode.id"
-        >
+        <UiButton v-for="mode in modes" :key="mode.id" :class="['mode-card glass-card-component', { selected: selectedMode === mode.id }]" @click="selectedMode = mode.id" variant="secondary">
           <div class="mode-icon-wrapper" :style="{ '--mode-color': mode.color }">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-              <path :d="mode.icon" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-            </svg>
+            <Icon  :size="24" :path="mode.icon" />
           </div>
           <h3 class="mode-title">{{ mode.title }}</h3>
           <p class="mode-description">{{ mode.description }}</p>
           <div v-if="selectedMode === mode.id" class="selected-indicator">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5" />
-              <path d="M5 8L7 10L11 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-            </svg>
+            <Icon  :size="16" name="outline-31" />
           </div>
-        </button>
+        </UiButton>
       </div>
 
 
@@ -124,12 +86,7 @@
         <div class="config-field">
           <label class="config-label text-sm">{{ $t('migration.sourceDirectory') }}</label>
           <div class="config-input-row">
-            <input
-              v-model="config.sourceDir"
-              type="text"
-              class="config-input"
-              :placeholder="$t('migration.sourceDirectoryPlaceholder')"
-            />
+            <UiInput v-model="config.sourceDir" type="text" class="config-input" :placeholder="$t('migration.sourceDirectoryPlaceholder')" />
             <span class="config-hint text-xs text-tertiary">{{ $t('migration.sourceDirectoryHint') }}</span>
           </div>
         </div>
@@ -137,14 +94,9 @@
         <div class="config-field">
           <label class="config-label text-sm">{{ $t('migration.targetDirectory') }}</label>
           <div class="target-option-row">
-            <button
-              v-for="option in targetOptions"
-              :key="option.id"
-              :class="['config-toggle', { active: config.targetKind === option.id }]"
-              @click="config.targetKind = option.id"
-            >
+            <UiChip v-for="option in targetOptions" :key="option.id" :class="['config-toggle', { active: config.targetKind === option.id }]" @click="config.targetKind = option.id" :selected="config.targetKind === option.id">
               {{ option.label }}
-            </button>
+            </UiChip>
           </div>
           <div class="selected-target">
             <span class="selected-target-path truncate">{{ selectedTargetDir || $t('migration.targetDirectoryPlaceholder') }}</span>
@@ -155,18 +107,12 @@
         <div class="config-field">
           <label class="config-label text-sm">{{ $t('migration.operation') }}</label>
           <div class="config-toggle-row">
-            <button
-              :class="['config-toggle', { active: config.action === 'move' }]"
-              @click="config.action = 'move'"
-            >
+            <UiChip :class="['config-toggle', { active: config.action === 'move' }]" @click="config.action = 'move'" :selected="config.action === 'move'">
               {{ $t('migration.move') }}
-            </button>
-            <button
-              :class="['config-toggle', { active: config.action === 'copy' }]"
-              @click="config.action = 'copy'"
-            >
+            </UiChip>
+            <UiChip :class="['config-toggle', { active: config.action === 'copy' }]" @click="config.action = 'copy'" :selected="config.action === 'copy'">
               {{ $t('migration.copySafe') }}
-            </button>
+            </UiChip>
           </div>
         </div>
       </div>
@@ -190,10 +136,7 @@
       <!-- Conflicts -->
       <div v-if="preview && preview.conflicts.length > 0" class="preview-warnings">
         <div class="warning-header">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-            <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10Z" stroke="currentColor" stroke-width="1.5"/>
-            <path d="M12 8v4M12 16h.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-          </svg>
+          <Icon  :size="14" name="outline-32" />
           <span>{{ $t('migration.conflictsDetected', { count: preview.conflicts.length }) }}</span>
         </div>
         <div v-for="(conflict, i) in preview.conflicts.slice(0, 5)" :key="i" class="warning-item text-xs">
@@ -254,7 +197,7 @@
       <div class="exec-processing">
         <div v-if="!migrationResult" class="exec-spinner" />
         <p v-if="!migrationResult" class="text-sm text-secondary">{{ $t('migration.movingFiles') }}</p>
-        
+
         <div v-if="migrationProgress || migrationResult" class="exec-progress">
           <div class="exec-progress-meta">
             <span>
@@ -309,10 +252,15 @@
     <div v-if="restoreAllMessage" :class="['restore-all-message', restoreAllFailed ? 'error' : 'ok']">
       {{ restoreAllMessage }}
     </div>
-  </div>
+  </div></div>
 </template>
 
 <script setup lang="ts">
+import UiChip from '@/components/ui/UiChip.vue'
+import PageHeader from '@/components/layout/PageHeader.vue'
+import UiInput from '@/components/ui/UiInput.vue'
+import UiButton from '@/components/ui/UiButton.vue'
+import Icon from '@/components/ui/Icon.vue'
 import { formatSize } from '@/utils/bytes'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -412,35 +360,35 @@ const modes = computed(() => [
     title: t('migration.modeFlatten'),
     description: t('migration.modeFlattenDesc'),
     icon: 'M3 7h18M12 3v14m-5-5 5 5 5-5M4 21h16',
-    color: '#5b8def',
+    color: 'var(--color-info)',
   },
   {
     id: 'by_type',
     title: t('migration.modeByType'),
     description: t('migration.modeByTypeDesc'),
     icon: 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z',
-    color: '#6e6bf0',
+    color: 'var(--accent-primary)',
   },
   {
     id: 'by_creator',
     title: t('migration.modeByCreator'),
     description: t('migration.modeByCreatorDesc'),
     icon: 'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75',
-    color: '#5b8def',
+    color: 'var(--color-info)',
   },
   {
     id: 'by_scene',
     title: t('migration.modeByScene'),
     description: t('migration.modeBySceneDesc'),
     icon: 'M2 4h20v16H2zM2 9h20M5 6.5h0M7.5 6.5h0M10 6.5h0',
-    color: '#f59e0b',
+    color: 'var(--color-warning)',
   },
   {
     id: 'custom',
     title: t('migration.modeByCustom'),
     description: t('migration.modeByCustomDesc'),
     icon: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z',
-    color: '#3ecf8e',
+    color: 'var(--color-success)',
   },
 ])
 
@@ -623,16 +571,6 @@ function fileName(path: string) { return path.split(/[\\/]/).pop() || path }
   gap: var(--space-6);
 }
 
-.migration-header-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-3) var(--space-6);
-  border-radius: var(--radius-md);
-  flex-wrap: wrap;
-  gap: var(--space-4);
-}
-
 .step-indicator {
   display: flex;
   align-items: center;
@@ -665,7 +603,7 @@ function fileName(path: string) { return path.split(/[\\/]/).pop() || path }
   justify-content: center;
   width: 28px;
   height: 28px;
-  border-radius: 50%;
+  border-radius: var(--radius-xl)%;
   background: var(--bg-hover);
   color: var(--text-tertiary);
   font-size: var(--text-sm);
@@ -674,8 +612,8 @@ function fileName(path: string) { return path.split(/[\\/]/).pop() || path }
   transition: background var(--duration-base) var(--ease), color var(--duration-base) var(--ease);
 }
 
-.step.active .step-number { background: var(--accent-primary); color: white; }
-.step.completed .step-number { background: var(--color-success); color: white; }
+.step.active .step-number { background: var(--accent-primary); color: var(--accent-ink); }
+.step.completed .step-number { background: var(--color-success); color: var(--text-primary); }
 
 .step-label {
   font-size: var(--text-sm);
@@ -718,15 +656,15 @@ function fileName(path: string) { return path.split(/[\\/]/).pop() || path }
   padding: var(--space-6);
   background: var(--glass-bg);
   backdrop-filter: var(--glass-blur);
-  border: 1px solid var(--border-default);
+  border: none;
   border-radius: var(--radius-lg);
   text-align: left;
   cursor: pointer;
   transition: transform var(--duration-base) var(--ease), box-shadow var(--duration-base) var(--ease), border-color var(--duration-base) var(--ease);
 }
 
-.mode-card:hover { transform: translateY(-2px); box-shadow: var(--glass-shadow-lg); border-color: var(--border-strong); }
-.mode-card.selected { border-color: var(--accent-primary); box-shadow: 0 0 0 1px var(--accent-primary), var(--glass-shadow-lg); }
+.mode-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); border-color: var(--border-strong); }
+.mode-card.selected { border-color: var(--accent-primary); box-shadow: none; }
 
 .mode-icon-wrapper {
   display: flex;
@@ -751,35 +689,6 @@ function fileName(path: string) { return path.split(/[\\/]/).pop() || path }
   margin-top: var(--space-6);
 }
 
-.step-back-btn, .step-next-btn, .step-execute-btn, .step-rollback-btn {
-  display: inline-flex;
-  align-items: center;
-  padding: var(--space-2) var(--space-5);
-  height: 36px;
-  font-size: var(--text-sm);
-  font-weight: var(--font-semibold);
-  border-radius: var(--radius-md);
-  transition: opacity var(--duration-fast) var(--ease), transform var(--duration-fast) var(--ease);
-}
-
-.step-back-btn { background: var(--bg-elevated); color: var(--text-secondary); border: 1px solid var(--border-subtle); }
-.step-back-btn:hover { color: var(--text-primary); }
-
-.step-next-btn { background: var(--accent-gradient); color: white; }
-.step-next-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.step-next-btn:not(:disabled):hover { opacity: 0.9; transform: translateY(-1px); }
-
-.step-execute-btn { background: var(--color-success); color: white; }
-.step-execute-btn:hover { opacity: 0.9; transform: translateY(-1px); }
-
-.step-rollback-btn {
-  background: rgba(248, 113, 113, 0.12);
-  color: var(--color-error);
-  border: 1px solid rgba(248, 113, 113, 0.25);
-}
-.step-rollback-btn:hover:not(:disabled) { background: rgba(248, 113, 113, 0.18); transform: translateY(-1px); }
-.step-rollback-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-
 /* ── Config Form ──────────────────────────────────────────── */
 .config-form { display: flex; flex-direction: column; gap: var(--space-5); max-width: 560px; }
 
@@ -790,17 +699,10 @@ function fileName(path: string) { return path.split(/[\\/]/).pop() || path }
 .config-input-row { display: flex; flex-direction: column; gap: var(--space-1); }
 
 .config-input {
-  height: 36px;
-  padding: 0 var(--space-3);
-  background: var(--bg-input);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  color: var(--text-primary);
-  font-size: var(--text-sm);
   transition: border-color var(--duration-fast) var(--ease);
 }
 
-.config-input:focus { border-color: var(--accent-primary); outline: none; }
+.config-input:focus { outline: none; }
 
 .target-option-row {
   display: flex;
@@ -834,16 +736,16 @@ function fileName(path: string) { return path.split(/[\\/]/).pop() || path }
   font-weight: var(--font-medium);
   background: var(--bg-elevated);
   color: var(--text-secondary);
-  border: 1px solid var(--border-subtle);
+  border: none;
   transition: background var(--duration-fast) var(--ease), color var(--duration-fast) var(--ease), border-color var(--duration-fast) var(--ease);
 }
 
-.config-toggle.active { background: rgba(110, 107, 240, 0.12); color: var(--accent-primary); border-color: var(--accent-primary); }
+.config-toggle.active { background: var(--accent-muted); color: var(--accent-primary); border-color: var(--accent-primary); }
 
 /* ── Preview ──────────────────────────────────────────────── */
 .preview-warnings {
-  background: rgba(251, 191, 36, 0.08);
-  border: 1px solid rgba(251, 191, 36, 0.2);
+  background: var(--color-warning-bg);
+  border: none;
   border-radius: var(--radius-md);
   padding: var(--space-3);
   margin-bottom: var(--space-4);
@@ -878,7 +780,7 @@ function fileName(path: string) { return path.split(/[\\/]/).pop() || path }
   align-items: center;
 }
 
-.preview-row.preview-conflict { background: rgba(251, 191, 36, 0.05); }
+.preview-row.preview-conflict { background: var(--color-warning-bg); }
 
 .preview-cell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .preview-cell.name { font-weight: var(--font-medium); }
@@ -907,9 +809,9 @@ function fileName(path: string) { return path.split(/[\\/]/).pop() || path }
 .exec-spinner, .dep-spinner {
   width: 32px;
   height: 32px;
-  border: 3px solid var(--accent-primary);
+  border: none;
   border-top-color: transparent;
-  border-radius: 50%;
+  border-radius: var(--radius-xl)%;
   animation: spin 0.8s linear infinite;
 }
 
@@ -992,4 +894,9 @@ function fileName(path: string) { return path.split(/[\\/]/).pop() || path }
   color: var(--color-error);
   background: var(--color-error-bg);
 }
+
+.b2-page { display: flex; flex-direction: column; height: 100%; min-height: 0; max-width: none; margin: 0; padding: 0; gap: 0; overflow: hidden; }
+.b2-page-body { flex: 1; min-height: 0; min-width: 0; overflow: auto; padding: 20px 24px; display: flex; flex-direction: column; gap: 20px; }
+.b2-page :deep(.page-header) { width: 100%; }
+@media(max-width: 800px) { .b2-page-body { padding: 12px; } }
 </style>

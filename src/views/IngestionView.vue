@@ -1,11 +1,8 @@
 <template>
-  <div class="ingestion-view">
-    <header class="ingestion-header">
-      <div><h2>{{ t('ingestion.title') }}</h2><p class="text-secondary">{{ t(sourceFiles.length ? 'ingestion.externalDescription' : 'ingestion.description') }}</p></div>
-      <button class="btn btn-primary" :disabled="sourceBusy || (!sourceFiles.length && !sourceDir.trim()) || !targetDir" @click="handlePreview">
+<div class="ingestion-view b2-page"><PageHeader :title="$t('ingestion.title')" :subtitle="t(sourceFiles.length ? 'ingestion.externalDescription' : 'ingestion.description')"><template #actions><UiButton :disabled="sourceBusy || (!sourceFiles.length && !sourceDir.trim()) || !targetDir" @click="handlePreview" variant="primary" size="lg">
         {{ scanning ? t('ingestion.scanning') : t('ingestion.preview') }}
-      </button>
-    </header>
+      </UiButton></template></PageHeader><div class="b2-page-body">
+
 
     <Transition name="status">
       <section v-if="busy" ref="progressPanel" class="progress-panel glass-panel" role="status" aria-live="polite">
@@ -22,29 +19,29 @@
       <template v-if="sourceFiles.length">
         <span class="field-label">{{ t('ingestion.externalFiles', { count: sourceFiles.length }) }}</span>
         <ul class="selected-files"><li v-for="path in sourceFiles" :key="path">{{ path }}</li></ul>
-        <button class="btn btn-secondary" :disabled="sourceBusy" @click="chooseSource()">{{ t('ingestion.externalChooseFolder') }}</button>
+        <UiButton :disabled="sourceBusy" @click="chooseSource()" variant="secondary">{{ t('ingestion.externalChooseFolder') }}</UiButton>
       </template>
       <label v-else for="ingestion-source">{{ t('ingestion.source') }}</label>
       <div v-if="!sourceFiles.length" class="directory-row">
         <div ref="sourcePicker" class="source-picker" @focusout="handleSourceFocusOut">
-          <input id="ingestion-source" ref="sourceInput" v-model="sourceDir" :disabled="sourceBusy" :placeholder="t('ingestion.sourcePlaceholder')" role="combobox" aria-autocomplete="none" aria-haspopup="listbox" :aria-expanded="sourceMenuOpen" aria-controls="ingestion-common-paths" :aria-activedescendant="sourceMenuOpen && activePathIndex >= 0 ? `ingestion-common-path-${activePathIndex}` : undefined" autocomplete="off" @focus="openSourceMenu" @click="openSourceMenu" @keydown="handleSourceKeydown" />
+          <UiInput id="ingestion-source" ref="sourceInput" v-model="sourceDir" :disabled="sourceBusy" :placeholder="t('ingestion.sourcePlaceholder')" role="combobox" aria-autocomplete="none" aria-haspopup="listbox" :aria-expanded="sourceMenuOpen" aria-controls="ingestion-common-paths" :aria-activedescendant="sourceMenuOpen && activePathIndex >= 0 ? `ingestion-common-path-${activePathIndex}` : undefined" autocomplete="off" @focus="openSourceMenu" @click="openSourceMenu" @keydown="handleSourceKeydown" />
           <div v-if="sourceMenuOpen" class="source-dropdown">
             <p class="source-dropdown-title">{{ t('ingestion.commonPaths') }}</p>
             <div id="ingestion-common-paths" class="common-path-list" role="listbox" :aria-label="t('ingestion.commonPaths')">
-              <button v-for="(path, index) in ingestionStore.commonPaths" :id="`ingestion-common-path-${index}`" :key="path" class="common-path-option" :class="{ active: activePathIndex === index }" role="option" :aria-selected="sourceDir === path" :title="path" @mouseenter="activePathIndex = index" @click="selectCommonPath(path)">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10H3Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /></svg>
+              <UiButton v-for="(path, index) in ingestionStore.commonPaths" :id="`ingestion-common-path-${index}`" :key="path" class="common-path-option" :class="{ active: activePathIndex === index }" role="option" :aria-selected="sourceDir === path" :title="path" @mouseenter="activePathIndex = index" @click="selectCommonPath(path)" variant="secondary">
+                <Icon  :size="18" name="outline-27" />
                 <span>{{ path }}</span>
-                <svg v-if="sourceDir === path" class="common-path-check" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m5 12 4 4L19 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
-              </button>
+                <Icon v-if="sourceDir === path" class="common-path-check" :size="16" name="outline-28" />
+              </UiButton>
             </div>
-            <button class="add-common-path" @click="chooseSource(true)">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" /></svg>
+            <UiButton class="add-common-path" @click="chooseSource(true)" variant="secondary">
+              <Icon  :size="18" name="outline-29" />
               {{ t('ingestion.addCommonPath') }}
-            </button>
+            </UiButton>
             <p v-if="sourceMenuError" class="source-dropdown-error error-message" role="alert">{{ sourceMenuError }}</p>
           </div>
         </div>
-        <button class="btn btn-secondary" :disabled="sourceBusy" @click="chooseSource()">{{ t('settings.browse') }}</button>
+        <UiButton :disabled="sourceBusy" @click="chooseSource()" variant="secondary">{{ t('settings.browse') }}</UiButton>
       </div>
       <div class="target-directory">
         <span class="field-label">{{ t('ingestion.target') }}</span>
@@ -55,7 +52,7 @@
         <div class="rule-options">
           <label v-for="rule in rules" :key="rule.value" class="rule-option" :class="{ selected: mode === rule.value, 'custom-rule': rule.value === 'custom' }">
             <input v-model="mode" type="radio" name="ingestion-rule" :value="rule.value" :aria-labelledby="`ingestion-rule-${rule.value}`" :aria-describedby="`ingestion-rule-help-${rule.value}`" />
-            <span class="rule-icon" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path :d="rule.icon" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" /></svg></span>
+            <span class="rule-icon" aria-hidden="true"><Icon  :size="24" :path="rule.icon" /></span>
             <span class="rule-content">
               <span :id="`ingestion-rule-${rule.value}`" class="rule-title">{{ t(rule.label) }}</span>
               <span :id="`ingestion-rule-help-${rule.value}`" class="rule-description">{{ t(`ingestion.ruleHelp.${rule.value}`) }}</span>
@@ -65,7 +62,7 @@
       </fieldset>
       <template v-if="mode === 'custom'">
         <label for="ingestion-custom">{{ t('ingestion.customFolder') }}</label>
-        <input id="ingestion-custom" v-model="customFolder" :disabled="busy" :placeholder="t('ingestion.customPlaceholder')" />
+        <UiInput id="ingestion-custom" v-model="customFolder" :disabled="busy" :placeholder="t('ingestion.customPlaceholder')" />
       </template>
       <div class="policy-notes">
         <p class="policy-note">{{ t('ingestion.policy') }}</p>
@@ -74,7 +71,7 @@
     </section>
 
     <p v-if="error" class="error-message" role="alert">{{ error }}</p>
-    <dialog ref="previewDialog" class="preview-dialog" aria-labelledby="ingestion-preview-title" aria-describedby="ingestion-preview-summary" @cancel.prevent="cancelPreview" @close="handlePreviewClose">
+    <UiModal ref="previewDialog" aria-labelledby="ingestion-preview-title" aria-describedby="ingestion-preview-summary" @cancel.prevent="cancelPreview" @close="handlePreviewClose" imperative :show-close="false">
       <template v-if="preview">
         <div class="preview-header">
           <div>
@@ -98,23 +95,23 @@
             </table>
           </div>
           <div v-if="pageCount > 1" class="pagination">
-            <button class="btn btn-secondary" :disabled="page === 1" @click="page--">{{ t('common.back') }}</button>
+            <UiButton :disabled="page === 1" @click="page--" variant="secondary">{{ t('common.back') }}</UiButton>
             <span>{{ page }} / {{ pageCount }}</span>
-            <button class="btn btn-secondary" :disabled="page === pageCount" @click="page++">{{ t('common.next') }}</button>
+            <UiButton :disabled="page === pageCount" @click="page++" variant="secondary">{{ t('common.next') }}</UiButton>
           </div>
           <details v-if="preview.warnings.length" class="warnings"><summary>{{ t('ingestion.warnings', { count: preview.warnings.length }) }}</summary><p v-for="(warning, index) in preview.warnings" :key="index">{{ warning }}</p></details>
         </div>
         <div class="preview-actions">
-          <button class="btn btn-secondary" autofocus @click="cancelPreview">{{ t('common.cancel') }}</button>
-          <button class="btn btn-primary" :disabled="sourceBusy || consumed || !preview.groups.length" @click="handleExecute">{{ t('ingestion.execute') }}</button>
+          <UiButton autofocus @click="cancelPreview" variant="secondary">{{ t('common.cancel') }}</UiButton>
+          <UiButton :disabled="sourceBusy || consumed || !preview.groups.length" @click="handleExecute" variant="primary" size="lg">{{ t('ingestion.execute') }}</UiButton>
         </div>
       </template>
-    </dialog>
+    </UiModal>
 
-    <dialog ref="resultDialog" class="result-dialog" aria-labelledby="ingestion-result-title" aria-describedby="ingestion-result-summary">
+    <UiModal ref="resultDialog" aria-labelledby="ingestion-result-title" aria-describedby="ingestion-result-summary" imperative :show-close="false">
       <div class="result-heading">
         <span class="result-icon" :class="{ incomplete: runIncomplete }" aria-hidden="true">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path :d="runIncomplete ? 'M12 8v5m0 3h.01M10.3 3.9 2.2 18a2 2 0 0 0 1.7 3h16.2a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z' : 'M5 12l4 4L19 6'" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
+          <Icon  :size="24" :path="runIncomplete ? 'M12 8v5m0 3h.01M10.3 3.9 2.2 18a2 2 0 0 0 1.7 3h16.2a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z' : 'M5 12l4 4L19 6'" />
         </span>
         <h3 id="ingestion-result-title">{{ t(runIncomplete ? 'ingestion.incomplete' : 'ingestion.finished') }}</h3>
       </div>
@@ -131,13 +128,18 @@
       <p class="result-help text-secondary">{{ t(result ? 'ingestion.afterRun' : 'ingestion.retryAfterFailure') }}</p>
       <div class="result-actions">
         <RouterLink v-if="status?.retired" to="/trash" class="btn btn-secondary" @click="resultDialog?.close()">{{ t('ingestion.openTrash') }}</RouterLink>
-        <button class="btn btn-primary" autofocus @click="resultDialog?.close()">{{ t('common.confirm') }}</button>
+        <UiButton autofocus @click="resultDialog?.close()" variant="primary" size="lg">{{ t('common.confirm') }}</UiButton>
       </div>
-    </dialog>
-  </div>
+    </UiModal>
+  </div></div>
 </template>
 
 <script setup lang="ts">
+import PageHeader from '@/components/layout/PageHeader.vue'
+import UiModal from '@/components/ui/UiModal.vue'
+import Icon from '@/components/ui/Icon.vue'
+import UiInput from '@/components/ui/UiInput.vue'
+import UiButton from '@/components/ui/UiButton.vue'
 import { computed, nextTick, onActivated, onDeactivated, onMounted, onUnmounted, ref, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -182,7 +184,7 @@ const route = useRoute()
 const sourceDir = ref('')
 const sourceFiles = ref<string[]>([])
 const sourcePicker = ref<HTMLElement | null>(null)
-const sourceInput = ref<HTMLInputElement | null>(null)
+const sourceInput = ref<{ focus: () => void; select: () => void } | null>(null)
 const sourceMenuOpen = ref(false)
 const sourceMenuError = ref('')
 const activePathIndex = ref(-1)
@@ -196,13 +198,13 @@ const sourceBusy = computed(() => busy.value || choosingSource.value)
 const consumed = ref(false)
 const error = ref('')
 const preview = ref<IngestionPreview | null>(null)
-const previewDialog = ref<HTMLDialogElement | null>(null)
+const previewDialog = ref<InstanceType<typeof UiModal> | null>(null)
 const previewOpen = ref(false)
 const progress = ref<IngestionResult | null>(null)
 const result = ref<IngestionResult | null>(null)
 const status = computed(() => result.value || progress.value)
 const progressPanel = ref<HTMLElement | null>(null)
-const resultDialog = ref<HTMLDialogElement | null>(null)
+const resultDialog = ref<InstanceType<typeof UiModal> | null>(null)
 const processedGroups = computed(() => (progress.value?.completed || 0) + (progress.value?.failed || 0))
 const progressPercent = computed(() => progress.value?.total ? Math.min(100, Math.round(processedGroups.value / progress.value.total * 100)) : 0)
 const runIncomplete = computed(() => !!error.value || !!status.value && (status.value.failed > 0 || status.value.errors.length > 0 || status.value.completed < status.value.total))
@@ -378,7 +380,7 @@ async function handleExecute() {
 
 <style scoped>
 .ingestion-view { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
-.ingestion-header, .preview-header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); }
+ .preview-header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); }
 h2 { font-size: var(--text-xl); margin-bottom: var(--space-2); }
 h3 { font-size: var(--text-base); margin-bottom: var(--space-2); }
 p { font-size: var(--text-sm); line-height: 1.7; overflow-wrap: anywhere; }
@@ -388,7 +390,7 @@ p { font-size: var(--text-sm); line-height: 1.7; overflow-wrap: anywhere; }
 label, legend, .field-label { font-size: var(--text-sm); font-weight: var(--font-medium); }
 .directory-row { display: flex; align-items: center; gap: var(--space-2); }
 .source-picker { position: relative; flex: 1; min-width: 0; }
-.source-dropdown { position: absolute; top: calc(100% + var(--space-2)); left: 0; right: 0; z-index: 10; padding: var(--space-2); background: var(--bg-surface); border: 1px solid var(--border-strong); border-radius: var(--radius-md); box-shadow: var(--shadow-lg); }
+.source-dropdown { position: absolute; top: calc(100% + var(--space-2)); left: 0; right: 0; z-index: 10; padding: var(--space-2); background: var(--bg-surface); border: none; border-radius: var(--radius-md); box-shadow: none; }
 .source-dropdown-title { padding: var(--space-1) var(--space-2) var(--space-2); color: var(--text-secondary); font-size: var(--text-xs); }
 .common-path-list { max-height: 220px; overflow: auto; }
 .common-path-option, .add-common-path { display: flex; align-items: center; gap: var(--space-2); width: 100%; min-height: 38px; padding: var(--space-2); border-radius: var(--radius-sm); text-align: left; font-size: var(--text-sm); }
@@ -399,17 +401,17 @@ label, legend, .field-label { font-size: var(--text-sm); font-weight: var(--font
 .common-path-option:focus-visible, .add-common-path:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: -2px; }
 .common-path-check { margin-left: auto; }
 .add-common-path { color: var(--accent-primary-hover); }
-.common-path-list:not(:empty) + .add-common-path { margin-top: var(--space-2); border-top: 1px solid var(--border-subtle); border-radius: 0 0 var(--radius-sm) var(--radius-sm); }
+.common-path-list:not(:empty) + .add-common-path { margin-top: var(--space-2); border-top: 1px solid var(--border-subtle); border-radius: var(--radius-none) var(--radius-none) var(--radius-sm) var(--radius-sm); }
 .source-dropdown-error { padding: var(--space-2); font-size: var(--text-xs); }
 input[type='text'], input:not([type]) { min-width: 0; width: 100%; height: 38px; padding: 9px 12px; border: 1px solid var(--border-default); border-radius: var(--radius-sm); color: var(--text-primary); background: var(--bg-input, var(--bg-base)); font-size: var(--text-sm); }
 input:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
 .target-directory { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: baseline; gap: var(--space-3); padding: var(--space-3); background: var(--bg-subtle); border-radius: var(--radius-sm); }
 .target-directory .field-label { color: var(--text-secondary); }
 .target-path { color: var(--text-primary); margin: 0; user-select: text; }
-.rules { border: 0; padding: 0; margin: var(--space-3) 0 0; min-width: 0; }
+.rules { border: none; padding: 0; margin: var(--space-3) 0 0; min-width: 0; }
 .rule-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
 legend { margin-bottom: var(--space-3); }
-.rule-option { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-3); min-height: 156px; padding: var(--space-6); border: 1px solid var(--border-default); background: var(--bg-subtle); border-radius: var(--radius-lg); cursor: pointer; line-height: 1.5; transition: background var(--duration-fast) var(--ease), border-color var(--duration-fast) var(--ease); }
+.rule-option { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-3); min-height: 156px; padding: var(--space-6); border: none; background: var(--bg-subtle); border-radius: var(--radius-lg); cursor: pointer; line-height: 1.5; transition: background var(--duration-fast) var(--ease), border-color var(--duration-fast) var(--ease); }
 .rules:not(:disabled) .rule-option:hover { background: var(--bg-hover); border-color: var(--border-strong); }
 .rules:disabled .rule-option { opacity: 0.5; cursor: not-allowed; }
 .rule-option:focus-within { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
@@ -423,7 +425,7 @@ input[type='radio'] { position: absolute; top: var(--space-6); right: var(--spac
 .custom-rule { grid-column: 1 / -1; flex-direction: row; align-items: center; min-height: 100px; }
 .policy-notes { display: grid; gap: var(--space-2); border-top: 1px solid var(--border-subtle); padding-top: var(--space-4); margin-top: var(--space-1); }
 .policy-notes p { margin: 0; color: var(--text-secondary); font-size: var(--text-xs); font-weight: var(--font-normal); line-height: 1.8; }
-.table-scroll { overflow: auto; max-height: 480px; margin-top: var(--space-4); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); }
+.table-scroll { overflow: auto; max-height: 480px; margin-top: var(--space-4); border: none; border-radius: var(--radius-sm); }
 table { width: 100%; min-width: 680px; table-layout: fixed; border-collapse: collapse; font-size: var(--text-sm); text-align: left; }
 th, td { padding: 12px; border-bottom: 1px solid var(--border-subtle); vertical-align: top; }
 th { font-weight: var(--font-medium); color: var(--text-secondary); white-space: nowrap; position: sticky; top: 0; background: var(--bg-surface); z-index: 1; }
@@ -443,21 +445,21 @@ summary { cursor: pointer; }
 .warnings, .pagination, .empty-message { margin-top: var(--space-4); }
 .pagination { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-3); }
 .error-message { color: var(--color-error); white-space: pre-wrap; }
-.progress-panel { position: sticky; top: 0; z-index: 5; border-color: var(--border-accent); background: var(--bg-surface); box-shadow: var(--shadow-md); }
+.progress-panel { position: sticky; top: 0; z-index: 5; border-color: var(--border-accent); background: var(--bg-surface); box-shadow: none; }
 .progress-heading, .progress-title { display: flex; align-items: center; gap: var(--space-3); }
 .progress-heading { justify-content: space-between; }
 .progress-title h3 { margin: 0; }
 .progress-percentage { color: var(--accent-primary-hover); font-size: var(--text-lg); font-weight: var(--font-semibold); font-variant-numeric: tabular-nums; }
-.progress-spinner { width: 16px; height: 16px; flex-shrink: 0; border: 2px solid var(--accent-muted); border-top-color: var(--accent-primary); border-radius: 50%; animation: progress-spin 0.8s linear infinite; }
-progress { display: block; width: 100%; height: 6px; margin: var(--space-3) 0; overflow: hidden; appearance: none; border: 0; border-radius: var(--radius-full); background: var(--bg-elevated); accent-color: var(--accent-primary); }
+.progress-spinner { width: 16px; height: 16px; flex-shrink: 0; border: none; border-top-color: var(--accent-primary); border-radius: var(--radius-xl)%; animation: progress-spin 0.8s linear infinite; }
+progress { display: block; width: 100%; height: 6px; margin: var(--space-3) 0; overflow: hidden; appearance: none; border: none; border-radius: var(--radius-full); background: var(--bg-elevated); accent-color: var(--accent-primary); }
 progress::-webkit-progress-bar { background: var(--bg-elevated); border-radius: var(--radius-full); }
 progress::-webkit-progress-value { background: var(--accent-primary); border-radius: var(--radius-full); transition: width var(--duration-base) var(--ease); }
 progress::-moz-progress-bar { background: var(--accent-primary); border-radius: var(--radius-full); }
-progress:indeterminate { background: linear-gradient(90deg, var(--bg-elevated) 0%, var(--bg-elevated) 35%, var(--accent-primary) 50%, var(--bg-elevated) 65%, var(--bg-elevated) 100%); background-size: 200% 100%; animation: progress-scan 1.4s linear infinite; }
+progress:indeterminate { background: var(--bg-elevated); background-size: 200% 100%; animation: progress-scan 1.4s linear infinite; }
 progress:indeterminate::-webkit-progress-bar { background: transparent; }
-.preview-dialog, .result-dialog { margin: auto; width: min(520px, calc(100vw - 48px)); max-height: calc(100vh - 64px); overflow: auto; padding: var(--space-6); color: var(--text-primary); background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); }
+.preview-dialog, .result-dialog { margin: auto; width: min(520px, calc(100vw - 48px)); max-height: calc(100vh - 64px); overflow: auto; padding: var(--space-6); color: var(--text-primary); background: var(--bg-surface); border: none; border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); }
 .preview-dialog[open], .result-dialog[open] { animation: result-enter var(--duration-base) var(--ease-out); }
-.preview-dialog::backdrop, .result-dialog::backdrop { background: rgba(0, 0, 0, 0.6); }
+.preview-dialog::backdrop, .result-dialog::backdrop { background: var(--bg-overlay); }
 .preview-dialog { width: min(1040px, calc(100vw - 48px)); overflow: hidden; }
 .preview-dialog[open] { display: flex; flex-direction: column; }
 .preview-header { flex-shrink: 0; }
@@ -483,11 +485,12 @@ progress:indeterminate::-webkit-progress-bar { background: transparent; }
 @keyframes progress-spin { to { transform: rotate(360deg); } }
 @keyframes progress-scan { to { background-position: -200% 0; } }
 @keyframes result-enter { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-.btn:disabled { opacity: 0.45; cursor: not-allowed; }
-.btn { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; white-space: nowrap; min-height: 36px; padding: 0 var(--space-4); border-radius: var(--radius-sm); font-size: var(--text-sm); }
-.directory-row .btn { min-width: 76px; height: 38px; }
-.btn:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
-@media (max-width: 800px) { .ingestion-header, .preview-header { align-items: flex-start; flex-direction: column; } .target-directory { grid-template-columns: 1fr; gap: var(--space-1); } }
+@media (max-width: 800px) {  .preview-header { align-items: flex-start; flex-direction: column; } .target-directory { grid-template-columns: 1fr; gap: var(--space-1); } }
 @media (max-width: 600px) { .rule-options { grid-template-columns: 1fr; gap: var(--space-3); } .rule-option { flex-direction: row; align-items: center; min-height: 112px; padding: var(--space-4); } .rule-content { padding-right: var(--space-5); } input[type='radio'] { top: var(--space-4); right: var(--space-4); } .result-actions { flex-wrap: wrap; } }
 @media (prefers-reduced-motion: reduce) { .rule-option, progress::-webkit-progress-value, .status-enter-active, .status-leave-active { transition: none; } .progress-spinner, progress:indeterminate, .preview-dialog[open], .result-dialog[open] { animation: none; } }
+
+.b2-page { display: flex; flex-direction: column; height: 100%; min-height: 0; max-width: none; margin: 0; padding: 0; gap: 0; overflow: hidden; }
+.b2-page-body { flex: 1; min-height: 0; min-width: 0; overflow: auto; padding: 20px 24px; display: flex; flex-direction: column; gap: 20px; }
+.b2-page :deep(.page-header) { width: 100%; }
+@media(max-width: 800px) { .b2-page-body { padding: 12px; } }
 </style>

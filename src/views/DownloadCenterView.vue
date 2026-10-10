@@ -1,5 +1,38 @@
 <template>
-  <div class="download-center-view animate-fadeIn">
+<div class="download-center-view animate-fadeIn b2-page"><PageHeader :title="$t('sidebar.downloadCenter')" ><template #filters>
+      <!-- Left Filters -->
+      <div class="filter-tabs">
+        <UiChip :class="['', { active: activeTab === 'active' }]" @click="activeTab = 'active'" :selected="activeTab === 'active'">
+          <span>{{ $t('download.tabs.active', { count: downloadStore.activeAndPendingCount }) }}</span>
+        </UiChip>
+        <UiChip :class="['', { active: activeTab === 'completed' }]" @click="activeTab = 'completed'" :selected="activeTab === 'completed'">
+          <span>{{ $t('download.tabs.completed', { count: downloadStore.completedCount }) }}</span>
+        </UiChip>
+        <UiChip :class="['', { active: activeTab === 'all' }]" @click="activeTab = 'all'" :selected="activeTab === 'all'">
+          <span>{{ $t('download.tabs.all') }}</span>
+          <span class="tab-badge">{{ downloadStore.queue.length }}</span>
+        </UiChip>
+      </div>
+
+      <!-- Right Global Actions -->
+      <div class="global-actions">
+        <span class="target-summary" :title="appStore.installContext?.downloadTargetDir || ''">
+          {{ downloadModeLabel }}
+        </span>
+        <UiButton :disabled="!hasActiveTasks" @click="downloadStore.pauseAll" variant="secondary">
+          <Icon  :size="14" name="outline-21" />
+          <span>{{ $t('download.actions.pauseAll') }}</span>
+        </UiButton>
+        <UiButton :disabled="!hasPausedTasks" @click="downloadStore.resumeAll" variant="secondary">
+          <Icon  :size="14" name="outline-22" />
+          <span>{{ $t('download.actions.resumeAll') }}</span>
+        </UiButton>
+        <UiButton :disabled="downloadStore.completedCount === 0" @click="downloadStore.clearCompleted" variant="danger">
+          <Icon  :size="14" name="outline-18" />
+          <span>{{ $t('download.actions.clearCompleted') }}</span>
+        </UiButton>
+      </div>
+    </template></PageHeader><div class="b2-page-body">
     <!-- Top Stats Section -->
     <section class="summary-grid stagger-children">
       <StatCard
@@ -8,7 +41,7 @@
         :subtitle="`Pending: ${downloadStore.pendingDownloads.length}`"
         icon="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"
         trend="neutral"
-        color="#6e6bf0"
+        color="var(--accent-primary)"
       />
       <StatCard
         :title="$t('download.stats.downloading')"
@@ -16,7 +49,7 @@
         :subtitle="`Completed: ${downloadStore.completedCount}`"
         icon="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"
         :trend="downloadStore.activeDownloads.length > 0 ? 'up' : 'neutral'"
-        color="#5b8def"
+        color="var(--color-info)"
       />
       <StatCard
         :title="$t('download.stats.speed')"
@@ -24,7 +57,7 @@
         :subtitle="downloadStore.activeDownloads.length > 0 ? 'Downloading packages' : 'Idle'"
         icon="M13 10V3L4 14h7v7l9-11h-7z"
         :trend="downloadStore.totalSpeed > 0 ? 'up' : 'neutral'"
-        color="#3ecf8e"
+        color="var(--color-success)"
       />
       <StatCard
         :title="$t('download.stats.savedSpace')"
@@ -32,73 +65,12 @@
         :subtitle="'Avoided duplicate downloads'"
         icon="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.286L13 21l-2.286-5.714L5 13l5.714-2.286L13 3z"
         trend="neutral"
-        color="#a78bfa"
+        color="var(--accent-primary)"
       />
     </section>
 
     <!-- Toolbar / Action Bar -->
-    <div class="action-bar glass-panel">
-      <!-- Left Filters -->
-      <div class="filter-tabs">
-        <button
-          :class="['tab-btn', { active: activeTab === 'active' }]"
-          @click="activeTab = 'active'"
-        >
-          <span>{{ $t('download.tabs.active', { count: downloadStore.activeAndPendingCount }) }}</span>
-        </button>
-        <button
-          :class="['tab-btn', { active: activeTab === 'completed' }]"
-          @click="activeTab = 'completed'"
-        >
-          <span>{{ $t('download.tabs.completed', { count: downloadStore.completedCount }) }}</span>
-        </button>
-        <button
-          :class="['tab-btn', { active: activeTab === 'all' }]"
-          @click="activeTab = 'all'"
-        >
-          <span>{{ $t('download.tabs.all') }}</span>
-          <span class="tab-badge">{{ downloadStore.queue.length }}</span>
-        </button>
-      </div>
 
-      <!-- Right Global Actions -->
-      <div class="global-actions">
-        <span class="target-summary" :title="appStore.installContext?.downloadTargetDir || ''">
-          {{ downloadModeLabel }}
-        </span>
-        <button
-          class="action-btn-secondary"
-          :disabled="!hasActiveTasks"
-          @click="downloadStore.pauseAll"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-            <path d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
-          <span>{{ $t('download.actions.pauseAll') }}</span>
-        </button>
-        <button
-          class="action-btn-secondary"
-          :disabled="!hasPausedTasks"
-          @click="downloadStore.resumeAll"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-            <path d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-            <path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
-          <span>{{ $t('download.actions.resumeAll') }}</span>
-        </button>
-        <button
-          class="action-btn-danger"
-          :disabled="downloadStore.completedCount === 0"
-          @click="downloadStore.clearCompleted"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-            <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
-          <span>{{ $t('download.actions.clearCompleted') }}</span>
-        </button>
-      </div>
-    </div>
 
     <!-- Download Tasks List -->
     <div class="list-container glass-panel flex-1">
@@ -140,7 +112,7 @@
                 </span>
                 <span class="progress-percent font-medium">{{ item.progress.toFixed(0) }}%</span>
               </div>
-              
+
               <!-- Smooth Progress Track -->
               <div class="progress-track">
                 <div 
@@ -154,50 +126,23 @@
             <!-- Right Controls Block -->
             <div class="task-controls">
               <!-- Play / Pause -->
-              <button
-                v-if="item.status === 'Downloading' || item.status === 'Pending'"
-                class="icon-btn"
-                :title="$t('download.actions.pause')"
-                @click="downloadStore.pauseTask(item.id)"
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                  <path d="M15.75 5.25v13.5m-7.5-13.5v13.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-              </button>
-              
-              <button
-                v-if="item.status === 'Paused'"
-                class="icon-btn"
-                :title="$t('download.actions.resume')"
-                @click="downloadStore.resumeTask(item.id)"
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                  <path d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.972l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-              </button>
-              
+              <UiButton v-if="item.status === 'Downloading' || item.status === 'Pending'" :title="$t('download.actions.pause')" @click="downloadStore.pauseTask(item.id)" variant="ghost" icon-only :aria-label="$t('download.actions.pause')">
+                <Icon  :size="16" name="outline-23" />
+              </UiButton>
+
+              <UiButton v-if="item.status === 'Paused'" :title="$t('download.actions.resume')" @click="downloadStore.resumeTask(item.id)" variant="ghost" icon-only :aria-label="$t('download.actions.resume')">
+                <Icon  :size="16" name="outline-24" />
+              </UiButton>
+
               <!-- Retry for Failed -->
-              <button
-                v-if="item.status === 'Failed' || (item.status === 'Completed' && !item.indexed)"
-                class="icon-btn text-warning"
-                :title="item.status === 'Completed' ? $t('download.actions.retryIndex') : $t('download.actions.retry')"
-                @click="downloadStore.retryTask(item.id)"
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                  <path d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-              </button>
+              <UiButton v-if="item.status === 'Failed' || (item.status === 'Completed' && !item.indexed)" class="text-warning" :title="item.status === 'Completed' ? $t('download.actions.retryIndex') : $t('download.actions.retry')" @click="downloadStore.retryTask(item.id)" variant="ghost" icon-only :aria-label="item.status === 'Completed' ? $t('download.actions.retryIndex') : $t('download.actions.retry')">
+                <Icon  :size="16" name="outline-25" />
+              </UiButton>
 
               <!-- Cancel / Delete -->
-              <button
-                class="icon-btn text-danger"
-                :title="$t('download.actions.delete')"
-                @click="downloadStore.cancelTask(item.id)"
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                  <path d="M6 18L18 6M6 6l12 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-              </button>
+              <UiButton class="text-danger" :title="$t('download.actions.delete')" @click="downloadStore.cancelTask(item.id)" variant="danger" icon-only :aria-label="$t('download.actions.delete')">
+                <Icon  :size="16" name="outline-26" />
+              </UiButton>
             </div>
           </div>
 
@@ -223,10 +168,14 @@
         />
       </div>
     </div>
-  </div>
+  </div></div>
 </template>
 
 <script setup lang="ts">
+import UiChip from '@/components/ui/UiChip.vue'
+import PageHeader from '@/components/layout/PageHeader.vue'
+import Icon from '@/components/ui/Icon.vue'
+import UiButton from '@/components/ui/UiButton.vue'
 import { ref, computed } from 'vue'
 import { useDownloadStore } from '@/stores/download'
 import { useAppStore } from '@/stores/app'
@@ -296,7 +245,7 @@ function installModeLabel(mode: string | null): string {
 </script>
 
 <style scoped>
-.warning-msg-bar { display: flex; gap: 8px; padding: 10px 16px; color: var(--color-warning); background: rgba(245,158,11,.08); border-top: 1px solid rgba(245,158,11,.2); overflow-wrap: anywhere; user-select: text; }
+.warning-msg-bar { display: flex; gap: 8px; padding: 10px 16px; color: var(--color-warning); background: var(--color-warning-bg); border-top: 1px solid var(--color-warning-bg); overflow-wrap: anywhere; user-select: text; }
 
 .download-center-view {
   display: flex;
@@ -324,61 +273,20 @@ function installModeLabel(mode: string | null): string {
 }
 
 /* ── Toolbar Action Bar ────────────────────────────────────── */
-.action-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-3) var(--space-4);
-  flex-shrink: 0;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg);
-  background: var(--glass-bg);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
-  box-shadow: var(--glass-shadow);
-}
 
 .filter-tabs {
   display: flex;
   gap: var(--space-2);
 }
 
-.tab-btn {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-4);
-  height: 32px;
-  border-radius: var(--radius-md);
-  color: var(--text-secondary);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-  transition: all var(--transition-fast);
-}
-
-.tab-btn:hover {
-  color: var(--text-primary);
-  background: var(--bg-hover);
-}
-
-.tab-btn.active {
-  color: var(--accent-primary);
-  background: rgba(110, 107, 240, 0.12);
-}
-
 .tab-badge {
   font-variant-numeric: tabular-nums;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--border-strong);
   color: var(--text-secondary);
   padding: 1px 6px;
   border-radius: var(--radius-full);
   font-size: var(--font-size-xs);
   transition: background var(--transition-fast);
-}
-
-.tab-btn.active .tab-badge {
-  background: rgba(110, 107, 240, 0.2);
-  color: var(--accent-primary);
 }
 
 .global-actions {
@@ -397,59 +305,17 @@ function installModeLabel(mode: string | null): string {
   white-space: nowrap;
 }
 
-.action-btn-secondary,
-.action-btn-danger {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: 0 var(--space-3);
-  height: 32px;
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-  border-radius: var(--radius-md);
-  transition: all var(--transition-fast);
-}
-
-.action-btn-secondary {
-  color: var(--text-secondary);
-  background: transparent;
-  border: 1px solid var(--border-subtle);
-}
-
-.action-btn-secondary:hover:not(:disabled) {
-  color: var(--text-primary);
-  background: var(--bg-hover);
-  border-color: var(--border-default);
-}
-
-.action-btn-secondary:disabled,
-.action-btn-danger:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.action-btn-danger {
-  color: var(--color-error);
-  background: rgba(248, 113, 113, 0.08);
-  border: 1px solid rgba(248, 113, 113, 0.15);
-}
-
-.action-btn-danger:hover:not(:disabled) {
-  background: rgba(248, 113, 113, 0.15);
-  border-color: rgba(248, 113, 113, 0.3);
-}
-
 /* ── Tasks List ────────────────────────────────────────────── */
 .list-container {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid var(--border-subtle);
+  border: none;
   border-radius: var(--radius-lg);
   background: var(--glass-bg);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
-  box-shadow: var(--glass-shadow);
+  box-shadow: none;
   min-height: 300px;
 }
 
@@ -465,15 +331,15 @@ function installModeLabel(mode: string | null): string {
 .task-card-wrapper {
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--border-subtle);
+  border: none;
   border-radius: var(--radius-md);
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--bg-subtle);
   transition: border-color var(--transition-fast), background var(--transition-fast);
 }
 
 .task-card-wrapper:hover {
-  border-color: rgba(110, 107, 240, 0.2);
-  background: rgba(255, 255, 255, 0.04);
+  border-color: var(--accent-muted);
+  background: var(--bg-subtle);
 }
 
 .task-card {
@@ -509,7 +375,7 @@ function installModeLabel(mode: string | null): string {
 }
 
 .creator-badge {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--border-default);
   color: var(--text-secondary);
   padding: 1px 8px;
   border-radius: var(--radius-full);
@@ -524,33 +390,33 @@ function installModeLabel(mode: string | null): string {
 .status-badge {
   padding: 1px 8px;
   border-radius: var(--radius-full);
-  font-size: 10px;
+  font-size: var(--text-xs);
   font-weight: var(--font-weight-semibold);
   text-transform: uppercase;
 }
 
 .status-badge.pending {
-  background: rgba(167, 139, 250, 0.15);
+  background: var(--accent-muted);
   color: var(--type-appearance);
 }
 
 .status-badge.downloading {
-  background: rgba(96, 165, 250, 0.15);
+  background: var(--color-info-bg);
   color: var(--color-info);
 }
 
 .status-badge.paused {
-  background: rgba(251, 191, 36, 0.15);
+  background: var(--color-warning-bg);
   color: var(--color-warning);
 }
 
 .status-badge.completed {
-  background: rgba(52, 211, 153, 0.15);
+  background: var(--color-success-bg);
   color: var(--color-success);
 }
 
 .status-badge.failed {
-  background: rgba(248, 113, 113, 0.15);
+  background: var(--color-error-bg);
   color: var(--color-error);
 }
 
@@ -597,7 +463,7 @@ function installModeLabel(mode: string | null): string {
 
 .progress-track {
   height: 6px;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--bg-subtle);
   border-radius: var(--radius-full);
   overflow: hidden;
 }
@@ -610,7 +476,7 @@ function installModeLabel(mode: string | null): string {
 }
 
 .progress-fill.active {
-  background: linear-gradient(90deg, var(--accent-primary) 0%, var(--accent-secondary) 100%);
+  background: var(--bg-elevated);
 }
 
 .progress-fill.paused {
@@ -629,38 +495,11 @@ function installModeLabel(mode: string | null): string {
   flex-shrink: 0;
 }
 
-.icon-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-md);
-  color: var(--text-secondary);
-  background: transparent;
-  transition: all var(--transition-fast);
-}
-
-.icon-btn:hover {
-  color: var(--text-primary);
-  background: var(--bg-hover);
-}
-
-.icon-btn.text-danger:hover {
-  color: var(--color-error);
-  background: rgba(248, 113, 113, 0.1);
-}
-
-.icon-btn.text-warning:hover {
-  color: var(--color-warning);
-  background: rgba(251, 191, 36, 0.1);
-}
-
 /* Error bar */
 .error-msg-bar {
   padding: var(--space-2) var(--space-4);
-  border-top: 1px solid rgba(248, 113, 113, 0.15);
-  background: rgba(248, 113, 113, 0.03);
+  border-top: 1px solid var(--color-error-bg);
+  background: var(--color-error-bg);
   border-bottom-left-radius: var(--radius-md);
   border-bottom-right-radius: var(--radius-md);
   display: flex;
@@ -684,4 +523,10 @@ function installModeLabel(mode: string | null): string {
   justify-content: center;
   padding: var(--space-8);
 }
+
+.b2-page { display: flex; flex-direction: column; height: 100%; min-height: 0; max-width: none; margin: 0; padding: 0; gap: 0; overflow: hidden; }
+.b2-page-body { flex: 1; min-height: 0; min-width: 0; overflow: auto; padding: 20px 24px; display: flex; flex-direction: column; gap: 20px; }
+.b2-page :deep(.page-header) { width: 100%; }
+@media(max-width: 800px) { .b2-page-body { padding: 12px; } }
+.task-card-wrapper { background: var(--bg-elevated); border: none; border-radius: var(--radius-card); box-shadow: none; }.task-card { padding: 14px 16px; }.task-icon { width: 40px; height: 40px; border-radius: var(--radius-sm); }.progress-track { height: 4px; border-radius: var(--radius-progress); background: var(--bg-active); }.progress-fill { background: var(--accent-primary); border-radius: var(--radius-progress); }
 </style>

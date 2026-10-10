@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import UiInput from '@/components/ui/UiInput.vue'
+import UiButton from '@/components/ui/UiButton.vue'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { open } from '@tauri-apps/plugin-dialog'
@@ -170,7 +172,7 @@ defineExpose({ launch: launchScene, extract: toggleExtraction, ready: computed((
     <section class="scene-extractor" :aria-label="t('gameContent.sceneActions')">
       <div class="extract-body" :aria-busy="loading || detailLoading || busy">
         <p v-if="loading" role="status">{{ t('gameContent.readingPackageScenes') }}</p>
-        <div v-else-if="error"><p class="error" role="alert">{{ error }}</p><button @click="loadScenes">{{ t('gameContent.retry') }}</button></div>
+        <div v-else-if="error"><p class="error" role="alert">{{ error }}</p><UiButton @click="loadScenes" variant="secondary">{{ t('gameContent.retry') }}</UiButton></div>
         <p v-else-if="loaded && !scenes.length">{{ t('gameContent.noPackageScenes') }}</p>
         <template v-if="scenes.length">
           <label>{{ t('gameContent.selectPackageScene', { count: scenes.length }) }}
@@ -188,7 +190,7 @@ defineExpose({ launch: launchScene, extract: toggleExtraction, ready: computed((
               <p v-else class="preview-empty">{{ t(previewFailed ? 'gameContent.imageFailed' : 'gameContent.noScenePreview') }}</p>
               <figcaption v-if="detail.image && !previewFailed">{{ t('gameContent.scenePreviewHelp') }}</figcaption>
             </figure>
-            <div v-if="detailError"><p class="error" role="alert">{{ detailError }}</p><button @click="loadDetail">{{ t('gameContent.retry') }}</button></div>
+            <div v-if="detailError"><p class="error" role="alert">{{ detailError }}</p><UiButton @click="loadDetail" variant="secondary">{{ t('gameContent.retry') }}</UiButton></div>
             <p v-else-if="detail && !detail.characters.length">{{ t('gameContent.noCharacters') }}</p>
             <form v-else-if="detail?.characters.length" @submit.prevent="save">
               <label>{{ t('gameContent.selectCharacter') }}
@@ -197,11 +199,11 @@ defineExpose({ launch: launchScene, extract: toggleExtraction, ready: computed((
               <p v-if="character">{{ t('gameContent.characterContents', character) }}</p>
               <p v-if="character?.error" class="error" role="alert">{{ character.error }}</p>
               <template v-else>
-                <label>{{ t('gameContent.filename') }}<input v-model="name" required maxlength="120" :disabled="busy" /></label>
-                <label>{{ t('gameContent.outputDirectory') }}<input v-model="outputDirectory" required :disabled="busy || choosingDirectory" :placeholder="defaultDirectory" spellcheck="false" /></label>
-                <div class="directory-actions"><button type="button" :disabled="busy || choosingDirectory" @click="browseOutputDirectory">{{ t('gameContent.chooseOutputDirectory') }}</button><button type="button" :disabled="busy || choosingDirectory || outputDirectory === defaultDirectory" @click="outputDirectory = defaultDirectory">{{ t('gameContent.resetOutputDirectory') }}</button></div>
+                <label>{{ t('gameContent.filename') }}<UiInput v-model="name" required maxlength="120" :disabled="busy" /></label>
+                <label>{{ t('gameContent.outputDirectory') }}<UiInput v-model="outputDirectory" required :disabled="busy || choosingDirectory" :placeholder="defaultDirectory" spellcheck="false" /></label>
+                <div class="directory-actions"><UiButton type="button" :disabled="busy || choosingDirectory" @click="browseOutputDirectory" variant="secondary">{{ t('gameContent.chooseOutputDirectory') }}</UiButton><UiButton type="button" :disabled="busy || choosingDirectory || outputDirectory === defaultDirectory" @click="outputDirectory = defaultDirectory" variant="secondary">{{ t('gameContent.resetOutputDirectory') }}</UiButton></div>
                 <p>{{ t('gameContent.outputDirectoryHelp') }}</p>
-                <button class="primary" :disabled="busy || choosingDirectory || !name.trim() || !outputDirectory.trim()" type="submit">{{ t(saving ? 'gameContent.working' : 'gameContent.saveAppearance') }}</button>
+                <UiButton class="primary" :disabled="busy || choosingDirectory || !name.trim() || !outputDirectory.trim()" type="submit" variant="primary" size="lg">{{ t(saving ? 'gameContent.working' : 'gameContent.saveAppearance') }}</UiButton>
               </template>
             </form>
             <p v-if="saveError" class="error" role="alert">{{ saveError }}</p>
@@ -216,21 +218,21 @@ defineExpose({ launch: launchScene, extract: toggleExtraction, ready: computed((
 </template>
 
 <style scoped>
-.scene-extractor { flex-shrink: 0; min-width: 0; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); background: var(--bg-surface); }
-button, input, select { font: inherit; font-size: 12px; color: var(--text-primary); border: 1px solid var(--border-default); border-radius: var(--radius-sm); background: var(--bg-surface); min-height: 34px; padding: 7px 10px; }
+.scene-extractor { flex-shrink: 0; min-width: 0; border: none; border-radius: var(--radius-md); background: var(--bg-surface); }
+button, input, select { font: inherit; font-size: var(--text-sm); color: var(--text-primary); border: 1px solid var(--border-default); border-radius: var(--radius-sm); background: var(--bg-surface); min-height: 34px; padding: 7px 10px; }
 button { cursor: pointer; }button:hover:not(:disabled) { background: var(--bg-hover); }button:disabled, input:disabled, select:disabled { opacity: .5; cursor: not-allowed; }
 button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible, a:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
 .package-scene-actions { flex-shrink: 0; min-width: 0; }
 .extract-body { display: flex; flex-direction: column; gap: 12px; padding: 12px; }
 .extraction-panel { display: flex; flex-direction: column; gap: 12px; border-top: 1px solid var(--border-subtle); padding-top: 12px; }
 .scene-preview { margin: 0; min-width: 0; }.scene-preview img { display: block; width: 100%; height: 120px; object-fit: contain; background: var(--bg-base); border-radius: var(--radius-sm); }
-.scene-preview figcaption { margin-top: 6px; color: var(--text-tertiary); font-size: 11px; line-height: 1.5; }.preview-empty { padding: 8px 0; }
+.scene-preview figcaption { margin-top: 6px; color: var(--text-tertiary); font-size: var(--text-xs); line-height: 1.5; }.preview-empty { padding: 8px 0; }
 form { display: flex; flex-direction: column; gap: 10px; }
 .directory-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-label { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--text-secondary); }
+label { display: flex; flex-direction: column; gap: 6px; font-size: var(--text-sm); color: var(--text-secondary); }
 select, input { width: 100%; min-width: 0; }select option { background: var(--bg-surface); }
-p { font-size: 12px; color: var(--text-secondary); line-height: 1.6; overflow-wrap: anywhere; margin: 0; }
-.primary { background: var(--accent-primary); color: white; border-color: transparent; }.primary:hover:not(:disabled) { background: var(--accent-hover, var(--accent-primary)); }
-.error { color: var(--color-error); }.saved { display: flex; flex-direction: column; gap: 6px; }.path { user-select: text; }a { color: var(--accent-primary); font-size: 12px; }
-summary { cursor: pointer; font-size: 12px; color: var(--text-secondary); }details p { margin-top: 8px; }
+p { font-size: var(--text-sm); color: var(--text-secondary); line-height: 1.6; overflow-wrap: anywhere; margin: 0; }
+.primary { background: var(--accent-primary); color: var(--accent-ink); border-color: transparent; }.primary:hover:not(:disabled) { background: var(--accent-hover, var(--accent-primary)); }
+.error { color: var(--color-error); }.saved { display: flex; flex-direction: column; gap: 6px; }.path { user-select: text; }a { color: var(--accent-primary); font-size: var(--text-sm); }
+summary { cursor: pointer; font-size: var(--text-sm); color: var(--text-secondary); }details p { margin-top: 8px; }
 </style>

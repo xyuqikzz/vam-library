@@ -23,60 +23,25 @@
           @invalid="$emit('invalid', $event)"
         />
 
-        <button
-          v-else-if="typeof value === 'boolean'"
-          type="button"
-          :class="['toggle-switch', { on: value }]"
-          @click="updateObjectField(key, !value)"
-        >
-          <span class="toggle-thumb" />
-        </button>
+        <UiSwitch v-else-if="typeof value === 'boolean'" type="button" :model-value="value" :label="$t('ui.toggleSetting')" @update:model-value="updateObjectField(key, !value)" />
 
-        <input
-          v-else-if="typeof value === 'number'"
-          class="field-input number-input"
-          type="number"
-          :value="value"
-          @input="updateObjectField(key, parseNumber(($event.target as HTMLInputElement).value, value))"
-        />
+        <UiInput v-else-if="typeof value === 'number'" class="field-input number-input" type="number" :model-value="value" @input="updateObjectField(key, parseNumber(($event.target as HTMLInputElement).value, value))" />
 
-        <textarea
-          v-else-if="Array.isArray(value)"
-          class="field-textarea"
-          :value="formatArray(value)"
-          spellcheck="false"
-          @change="updateArrayField(key, ($event.target as HTMLTextAreaElement).value)"
-        />
+        <UiInput v-else-if="Array.isArray(value)" class="field-textarea" :model-value="formatArray(value)" spellcheck="false" @change="updateArrayField(key, ($event.target as HTMLTextAreaElement).value)" multiline />
 
-        <input
-          v-else
-          class="field-input"
-          type="text"
-          :value="stringValue(value)"
-          @input="updateObjectField(key, ($event.target as HTMLInputElement).value)"
-        />
+        <UiInput v-else class="field-input" type="text" :model-value="stringValue(value)" @input="updateObjectField(key, ($event.target as HTMLInputElement).value)" />
       </div>
     </template>
 
-    <textarea
-      v-else-if="Array.isArray(modelValue)"
-      class="field-textarea root-array"
-      :value="formatArray(modelValue)"
-      spellcheck="false"
-      @change="updateRootArray(($event.target as HTMLTextAreaElement).value)"
-    />
+    <UiInput v-else-if="Array.isArray(modelValue)" class="field-textarea root-array" :model-value="formatArray(modelValue)" spellcheck="false" @change="updateRootArray(($event.target as HTMLTextAreaElement).value)" multiline />
 
-    <input
-      v-else
-      class="field-input"
-      type="text"
-      :value="stringValue(modelValue)"
-      @input="$emit('update:modelValue', ($event.target as HTMLInputElement).value)"
-    />
+    <UiInput v-else class="field-input" type="text" :model-value="stringValue(modelValue)" @input="$emit('update:modelValue', ($event.target as HTMLInputElement).value)" />
   </div>
 </template>
 
 <script setup lang="ts">
+import UiInput from '@/components/ui/UiInput.vue'
+import UiSwitch from '@/components/ui/UiSwitch.vue'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
@@ -284,9 +249,9 @@ function humanizeFieldKey(key: string) {
 .json-node.nested {
   width: 100%;
   padding: var(--space-3);
-  border: 1px solid var(--border-subtle);
+  border: none;
   border-radius: var(--radius-sm);
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--bg-subtle);
 }
 
 .field-row {
@@ -295,7 +260,7 @@ function humanizeFieldKey(key: string) {
   align-items: center;
   gap: var(--space-4);
   padding: var(--space-3);
-  border: 1px solid var(--border-subtle);
+  border: none;
   border-radius: var(--radius-sm);
   background: var(--bg-subtle);
 }
@@ -331,23 +296,16 @@ function humanizeFieldKey(key: string) {
 .field-type {
   color: var(--text-tertiary);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--text-xs);
 }
 
 .field-input,
 .field-textarea {
   width: 100%;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
-  background: var(--bg-input);
-  color: var(--text-primary);
-  font-size: var(--text-sm);
   outline: none;
 }
 
 .field-input {
-  height: 32px;
-  padding: 0 var(--space-3);
 }
 
 .number-input {
@@ -356,10 +314,8 @@ function humanizeFieldKey(key: string) {
 
 .field-textarea {
   min-height: 92px;
-  padding: var(--space-3);
   resize: vertical;
   font-family: var(--font-mono);
-  font-size: 11px;
   line-height: 1.5;
 }
 
@@ -369,14 +325,13 @@ function humanizeFieldKey(key: string) {
 
 .field-input:focus,
 .field-textarea:focus {
-  border-color: var(--accent-primary);
 }
 
 .toggle-switch {
   position: relative;
   width: 44px;
   height: 24px;
-  border: 1px solid var(--border-subtle);
+  border: none;
   border-radius: var(--radius-full);
   background: var(--bg-hover);
   cursor: pointer;
@@ -396,9 +351,9 @@ function humanizeFieldKey(key: string) {
   left: 2px;
   width: 18px;
   height: 18px;
-  border-radius: 50%;
-  background: white;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  border-radius: var(--radius-xl)%;
+  background: var(--text-primary);
+  box-shadow: none;
   transition: transform var(--duration-base) var(--ease);
 }
 
