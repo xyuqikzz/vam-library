@@ -7,21 +7,42 @@
       <template v-if="status">
         <p v-if="status.conflict">{{ t('sceneBrowserMod.unrecognized') }}</p>
         <p v-else-if="status.updateAvailable">{{ t('sceneBrowserMod.olderInstalled') }}</p>
-        <p v-else-if="status.installed">{{ t('sceneBrowserMod.installed') }} · v{{ status.version }}</p>
+        <p v-else-if="status.installed">
+          {{ t('sceneBrowserMod.installed') }} · v{{ status.version }}
+        </p>
         <p v-else>{{ t('sceneBrowserMod.notInstalled') }}</p>
-        <p v-if="!status.installed">{{ t('sceneBrowserMod.bundledVersion', { version: status.version }) }}</p>
+        <p v-if="!status.installed">
+          {{ t('sceneBrowserMod.bundledVersion', { version: status.version }) }}
+        </p>
         <p v-if="status.updateAvailable">{{ t('sceneBrowserMod.updateAvailable') }}</p>
         <div v-if="status.conflict" class="conflict-help" role="alert">
           <p>{{ t('sceneBrowserMod.conflict') }}</p>
           <p>{{ t('sceneBrowserMod.conflictHelp') }}</p>
-          <p class="plugin-path">{{ t('sceneBrowserMod.pluginFile') }} <code>{{ status.targetPath }}</code></p>
+          <p class="plugin-path">
+            {{ t('sceneBrowserMod.pluginFile') }}
+            <code>{{ status.targetPath }}</code>
+          </p>
         </div>
         <p v-if="status.reason" role="alert">{{ status.reason }}</p>
       </template>
       <div class="actions">
-        <UiButton :disabled="busy || !app.vamRootPath" @click="refresh" variant="secondary">{{ t('sceneBrowserMod.refresh') }}</UiButton>
-        <UiButton :disabled="busy || !status?.compatible || status?.conflict || status?.installed" @click="change('install')" variant="secondary">{{ t(status?.updateAvailable ? 'sceneBrowserMod.update' : 'sceneBrowserMod.install') }}</UiButton>
-        <UiButton :disabled="busy || !(status?.installed || status?.updateAvailable)" @click="change('uninstall')" variant="secondary">{{ t('sceneBrowserMod.uninstall') }}</UiButton>
+        <UiButton :disabled="busy || !app.vamRootPath" @click="refresh" variant="secondary">
+          {{ t('sceneBrowserMod.refresh') }}
+        </UiButton>
+        <UiButton
+          :disabled="busy || !status?.compatible || status?.conflict || status?.installed"
+          @click="change('install')"
+          variant="secondary"
+        >
+          {{ t(status?.updateAvailable ? 'sceneBrowserMod.update' : 'sceneBrowserMod.install') }}
+        </UiButton>
+        <UiButton
+          :disabled="busy || !(status?.installed || status?.updateAvailable)"
+          @click="change('uninstall')"
+          variant="secondary"
+        >
+          {{ t('sceneBrowserMod.uninstall') }}
+        </UiButton>
         <span v-if="busy" role="status">{{ t('common.loading') }}</span>
       </div>
     </div>
@@ -94,11 +115,37 @@ watch(() => app.vamRootPath, refresh, { immediate: true })
 </script>
 
 <style scoped>
-.mod-panel { display: grid; gap: 12px; }
-.conflict-help { display: grid; gap: 8px; }
-.plugin-path { overflow-wrap: anywhere; }
-p { margin: 0; line-height: 1.6; }
-.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
-button { padding: 8px 16px; border: none; border-radius: var(--radius-xs); background: var(--bg-surface); color: var(--text-primary); cursor: pointer; }
-button:disabled { opacity: .45; cursor: default; }
+.mod-panel {
+  display: grid;
+  gap: 12px;
+}
+.conflict-help {
+  display: grid;
+  gap: 8px;
+}
+.plugin-path {
+  overflow-wrap: anywhere;
+}
+p {
+  margin: 0;
+  line-height: 1.6;
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+button {
+  padding: 8px 16px;
+  border: none;
+  border-radius: var(--radius-xs);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
 </style>

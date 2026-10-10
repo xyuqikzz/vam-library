@@ -5,68 +5,68 @@
 
 :root {
   /* ── Backgrounds ───────────────────────────────────────────── */
-  --bg-base:     #0a0a0b;
-  --bg-surface:  #111113;
+  --bg-base: #0a0a0b;
+  --bg-surface: #111113;
   --bg-elevated: #19191c;
-  --bg-hover:    #222226;
-  --bg-active:   #2a2a2e;
-  --bg-overlay:  rgba(6, 6, 7, 0.78);
-  --bg-input:    #1c1c1f;
-  --bg-subtle:   rgba(255, 255, 255, 0.03);
+  --bg-hover: #222226;
+  --bg-active: #2a2a2e;
+  --bg-overlay: rgba(6, 6, 7, 0.78);
+  --bg-input: #1c1c1f;
+  --bg-subtle: rgba(255, 255, 255, 0.03);
   --bg-control: #26262a;
   --bg-control-hover: #303035;
   --bg-menu: #1f1f22;
   --bg-on-image: rgba(10, 10, 11, 0.72);
 
   /* ── Text（四级灰度）──────────────────────────────────────── */
-  --text-primary:    #f4f2f0;
-  --text-secondary:  #b8b4ae;
-  --text-tertiary:   #9c9893;
-  --text-disabled:   #5c5955;
-  --text-inverse:    #111113;
+  --text-primary: #f4f2f0;
+  --text-secondary: #b8b4ae;
+  --text-tertiary: #9c9893;
+  --text-disabled: #5c5955;
+  --text-inverse: #111113;
   --text-muted-strong: #d6d2cc;
 
   /* ── Accent（橙色，保留旧变量名兼容现有组件）──────────────── */
-  --accent-primary:       #ff8a5c;
+  --accent-primary: #ff8a5c;
   --accent-primary-hover: #ff9d76;
-  --accent-primary-active:#f07a4c;
-  --accent-secondary:     #ff9d76;
-  --accent-secondary-hover:#ffb08f;
-  --accent-gradient:      #ff8a5c;
-  --accent-muted:         rgba(255, 138, 92, 0.16);
-  --accent-subtle:        rgba(255, 138, 92, 0.08);
-  --accent-ink:           #1a0e08;
+  --accent-primary-active: #f07a4c;
+  --accent-secondary: #ff9d76;
+  --accent-secondary-hover: #ffb08f;
+  --accent-gradient: #ff8a5c;
+  --accent-muted: rgba(255, 138, 92, 0.16);
+  --accent-subtle: rgba(255, 138, 92, 0.08);
+  --accent-ink: #1a0e08;
 
   /* ── Semantic Colors ───────────────────────────────────────── */
-  --color-success:    #5fd68a;
+  --color-success: #5fd68a;
   --color-success-bg: rgba(95, 214, 138, 0.14);
-  --color-warning:    #f5c451;
+  --color-warning: #f5c451;
   --color-warning-bg: rgba(245, 196, 81, 0.14);
-  --color-warning-ink:#241a02;
-  --color-error:      #ff7a6e;
-  --color-error-bg:   rgba(255, 122, 110, 0.14);
+  --color-warning-ink: #241a02;
+  --color-error: #ff7a6e;
+  --color-error-bg: rgba(255, 122, 110, 0.14);
   --color-error-surface: #2e1a19;
   --color-error-surface-hover: #3a1f1d;
-  --color-info:       #7cc4ff;
-  --color-info-bg:    rgba(124, 196, 255, 0.14);
+  --color-info: #7cc4ff;
+  --color-info-bg: rgba(124, 196, 255, 0.14);
 
   /* ── Resource Type Colors（圆点、细标）──────────────────────── */
-  --color-scene:       #f5b041;
-  --color-scene-bg:    rgba(245, 176, 65, 0.14);
-  --color-appearance:  #f27aa8;
+  --color-scene: #f5b041;
+  --color-scene-bg: rgba(245, 176, 65, 0.14);
+  --color-appearance: #f27aa8;
   --color-appearance-bg: rgba(242, 122, 168, 0.14);
-  --color-morph:       #b096fa;
-  --color-morph-bg:    rgba(176, 150, 250, 0.14);
-  --color-clothing:    #4fcbe0;
+  --color-morph: #b096fa;
+  --color-morph-bg: rgba(176, 150, 250, 0.14);
+  --color-clothing: #4fcbe0;
   --color-clothing-bg: rgba(79, 203, 224, 0.14);
-  --color-plugin:      #5fd68a;
-  --color-plugin-bg:   rgba(95, 214, 138, 0.14);
-  --color-texture:     #ff935a;
-  --color-texture-bg:  rgba(255, 147, 90, 0.14);
-  --color-asset:       #a3abff;
-  --color-asset-bg:    rgba(163, 171, 255, 0.14);
-  --color-hair:        #d4a8ff;
-  --color-hair-bg:     rgba(212, 168, 255, 0.14);
+  --color-plugin: #5fd68a;
+  --color-plugin-bg: rgba(95, 214, 138, 0.14);
+  --color-texture: #ff935a;
+  --color-texture-bg: rgba(255, 147, 90, 0.14);
+  --color-asset: #a3abff;
+  --color-asset-bg: rgba(163, 171, 255, 0.14);
+  --color-hair: #d4a8ff;
+  --color-hair-bg: rgba(212, 168, 255, 0.14);
 
   /* ── Thumbnail Placeholders ────────────────────────────────── */
   --thumb-scene: #4a3524;
@@ -80,10 +80,10 @@
   --thumb-other: #232327;
 
   /* ── Borders（分隔线与输入焦点）───────────────────────────── */
-  --border-subtle:  rgba(255, 255, 255, 0.05);
+  --border-subtle: rgba(255, 255, 255, 0.05);
   --border-default: rgba(255, 255, 255, 0.08);
-  --border-strong:  rgba(255, 255, 255, 0.12);
-  --border-accent:  rgba(255, 138, 92, 0.45);
+  --border-strong: rgba(255, 255, 255, 0.12);
+  --border-accent: rgba(255, 138, 92, 0.45);
   --divider: #232327;
 
   /* ── Spacing ───────────────────────────────────────────────── */
@@ -110,64 +110,65 @@
   --radius-full: 9999px;
 
   /* ── Shadows（仅浮层）─────────────────────────────────────── */
-  --shadow-sm:  0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-md:  0 12px 28px rgba(0, 0, 0, 0.45);
-  --shadow-lg:  0 24px 80px rgba(0, 0, 0, 0.6);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 12px 28px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 24px 80px rgba(0, 0, 0, 0.6);
   --shadow-float: var(--shadow-lg);
   --focus-ring: 0 0 0 2px var(--bg-surface), 0 0 0 4px var(--text-primary);
   --ring-selected: 0 0 0 2px var(--bg-surface), 0 0 0 4px var(--accent-primary);
 
   /* ── Glass Effects（保留变量名兼容，但去掉 blur）──────────── */
-  --glass-bg:         #19191c;
-  --glass-bg-heavy:   #1f1f22;
-  --glass-blur:       none;
+  --glass-bg: #19191c;
+  --glass-bg-heavy: #1f1f22;
+  --glass-blur: none;
   --glass-blur-light: none;
   --glass-blur-heavy: none;
-  --glass-border:     1px solid transparent;
-  --glass-shadow:     none;
-  --glass-shadow-lg:  var(--shadow-lg);
-  --glass-panel-bg:   #19191c;
+  --glass-border: 1px solid transparent;
+  --glass-shadow: none;
+  --glass-shadow-lg: var(--shadow-lg);
+  --glass-panel-bg: #19191c;
   --glass-sidebar-bg: #141416;
   --glass-toolbar-bg: #111113;
 
   /* ── Typography ────────────────────────────────────────────── */
-  --font-family: 'Manrope Variable', 'Manrope', 'PingFang SC', 'Microsoft YaHei UI', system-ui, sans-serif;
+  --font-family:
+    'Manrope Variable', 'Manrope', 'PingFang SC', 'Microsoft YaHei UI', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', 'Cascadia Mono', 'Consolas', monospace;
 
-  --text-xs:   11px;
-  --text-sm:   12px;
+  --text-xs: 11px;
+  --text-sm: 12px;
   --text-base: 13px;
-  --text-md:   14px;
-  --text-lg:   16px;
-  --text-xl:   20px;
-  --text-2xl:  24px;
-  --text-3xl:  28px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 24px;
+  --text-3xl: 28px;
 
-  --leading-tight:   1.25;
-  --leading-normal:  1.5;
+  --leading-tight: 1.25;
+  --leading-normal: 1.5;
   --leading-relaxed: 1.65;
 
-  --font-normal:   400;
-  --font-medium:   500;
+  --font-normal: 400;
+  --font-medium: 500;
   --font-semibold: 600;
-  --font-bold:     700;
-  --font-heavy:    800;
+  --font-bold: 700;
+  --font-heavy: 800;
 
   /* ── Transitions ───────────────────────────────────────────── */
-  --ease:       cubic-bezier(0.25, 0.1, 0.25, 1);
-  --ease-out:   cubic-bezier(0, 0, 0.15, 1);
-  --ease-in:    cubic-bezier(0.4, 0, 1, 1);
+  --ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+  --ease-out: cubic-bezier(0, 0, 0.15, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
   --ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
 
-  --duration-fast:   120ms;
-  --duration-base:   200ms;
-  --duration-slow:   300ms;
+  --duration-fast: 120ms;
+  --duration-base: 200ms;
+  --duration-slow: 300ms;
   --duration-slower: 400ms;
 
   /* ── Transition shorthands（兼容旧代码）─────────────────── */
-  --transition-fast:   var(--duration-fast) var(--ease);
+  --transition-fast: var(--duration-fast) var(--ease);
   --transition-normal: var(--duration-base) var(--ease);
-  --transition-slow:   var(--duration-slow) var(--ease);
+  --transition-slow: var(--duration-slow) var(--ease);
 
   /* ── Layout Dimensions ─────────────────────────────────────── */
   --control-h-sm: 32px;
@@ -217,24 +218,24 @@
    Light Theme Tokens
    ============================================================ */
 :root.light-theme {
-  --bg-base:     #f5f5f7;
-  --bg-surface:  #ffffff;
+  --bg-base: #f5f5f7;
+  --bg-surface: #ffffff;
   --bg-elevated: #fcfcfd;
-  --bg-hover:    #e8e8ed;
-  --bg-active:   #d2d2d7;
-  --bg-overlay:  rgba(245, 245, 247, 0.75);
-  --bg-input:    rgba(0, 0, 0, 0.04);
-  --bg-subtle:   rgba(0, 0, 0, 0.03);
+  --bg-hover: #e8e8ed;
+  --bg-active: #d2d2d7;
+  --bg-overlay: rgba(245, 245, 247, 0.75);
+  --bg-input: rgba(0, 0, 0, 0.04);
+  --bg-subtle: rgba(0, 0, 0, 0.03);
   --bg-control: var(--bg-hover);
   --bg-control-hover: var(--bg-active);
   --bg-menu: var(--glass-bg-heavy);
   --bg-on-image: rgba(255, 255, 255, 0.9);
 
-  --text-primary:   #1d1d1f;
+  --text-primary: #1d1d1f;
   --text-secondary: #86868b;
-  --text-tertiary:  #6e6e73;
-  --text-disabled:  #a1a1a6;
-  --text-inverse:   #ffffff;
+  --text-tertiary: #6e6e73;
+  --text-disabled: #a1a1a6;
+  --text-inverse: #ffffff;
   --text-muted-strong: var(--text-primary);
 
   --accent-primary: #c2521f;
@@ -243,7 +244,7 @@
   --accent-secondary: var(--accent-primary);
   --accent-secondary-hover: var(--accent-primary-hover);
   --accent-gradient: var(--accent-primary);
-  --accent-muted:  rgba(194, 82, 31, 0.12);
+  --accent-muted: rgba(194, 82, 31, 0.12);
   --accent-subtle: rgba(194, 82, 31, 0.06);
   --accent-ink: #ffffff;
 
@@ -266,25 +267,25 @@
   --border-control: var(--text-tertiary);
   --border-menu: var(--border-default);
 
-  --border-subtle:  rgba(0, 0, 0, 0.05);
+  --border-subtle: rgba(0, 0, 0, 0.05);
   --border-default: rgba(0, 0, 0, 0.08);
-  --border-strong:  rgba(0, 0, 0, 0.12);
-  --border-accent:  rgba(194, 82, 31, 0.3);
+  --border-strong: rgba(0, 0, 0, 0.12);
+  --border-accent: rgba(194, 82, 31, 0.3);
   --divider: var(--border-default);
 
-  --shadow-sm:  0 1px 2px rgba(0, 0, 0, 0.06);
-  --shadow-md:  0 4px 12px rgba(0, 0, 0, 0.08);
-  --shadow-lg:  0 8px 24px rgba(0, 0, 0, 0.12);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
 
-  --glass-bg:         #ffffff;
-  --glass-bg-heavy:   #fafafa;
-  --glass-blur:       none;
+  --glass-bg: #ffffff;
+  --glass-bg-heavy: #fafafa;
+  --glass-blur: none;
   --glass-blur-light: none;
   --glass-blur-heavy: none;
-  --glass-border:     1px solid rgba(0, 0, 0, 0.08);
-  --glass-shadow:     var(--shadow-md);
-  --glass-shadow-lg:  var(--shadow-lg);
-  --glass-panel-bg:   #ffffff;
+  --glass-border: 1px solid rgba(0, 0, 0, 0.08);
+  --glass-shadow: var(--shadow-md);
+  --glass-shadow-lg: var(--shadow-lg);
+  --glass-panel-bg: #ffffff;
   --glass-sidebar-bg: #ffffff;
   --glass-toolbar-bg: #ffffff;
 }

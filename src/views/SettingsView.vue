@@ -1,278 +1,394 @@
 <template>
-<div class="settings-view animate-fadeIn b2-page"><PageHeader :title="$t('sidebar.settings')" ></PageHeader><div class="b2-page-body">
-    <SceneBrowserModPanel />
-    <!-- General -->
-    <GlassPanel :title="$t('settings.general')">
-      <div class="setting-row">
-        <div class="setting-info">
-          <h4 class="setting-label">{{ $t('settings.vamDirectory') }}</h4>
-          <p class="setting-description">{{ $t('settings.vamDirectoryDesc') }}</p>
-        </div>
-        <div class="setting-control path-control">
-          <div class="path-display">
-            <Icon  :size="14" name="outline-45" />
-            <span class="path-text truncate">{{ vamRootPath || $t('settings.notConfigured') }}</span>
+  <div class="settings-view animate-fadeIn b2-page">
+    <PageHeader :title="$t('sidebar.settings')"></PageHeader>
+    <div class="b2-page-body">
+      <SceneBrowserModPanel />
+      <!-- General -->
+      <GlassPanel :title="$t('settings.general')">
+        <div class="setting-row">
+          <div class="setting-info">
+            <h4 class="setting-label">{{ $t('settings.vamDirectory') }}</h4>
+            <p class="setting-description">{{ $t('settings.vamDirectoryDesc') }}</p>
           </div>
-          <UiButton @click="browseDirectory" variant="secondary">{{ $t('settings.browse') }}</UiButton>
-        </div>
-      </div>
-
-      <div class="setting-divider" />
-
-      <div class="setting-row">
-        <div class="setting-info">
-          <h4 class="setting-label">{{ $t('settings.autoScan') }}</h4>
-          <p class="setting-description">{{ $t('settings.autoScanDesc') }}</p>
-        </div>
-        <div class="setting-control">
-          <UiSwitch  :model-value="appStore.autoScan" :label="$t('settings.autoScan')" @update:model-value="toggleAutoScan" />
-        </div>
-      </div>
-    </GlassPanel>
-
-    <GlassPanel :title="$t('settings.vamInstances')">
-      <div class="instance-list">
-        <p v-if="vamInstances.length === 0" class="instance-empty">
-          {{ $t('settings.noInstances') }}
-        </p>
-        <div
-          v-for="instance in vamInstances"
-          :key="instance.id"
-          :class="['instance-row', { active: activeInstanceId === instance.id }]"
-        >
-          <UiButton class="instance-main" type="button" @click="switchInstance(instance.id)" variant="secondary">
-            <span class="instance-name">{{ instance.name }}</span>
-            <span class="instance-path truncate">{{ instance.rootPath }}</span>
-          </UiButton>
-          <UiButton class="instance-delete" type="button" :title="$t('settings.deleteInstance')" @click="deleteInstance(instance.id)" variant="danger" icon-only :aria-label="$t('settings.deleteInstance')">
-            <Icon  :size="14" name="outline-46" />
-          </UiButton>
-        </div>
-      </div>
-
-      <div class="setting-divider" />
-
-      <div class="instance-add-row">
-        <UiInput v-model="newInstanceName" class="setting-input instance-name-input" :placeholder="$t('settings.instanceNamePlaceholder')" />
-        <UiButton :disabled="!canAddCurrentInstance" @click="addCurrentInstance" variant="secondary">
-          {{ $t('settings.addCurrentInstance') }}
-        </UiButton>
-      </div>
-      <p v-if="isCurrentPathDuplicated" class="instance-tip">
-        {{ $t('settings.duplicateInstancePath') }}
-      </p>
-    </GlassPanel>
-
-    <!-- Resource Management -->
-    <GlassPanel :title="$t('settings.resourceManagement')">
-      <div class="setting-row">
-        <div class="setting-info">
-          <h4 class="setting-label">{{ $t('settings.managedMode') }}</h4>
-          <p class="setting-description">{{ $t('settings.managedModeDesc') }}</p>
-        </div>
-        <div class="setting-control">
-          <UiSwitch  :model-value="managedEnabled" :label="$t('settings.managedMode')" @update:model-value="toggleManagedMode" />
-        </div>
-      </div>
-
-      <div class="setting-divider" />
-
-      <div class="setting-row">
-        <div class="setting-info">
-          <h4 class="setting-label">{{ $t('settings.managedLibraryPath') }}</h4>
-          <p class="setting-description">{{ installContext?.managedLibraryDir || $t('settings.notConfigured') }}</p>
-        </div>
-      </div>
-    </GlassPanel>
-
-    <GlassPanel :title="$t('settings.previewSettings')">
-      <div class="setting-row">
-        <div class="setting-info">
-          <h4 id="blur-previews-label" class="setting-label">{{ $t('settings.blurPreviews') }}</h4>
-          <p id="blur-previews-description" class="setting-description">{{ $t('settings.blurPreviewsDesc') }}</p>
-        </div>
-        <div class="setting-control">
-          <UiSwitch type="button" role="switch" aria-labelledby="blur-previews-label" aria-describedby="blur-previews-description" :aria-checked="appStore.blurPreviews" :disabled="isSavingPreviewSettings" :model-value="appStore.blurPreviews" :label="$t('settings.blurPreviews')" @update:model-value="togglePreviewBlur" />
-        </div>
-      </div>
-    </GlassPanel>
-
-    <!-- Language Settings -->
-    <GlassPanel :title="$t('settings.language')">
-      <div class="setting-row">
-        <div class="setting-info">
-          <h4 class="setting-label">{{ $t('settings.language') }}</h4>
-          <p class="setting-description">{{ $t('settings.languageDesc') }}</p>
-        </div>
-        <div class="setting-control">
-          <div class="theme-selector">
-            <UiChip :class="['', { active: locale === 'zh-CN' }]" @click="setLocale('zh-CN')" :selected="locale === 'zh-CN'">
-              中文
-            </UiChip>
-            <UiChip :class="['', { active: locale === 'en-US' }]" @click="setLocale('en-US')" :selected="locale === 'en-US'">
-              English
-            </UiChip>
-          </div>
-        </div>
-      </div>
-    </GlassPanel>
-
-    <!-- Download Settings -->
-    <GlassPanel :title="$t('settings.downloadSettings')">
-      <div class="setting-row">
-        <div class="setting-info">
-          <h4 class="setting-label">{{ $t('settings.maxConcurrentDownloads') }}</h4>
-          <p class="setting-description">{{ $t('settings.maxConcurrentDownloadsDesc') }}</p>
-        </div>
-        <div class="setting-control">
-          <div class="stepper-control">
-            <UiButton type="button" :disabled="maxConcurrentDownloads <= 1" @click="changeMaxConcurrentDownloads(-1)" variant="secondary">
-              -
-            </UiButton>
-            <UiInput type="number" class="setting-input stepper-input" v-model.number="maxConcurrentDownloads" min="1" max="5" @blur="saveDownloadSettings" @change="saveDownloadSettings" />
-            <UiButton type="button" :disabled="maxConcurrentDownloads >= 5" @click="changeMaxConcurrentDownloads(1)" variant="secondary">
-              +
+          <div class="setting-control path-control">
+            <div class="path-display">
+              <Icon :size="14" name="outline-45" />
+              <span class="path-text truncate">
+                {{ vamRootPath || $t('settings.notConfigured') }}
+              </span>
+            </div>
+            <UiButton @click="browseDirectory" variant="secondary">
+              {{ $t('settings.browse') }}
             </UiButton>
           </div>
         </div>
-      </div>
 
-      <div class="setting-divider" />
+        <div class="setting-divider" />
 
-      <div class="setting-row">
-        <div class="setting-info">
-          <h4 class="setting-label">{{ $t('settings.speedLimit') }}</h4>
-          <p class="setting-description">{{ $t('settings.speedLimitDesc') }}</p>
+        <div class="setting-row">
+          <div class="setting-info">
+            <h4 class="setting-label">{{ $t('settings.autoScan') }}</h4>
+            <p class="setting-description">{{ $t('settings.autoScanDesc') }}</p>
+          </div>
+          <div class="setting-control">
+            <UiSwitch
+              :model-value="appStore.autoScan"
+              :label="$t('settings.autoScan')"
+              @update:model-value="toggleAutoScan"
+            />
+          </div>
         </div>
-        <div class="setting-control speed-limit-control">
-          <UiInput type="number" class="setting-input" v-model.number="speedLimitKb" min="0" step="100" @change="saveDownloadSettings" />
-          <span class="unit-label">{{ $t('settings.speedLimitUnit') }}</span>
-        </div>
-      </div>
+      </GlassPanel>
 
-      <div class="setting-divider" />
-
-      <div class="setting-row">
-        <div class="setting-info">
-          <h4 class="setting-label">{{ $t('settings.downloadTargetPolicy') }}</h4>
-          <p class="setting-description">{{ $t('settings.downloadTargetPolicyDesc') }}</p>
-        </div>
-        <div class="setting-control">
-          <select v-model="downloadTargetPolicy" class="setting-select" @change="saveDownloadSettings">
-            <option value="auto">{{ $t('settings.policyAuto') }}</option>
-            <option value="real_addon">{{ $t('settings.policyRealAddon') }}</option>
-            <option value="managed_library">{{ $t('settings.policyManagedLibrary') }}</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="setting-divider" />
-
-      <div class="setting-row">
-        <div class="setting-info">
-          <h4 class="setting-label">{{ $t('settings.downloadAfterAction') }}</h4>
-          <p class="setting-description">{{ $t('settings.downloadAfterActionDesc') }}</p>
-        </div>
-        <div class="setting-control">
-          <select v-model="downloadAfterAction" class="setting-select" @change="saveDownloadSettings">
-            <option value="library_only">{{ $t('settings.afterLibraryOnly') }}</option>
-            <option value="add_to_active_plan">{{ $t('settings.afterAddToActivePlan') }}</option>
-            <option value="add_and_apply">{{ $t('settings.afterAddAndApply') }}</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="setting-divider" />
-
-      <div class="setting-row">
-        <div class="setting-info">
-          <h4 class="setting-label">{{ $t('settings.currentDownloadTarget') }}</h4>
-          <p class="setting-description">{{ installContext?.downloadTargetDir || $t('settings.notConfigured') }}</p>
-        </div>
-      </div>
-    </GlassPanel>
-
-    <GlassPanel :title="$t('settings.hubLogin')">
-      <div class="setting-row">
-        <div class="setting-info">
-          <h4 class="setting-label">{{ $t('settings.hubCookie') }}</h4>
-          <p class="setting-description">
-            {{ hubLoggedIn ? $t('settings.hubLoggedIn') : $t('settings.hubNotLoggedIn') }}
+      <GlassPanel :title="$t('settings.vamInstances')">
+        <div class="instance-list">
+          <p v-if="vamInstances.length === 0" class="instance-empty">
+            {{ $t('settings.noInstances') }}
           </p>
+          <div
+            v-for="instance in vamInstances"
+            :key="instance.id"
+            :class="['instance-row', { active: activeInstanceId === instance.id }]"
+          >
+            <UiButton
+              class="instance-main"
+              type="button"
+              @click="switchInstance(instance.id)"
+              variant="secondary"
+            >
+              <span class="instance-name">{{ instance.name }}</span>
+              <span class="instance-path truncate">{{ instance.rootPath }}</span>
+            </UiButton>
+            <UiButton
+              class="instance-delete"
+              type="button"
+              :title="$t('settings.deleteInstance')"
+              @click="deleteInstance(instance.id)"
+              variant="danger"
+              icon-only
+              :aria-label="$t('settings.deleteInstance')"
+            >
+              <Icon :size="14" name="outline-46" />
+            </UiButton>
+          </div>
         </div>
-      </div>
-      <UiInput v-model="hubCookieDraft" class="cookie-input" :placeholder="$t('settings.hubCookiePlaceholder')" multiline />
-      <div class="hub-actions">
-        <UiButton @click="saveHubCookie" variant="secondary">{{ $t('settings.saveHubCookie') }}</UiButton>
-        <UiButton @click="clearHubCookie" variant="secondary">{{ $t('settings.clearHubCookie') }}</UiButton>
-      </div>
-    </GlassPanel>
 
-    <!-- Cache Management -->
-    <GlassPanel :title="$t('settings.cacheCleanup')">
-      <div class="setting-row">
-        <div class="setting-info">
-          <h4 class="setting-label">{{ $t('settings.clearThumbnails') }}</h4>
-          <p class="setting-description">{{ $t('settings.clearThumbnailsDesc') }}</p>
-        </div>
-        <div class="setting-control">
-          <UiButton :disabled="isClearingThumbnails" @click="handleClearThumbnails" variant="secondary">
-            {{ isClearingThumbnails ? $t('common.loading') : $t('settings.clearBtn') }}
+        <div class="setting-divider" />
+
+        <div class="instance-add-row">
+          <UiInput
+            v-model="newInstanceName"
+            class="setting-input instance-name-input"
+            :placeholder="$t('settings.instanceNamePlaceholder')"
+          />
+          <UiButton
+            :disabled="!canAddCurrentInstance"
+            @click="addCurrentInstance"
+            variant="secondary"
+          >
+            {{ $t('settings.addCurrentInstance') }}
           </UiButton>
         </div>
-      </div>
+        <p v-if="isCurrentPathDuplicated" class="instance-tip">
+          {{ $t('settings.duplicateInstancePath') }}
+        </p>
+      </GlassPanel>
 
-      <div class="setting-divider" />
-
-      <div class="setting-row">
-        <div class="setting-info">
-          <h4 class="setting-label">{{ $t('settings.clearLocalData') }}</h4>
-          <p class="setting-description">{{ $t('settings.clearLocalDataDesc') }}</p>
+      <!-- Resource Management -->
+      <GlassPanel :title="$t('settings.resourceManagement')">
+        <div class="setting-row">
+          <div class="setting-info">
+            <h4 class="setting-label">{{ $t('settings.managedMode') }}</h4>
+            <p class="setting-description">{{ $t('settings.managedModeDesc') }}</p>
+          </div>
+          <div class="setting-control">
+            <UiSwitch
+              :model-value="managedEnabled"
+              :label="$t('settings.managedMode')"
+              @update:model-value="toggleManagedMode"
+            />
+          </div>
         </div>
-        <div class="setting-control">
-          <UiButton :disabled="isClearingLocalData" @click="confirmClearLocalData = true" variant="danger">
-            {{ isClearingLocalData ? $t('common.loading') : $t('settings.clearBtn') }}
+
+        <div class="setting-divider" />
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <h4 class="setting-label">{{ $t('settings.managedLibraryPath') }}</h4>
+            <p class="setting-description">
+              {{ installContext?.managedLibraryDir || $t('settings.notConfigured') }}
+            </p>
+          </div>
+        </div>
+      </GlassPanel>
+
+      <GlassPanel :title="$t('settings.previewSettings')">
+        <div class="setting-row">
+          <div class="setting-info">
+            <h4 id="blur-previews-label" class="setting-label">
+              {{ $t('settings.blurPreviews') }}
+            </h4>
+            <p id="blur-previews-description" class="setting-description">
+              {{ $t('settings.blurPreviewsDesc') }}
+            </p>
+          </div>
+          <div class="setting-control">
+            <UiSwitch
+              type="button"
+              role="switch"
+              aria-labelledby="blur-previews-label"
+              aria-describedby="blur-previews-description"
+              :aria-checked="appStore.blurPreviews"
+              :disabled="isSavingPreviewSettings"
+              :model-value="appStore.blurPreviews"
+              :label="$t('settings.blurPreviews')"
+              @update:model-value="togglePreviewBlur"
+            />
+          </div>
+        </div>
+      </GlassPanel>
+
+      <!-- Language Settings -->
+      <GlassPanel :title="$t('settings.language')">
+        <div class="setting-row">
+          <div class="setting-info">
+            <h4 class="setting-label">{{ $t('settings.language') }}</h4>
+            <p class="setting-description">{{ $t('settings.languageDesc') }}</p>
+          </div>
+          <div class="setting-control">
+            <div class="theme-selector">
+              <UiChip
+                :class="['', { active: locale === 'zh-CN' }]"
+                @click="setLocale('zh-CN')"
+                :selected="locale === 'zh-CN'"
+              >
+                中文
+              </UiChip>
+              <UiChip
+                :class="['', { active: locale === 'en-US' }]"
+                @click="setLocale('en-US')"
+                :selected="locale === 'en-US'"
+              >
+                English
+              </UiChip>
+            </div>
+          </div>
+        </div>
+      </GlassPanel>
+
+      <!-- Download Settings -->
+      <GlassPanel :title="$t('settings.downloadSettings')">
+        <div class="setting-row">
+          <div class="setting-info">
+            <h4 class="setting-label">{{ $t('settings.maxConcurrentDownloads') }}</h4>
+            <p class="setting-description">{{ $t('settings.maxConcurrentDownloadsDesc') }}</p>
+          </div>
+          <div class="setting-control">
+            <div class="stepper-control">
+              <UiButton
+                type="button"
+                :disabled="maxConcurrentDownloads <= 1"
+                @click="changeMaxConcurrentDownloads(-1)"
+                variant="secondary"
+              >
+                -
+              </UiButton>
+              <UiInput
+                type="number"
+                class="setting-input stepper-input"
+                v-model.number="maxConcurrentDownloads"
+                min="1"
+                max="5"
+                @blur="saveDownloadSettings"
+                @change="saveDownloadSettings"
+              />
+              <UiButton
+                type="button"
+                :disabled="maxConcurrentDownloads >= 5"
+                @click="changeMaxConcurrentDownloads(1)"
+                variant="secondary"
+              >
+                +
+              </UiButton>
+            </div>
+          </div>
+        </div>
+
+        <div class="setting-divider" />
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <h4 class="setting-label">{{ $t('settings.speedLimit') }}</h4>
+            <p class="setting-description">{{ $t('settings.speedLimitDesc') }}</p>
+          </div>
+          <div class="setting-control speed-limit-control">
+            <UiInput
+              type="number"
+              class="setting-input"
+              v-model.number="speedLimitKb"
+              min="0"
+              step="100"
+              @change="saveDownloadSettings"
+            />
+            <span class="unit-label">{{ $t('settings.speedLimitUnit') }}</span>
+          </div>
+        </div>
+
+        <div class="setting-divider" />
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <h4 class="setting-label">{{ $t('settings.downloadTargetPolicy') }}</h4>
+            <p class="setting-description">{{ $t('settings.downloadTargetPolicyDesc') }}</p>
+          </div>
+          <div class="setting-control">
+            <select
+              v-model="downloadTargetPolicy"
+              class="setting-select"
+              @change="saveDownloadSettings"
+            >
+              <option value="auto">{{ $t('settings.policyAuto') }}</option>
+              <option value="real_addon">{{ $t('settings.policyRealAddon') }}</option>
+              <option value="managed_library">{{ $t('settings.policyManagedLibrary') }}</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="setting-divider" />
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <h4 class="setting-label">{{ $t('settings.downloadAfterAction') }}</h4>
+            <p class="setting-description">{{ $t('settings.downloadAfterActionDesc') }}</p>
+          </div>
+          <div class="setting-control">
+            <select
+              v-model="downloadAfterAction"
+              class="setting-select"
+              @change="saveDownloadSettings"
+            >
+              <option value="library_only">{{ $t('settings.afterLibraryOnly') }}</option>
+              <option value="add_to_active_plan">{{ $t('settings.afterAddToActivePlan') }}</option>
+              <option value="add_and_apply">{{ $t('settings.afterAddAndApply') }}</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="setting-divider" />
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <h4 class="setting-label">{{ $t('settings.currentDownloadTarget') }}</h4>
+            <p class="setting-description">
+              {{ installContext?.downloadTargetDir || $t('settings.notConfigured') }}
+            </p>
+          </div>
+        </div>
+      </GlassPanel>
+
+      <GlassPanel :title="$t('settings.hubLogin')">
+        <div class="setting-row">
+          <div class="setting-info">
+            <h4 class="setting-label">{{ $t('settings.hubCookie') }}</h4>
+            <p class="setting-description">
+              {{ hubLoggedIn ? $t('settings.hubLoggedIn') : $t('settings.hubNotLoggedIn') }}
+            </p>
+          </div>
+        </div>
+        <UiInput
+          v-model="hubCookieDraft"
+          class="cookie-input"
+          :placeholder="$t('settings.hubCookiePlaceholder')"
+          multiline
+        />
+        <div class="hub-actions">
+          <UiButton @click="saveHubCookie" variant="secondary">
+            {{ $t('settings.saveHubCookie') }}
+          </UiButton>
+          <UiButton @click="clearHubCookie" variant="secondary">
+            {{ $t('settings.clearHubCookie') }}
           </UiButton>
         </div>
-      </div>
-    </GlassPanel>
+      </GlassPanel>
 
-    <!-- Backup & Export -->
-    <GlassPanel :title="$t('settings.exportPackageList')">
-      <div class="setting-row">
-        <div class="setting-info">
-          <h4 class="setting-label">{{ $t('settings.exportPackageList') }}</h4>
-          <p class="setting-description">{{ $t('settings.exportPackageListDesc') }}</p>
+      <!-- Cache Management -->
+      <GlassPanel :title="$t('settings.cacheCleanup')">
+        <div class="setting-row">
+          <div class="setting-info">
+            <h4 class="setting-label">{{ $t('settings.clearThumbnails') }}</h4>
+            <p class="setting-description">{{ $t('settings.clearThumbnailsDesc') }}</p>
+          </div>
+          <div class="setting-control">
+            <UiButton
+              :disabled="isClearingThumbnails"
+              @click="handleClearThumbnails"
+              variant="secondary"
+            >
+              {{ isClearingThumbnails ? $t('common.loading') : $t('settings.clearBtn') }}
+            </UiButton>
+          </div>
         </div>
-        <div class="setting-control">
-          <UiButton @click="handleExportPackages" variant="secondary">
-            {{ $t('settings.exportPackageList') }}
-          </UiButton>
-        </div>
-      </div>
-    </GlassPanel>
 
-    <!-- About -->
-    <GlassPanel :title="$t('settings.about')">
-      <div class="about-content">
-        <div class="about-row">
-          <span class="about-label">{{ $t('settings.version') }}</span>
-          <span class="about-value">0.1.1</span>
-        </div>
-        <div class="about-row">
-          <span class="about-label">{{ $t('settings.framework') }}</span>
-          <span class="about-value">Tauri 2 + Vue 3</span>
-        </div>
-        <div class="about-row">
-          <span class="about-label">{{ $t('settings.repository') }}</span>
-          <UiButton class="about-link" type="button" @click="openRepository" variant="secondary">
-            github.com/xyuqikzz/vam-library
-          </UiButton>
-        </div>
-      </div>
-    </GlassPanel>
+        <div class="setting-divider" />
 
-    <UiModal v-if="confirmClearLocalData" :show-close="false"  :close-disabled="isClearingLocalData" @close="closeClearLocalDataDialog">
+        <div class="setting-row">
+          <div class="setting-info">
+            <h4 class="setting-label">{{ $t('settings.clearLocalData') }}</h4>
+            <p class="setting-description">{{ $t('settings.clearLocalDataDesc') }}</p>
+          </div>
+          <div class="setting-control">
+            <UiButton
+              :disabled="isClearingLocalData"
+              @click="confirmClearLocalData = true"
+              variant="danger"
+            >
+              {{ isClearingLocalData ? $t('common.loading') : $t('settings.clearBtn') }}
+            </UiButton>
+          </div>
+        </div>
+      </GlassPanel>
+
+      <!-- Backup & Export -->
+      <GlassPanel :title="$t('settings.exportPackageList')">
+        <div class="setting-row">
+          <div class="setting-info">
+            <h4 class="setting-label">{{ $t('settings.exportPackageList') }}</h4>
+            <p class="setting-description">{{ $t('settings.exportPackageListDesc') }}</p>
+          </div>
+          <div class="setting-control">
+            <UiButton @click="handleExportPackages" variant="secondary">
+              {{ $t('settings.exportPackageList') }}
+            </UiButton>
+          </div>
+        </div>
+      </GlassPanel>
+
+      <!-- About -->
+      <GlassPanel :title="$t('settings.about')">
+        <div class="about-content">
+          <div class="about-row">
+            <span class="about-label">{{ $t('settings.version') }}</span>
+            <span class="about-value">0.1.1</span>
+          </div>
+          <div class="about-row">
+            <span class="about-label">{{ $t('settings.framework') }}</span>
+            <span class="about-value">Tauri 2 + Vue 3</span>
+          </div>
+          <div class="about-row">
+            <span class="about-label">{{ $t('settings.repository') }}</span>
+            <UiButton class="about-link" type="button" @click="openRepository" variant="secondary">
+              github.com/xyuqikzz/vam-library
+            </UiButton>
+          </div>
+        </div>
+      </GlassPanel>
+
+      <UiModal
+        v-if="confirmClearLocalData"
+        :show-close="false"
+        :close-disabled="isClearingLocalData"
+        @close="closeClearLocalDataDialog"
+      >
         <div class="confirm-dialog-header">
           <h3>{{ $t('settings.clearLocalDataConfirmTitle') }}</h3>
         </div>
@@ -280,7 +396,11 @@
           <p>{{ $t('settings.clearLocalDataConfirmDesc') }}</p>
         </div>
         <div class="confirm-dialog-actions">
-          <UiButton :disabled="isClearingLocalData" @click="closeClearLocalDataDialog" variant="secondary">
+          <UiButton
+            :disabled="isClearingLocalData"
+            @click="closeClearLocalDataDialog"
+            variant="secondary"
+          >
             {{ $t('common.cancel') }}
           </UiButton>
           <UiButton :disabled="isClearingLocalData" @click="handleClearLocalData" variant="danger">
@@ -288,7 +408,8 @@
           </UiButton>
         </div>
       </UiModal>
-  </div></div>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -599,40 +720,6 @@ async function handleExportPackages() {
   max-width: 160px;
 }
 
-.toggle-switch {
-  position: relative;
-  width: 44px;
-  height: 24px;
-  border-radius: var(--radius-full);
-  background: var(--bg-hover);
-  border: none;
-  cursor: pointer;
-  transition:
-    background var(--duration-base) var(--ease),
-    border-color var(--duration-base) var(--ease);
-}
-
-.toggle-switch.on {
-  background: var(--accent-primary);
-  border-color: var(--accent-primary);
-}
-
-.toggle-thumb {
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 18px;
-  height: 18px;
-  border-radius: var(--radius-xl)%;
-  background: var(--text-primary);
-  box-shadow: none;
-  transition: transform var(--duration-base) var(--ease);
-}
-
-.toggle-switch.on .toggle-thumb {
-  transform: translateX(20px);
-}
-
 .theme-selector {
   display: flex;
   background: var(--bg-base);
@@ -683,24 +770,28 @@ async function handleExportPackages() {
 
 .stepper-control {
   display: grid;
-  grid-template-columns: 30px 44px 30px;
+  grid-template-columns: 40px 72px 40px;
   align-items: center;
   overflow: hidden;
-  height: 32px;
+  height: var(--control-h-lg);
   background: var(--bg-input);
   border: none;
   border-radius: var(--radius-sm);
 }
 
+.stepper-control :deep(.ui-button) {
+  padding: 0;
+}
+
 .stepper-input {
-  width: 44px;
+  width: 72px;
   text-align: center;
   appearance: textfield;
   -moz-appearance: textfield;
 }
 
-.stepper-input::-webkit-outer-spin-button,
-.stepper-input::-webkit-inner-spin-button {
+.stepper-input :deep(input::-webkit-outer-spin-button),
+.stepper-input :deep(input::-webkit-inner-spin-button) {
   margin: 0;
   appearance: none;
   -webkit-appearance: none;
@@ -854,8 +945,33 @@ async function handleExportPackages() {
   border-top: 1px solid var(--border-subtle);
 }
 
-.b2-page { display: flex; flex-direction: column; height: 100%; min-height: 0; max-width: none; margin: 0; padding: 0; gap: 0; overflow: hidden; }
-.b2-page-body { flex: 1; min-height: 0; min-width: 0; overflow: auto; padding: 20px 24px; display: flex; flex-direction: column; gap: 20px; }
-.b2-page :deep(.page-header) { width: 100%; }
-@media(max-width: 800px) { .b2-page-body { padding: 12px; } }
+.b2-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+}
+.b2-page-body {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: auto;
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.b2-page :deep(.page-header) {
+  width: 100%;
+}
+@media (max-width: 800px) {
+  .b2-page-body {
+    padding: 12px;
+  }
+}
 </style>

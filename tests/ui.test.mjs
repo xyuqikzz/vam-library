@@ -86,3 +86,13 @@ test('package cards expose independent keyboard and selection actions without ne
   assert.equal(checked.value, true)
   assert.equal(document.querySelector('.package-check input').checked, true)
 })
+
+test('modal tab order excludes collapsed details and hidden ancestors', async t => {
+  const { focusable } = await import(load('src/components/ui/overlay.ts'))
+  const root = document.createElement('section')
+  root.innerHTML = '<button id="visible">Visible</button><details><summary id="summary">Options</summary><button id="collapsed">Hidden</button></details><div style="display:none"><button id="css-hidden">Hidden</button></div>'
+  document.body.append(root); t.after(() => root.remove())
+  assert.deepEqual(focusable(root).map(el => el.id), ['visible', 'summary'])
+  root.querySelector('details').open = true
+  assert.deepEqual(focusable(root).map(el => el.id), ['visible', 'summary', 'collapsed'])
+})

@@ -1,124 +1,174 @@
 <template>
-<div class="trash-view animate-fadeIn b2-page"><PageHeader :title="$t('sidebar.trash')" ><template #actions>
-      <UiButton :disabled="isLoading" @click="loadTrash" variant="secondary">
-        <Icon :class="['refresh-icon', { 'spin': isLoading }]" :size="14" name="outline-52" />
-        <span>{{ $t('common.refresh') }}</span>
-      </UiButton>
+  <div class="trash-view animate-fadeIn b2-page">
+    <PageHeader :title="$t('sidebar.trash')">
+      <template #actions>
+        <UiButton :disabled="isLoading" @click="loadTrash" variant="secondary">
+          <Icon :class="['refresh-icon', { 'spin': isLoading }]" :size="14" name="outline-52" />
+          <span>{{ $t('common.refresh') }}</span>
+        </UiButton>
 
-      <UiButton v-if="trashList.length > 0" :disabled="isOperating" @click="confirmEmptyTrash" variant="danger">
-        <Icon  :size="14" name="outline-18" />
-        <span>{{ $t('trash.emptyBtn') }}</span>
-      </UiButton>
-    </template></PageHeader><div class="b2-page-body">
-    <section class="trash-toolbar">
-      <dl class="summary-grid">
-        <div class="summary-item">
-          <dt>{{ $t('trash.statsTotal') }}</dt>
-          <dd>{{ trashList.length.toLocaleString() }}</dd>
+        <UiButton
+          v-if="trashList.length > 0"
+          :disabled="isOperating"
+          @click="confirmEmptyTrash"
+          variant="danger"
+        >
+          <Icon :size="14" name="outline-18" />
+          <span>{{ $t('trash.emptyBtn') }}</span>
+        </UiButton>
+      </template>
+    </PageHeader>
+    <div class="b2-page-body">
+      <section class="trash-toolbar">
+        <dl class="summary-grid">
+          <div class="summary-item">
+            <dt>{{ $t('trash.statsTotal') }}</dt>
+            <dd>{{ trashList.length.toLocaleString() }}</dd>
+          </div>
+          <div class="summary-item">
+            <dt>{{ $t('trash.statsSize') }}</dt>
+            <dd>{{ formatSize(totalSize) }}</dd>
+          </div>
+        </dl>
+      </section>
+
+      <!-- Trash Content -->
+      <div v-if="trashList.length > 0" class="trash-content glass-panel">
+        <div class="trash-header">
+          <h3 class="trash-header-title">{{ $t('trash.listTitle') }}</h3>
+          <span class="trash-header-info text-xs text-tertiary">
+            {{ $t('trash.autoPurgeTip') }}
+          </span>
         </div>
-        <div class="summary-item">
-          <dt>{{ $t('trash.statsSize') }}</dt>
-          <dd>{{ formatSize(totalSize) }}</dd>
+
+        <div class="trash-body list-scrollbar">
+          <table class="trash-table">
+            <thead>
+              <tr>
+                <th class="col-package">{{ $t('packages.package') }}</th>
+                <th class="col-size">{{ $t('packages.size') }}</th>
+                <th class="col-time">{{ $t('trash.deletedTime') }}</th>
+                <th class="col-remaining">{{ $t('trash.remainingTime') }}</th>
+                <th class="col-actions">{{ $t('onDemand.action') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="item in trashList" :key="item.id" class="trash-row">
+                <td class="col-package font-medium text-primary">
+                  <div class="package-cell">
+                    <span
+                      class="truncate package-name"
+                      :title="item.original_path.split(/[\\/]/).pop()"
+                    >
+                      {{ item.original_path.split(/[\\/]/).pop() }}
+                    </span>
+                    <span
+                      class="truncate-path"
+                      :title="`${$t('trash.originalPath')}: ${item.original_path}`"
+                    >
+                      {{ item.original_path }}
+                    </span>
+                  </div>
+                </td>
+                <td class="col-size font-numeric text-secondary text-sm">
+                  {{ formatSize(item.size_bytes) }}
+                </td>
+                <td class="col-time text-secondary text-xs">
+                  <time :title="formatDate(item.created_at)">
+                    <span>{{ formatDate(item.created_at).split(' ')[0] }}</span>
+                    <span class="time-detail">{{ formatDate(item.created_at).split(' ')[1] }}</span>
+                  </time>
+                </td>
+                <td class="col-remaining text-warning text-xs font-semibold">
+                  {{ getRemainingTime(item.created_at) }}
+                </td>
+                <td class="col-actions">
+                  <div class="action-buttons">
+                    <UiButton
+                      class="restore"
+                      :disabled="isOperating"
+                      :title="$t('common.restore')"
+                      @click="handleRestore(item)"
+                      variant="secondary"
+                    >
+                      {{ $t('common.restore') || '恢复' }}
+                    </UiButton>
+                    <UiButton
+                      class="delete"
+                      :disabled="isOperating"
+                      :title="$t('common.delete')"
+                      @click="confirmDelete(item)"
+                      variant="danger"
+                    >
+                      {{ $t('common.delete') || '永久删除' }}
+                    </UiButton>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
-      </dl>
-
-    </section>
-
-    <!-- Trash Content -->
-    <div v-if="trashList.length > 0" class="trash-content glass-panel">
-      <div class="trash-header">
-        <h3 class="trash-header-title">{{ $t('trash.listTitle') }}</h3>
-        <span class="trash-header-info text-xs text-tertiary">
-          {{ $t('trash.autoPurgeTip') }}
-        </span>
       </div>
 
-      <div class="trash-body list-scrollbar">
-        <table class="trash-table">
-          <thead>
-            <tr>
-              <th class="col-package">{{ $t('packages.package') }}</th>
-              <th class="col-size">{{ $t('packages.size') }}</th>
-              <th class="col-time">{{ $t('trash.deletedTime') }}</th>
-              <th class="col-remaining">{{ $t('trash.remainingTime') }}</th>
-              <th class="col-actions">{{ $t('onDemand.action') }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="item in trashList" :key="item.id" class="trash-row">
-              <td class="col-package font-medium text-primary">
-                <div class="package-cell">
-                  <span class="truncate package-name" :title="item.original_path.split(/[\\/]/).pop()">{{ item.original_path.split(/[\\/]/).pop() }}</span>
-                  <span class="truncate-path" :title="`${$t('trash.originalPath')}: ${item.original_path}`">{{ item.original_path }}</span>
-                </div>
-              </td>
-              <td class="col-size font-numeric text-secondary text-sm">
-                {{ formatSize(item.size_bytes) }}
-              </td>
-              <td class="col-time text-secondary text-xs">
-                <time :title="formatDate(item.created_at)">
-                  <span>{{ formatDate(item.created_at).split(' ')[0] }}</span>
-                  <span class="time-detail">{{ formatDate(item.created_at).split(' ')[1] }}</span>
-                </time>
-              </td>
-              <td class="col-remaining text-warning text-xs font-semibold">
-                {{ getRemainingTime(item.created_at) }}
-              </td>
-              <td class="col-actions">
-                <div class="action-buttons">
-                  <UiButton class="restore" :disabled="isOperating" :title="$t('common.restore')" @click="handleRestore(item)" variant="secondary">
-                    {{ $t('common.restore') || '恢复' }}
-                  </UiButton>
-                  <UiButton class="delete" :disabled="isOperating" :title="$t('common.delete')" @click="confirmDelete(item)" variant="danger">
-                    {{ $t('common.delete') || '永久删除' }}
-                  </UiButton>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+      <!-- Empty State -->
+      <div v-else class="trash-content glass-panel">
+        <div class="trash-body empty-body">
+          <EmptyState
+            :icon="icons.emptyTrash"
+            :title="$t('trash.emptyTitle')"
+            :description="$t('trash.emptyDesc')"
+          />
+        </div>
       </div>
-    </div>
 
-    <!-- Empty State -->
-    <div v-else class="trash-content glass-panel">
-      <div class="trash-body empty-body">
-        <EmptyState
-          :icon="icons.emptyTrash"
-          :title="$t('trash.emptyTitle')"
-          :description="$t('trash.emptyDesc')"
-        />
-      </div>
-    </div>
-
-    <!-- Confirm Delete Modal -->
-    <UiModal v-if="confirmDialog.show" :show-close="false"  :close-disabled="isOperating" @close="closeConfirmDialog">
-          <div class="modal-header">
-            <h3 class="modal-title">
-              <Icon class="title-icon text-error" :size="18" name="outline-14" />
-              {{ confirmDialog.title }}
-            </h3>
-            <UiButton :disabled="isOperating" @click="closeConfirmDialog" variant="ghost" icon-only :aria-label="$t('common.close')">
-              <Icon  :size="16" name="outline-9" />
+      <!-- Confirm Delete Modal -->
+      <UiModal
+        v-if="confirmDialog.show"
+        :show-close="false"
+        :close-disabled="isOperating"
+        @close="closeConfirmDialog"
+      >
+        <div class="modal-header">
+          <h3 class="modal-title">
+            <Icon class="title-icon text-error" :size="18" name="outline-14" />
+            {{ confirmDialog.title }}
+          </h3>
+          <UiButton
+            :disabled="isOperating"
+            @click="closeConfirmDialog"
+            variant="ghost"
+            icon-only
+            :aria-label="$t('common.close')"
+          >
+            <Icon :size="16" name="outline-9" />
+          </UiButton>
+        </div>
+        <div class="modal-body text-sm text-secondary">
+          <p>{{ confirmDialog.message }}</p>
+          <p
+            v-if="confirmDialog.detail"
+            class="mt-2 text-xs text-tertiary break-all font-mono bg-black bg-opacity-20 p-2 rounded"
+          >
+            {{ confirmDialog.detail }}
+          </p>
+          <div class="action-footer mt-4">
+            <UiButton :disabled="isOperating" @click="closeConfirmDialog" variant="secondary">
+              {{ $t('common.cancel') }}
+            </UiButton>
+            <UiButton
+              :class="{ 'danger': confirmDialog.isDanger }"
+              :disabled="isOperating"
+              @click="executeConfirmedAction"
+              variant="danger"
+            >
+              <span v-if="isOperating" class="spinner-mini"></span>
+              <span>{{ $t('common.confirm') }}</span>
             </UiButton>
           </div>
-          <div class="modal-body text-sm text-secondary">
-            <p>{{ confirmDialog.message }}</p>
-            <p v-if="confirmDialog.detail" class="mt-2 text-xs text-tertiary break-all font-mono bg-black bg-opacity-20 p-2 rounded">
-              {{ confirmDialog.detail }}
-            </p>
-            <div class="action-footer mt-4">
-              <UiButton :disabled="isOperating" @click="closeConfirmDialog" variant="secondary">
-                {{ $t('common.cancel') }}
-              </UiButton>
-              <UiButton :class="{ 'danger': confirmDialog.isDanger }" :disabled="isOperating" @click="executeConfirmedAction" variant="danger">
-                <span v-if="isOperating" class="spinner-mini"></span>
-                <span>{{ $t('common.confirm') }}</span>
-              </UiButton>
-            </div>
-          </div>
-        </UiModal>
-  </div></div>
+        </div>
+      </UiModal>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -407,15 +457,42 @@ const icons = {
   vertical-align: middle;
 }
 
-.trash-table .col-package { padding-left: var(--space-5); }
-.col-size { width: 88px; text-align: right; white-space: nowrap; }
-.col-time { width: 112px; white-space: nowrap; }
-.col-remaining { width: 150px; white-space: nowrap; }
-.col-actions { width: 148px; white-space: nowrap; }
-.trash-table .col-actions { padding-right: var(--space-5); }
-.col-time time { display: flex; flex-direction: column; gap: 2px; font-variant-numeric: tabular-nums; }
-.time-detail { color: var(--text-tertiary); }
-.trash-table td.col-remaining { color: var(--text-secondary); font-weight: var(--font-normal); }
+.trash-table .col-package {
+  padding-left: var(--space-5);
+}
+.col-size {
+  width: 88px;
+  text-align: right;
+  white-space: nowrap;
+}
+.col-time {
+  width: 112px;
+  white-space: nowrap;
+}
+.col-remaining {
+  width: 150px;
+  white-space: nowrap;
+}
+.col-actions {
+  width: 148px;
+  white-space: nowrap;
+}
+.trash-table .col-actions {
+  padding-right: var(--space-5);
+}
+.col-time time {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-variant-numeric: tabular-nums;
+}
+.time-detail {
+  color: var(--text-tertiary);
+}
+.trash-table td.col-remaining {
+  color: var(--text-secondary);
+  font-weight: var(--font-normal);
+}
 
 .trash-table th {
   font-size: var(--text-xs);
@@ -504,21 +581,54 @@ const icons = {
   height: 14px;
   border: none;
   border-top-color: var(--text-primary);
-  border-radius: var(--radius-xl)%;
+  border-radius: var(--radius-xl) %;
   animation: spin 0.8s linear infinite;
   margin-right: var(--space-2);
 }
 
 @keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
-.mt-2 { margin-top: var(--space-2); }
-.mt-4 { margin-top: var(--space-4); }
+.mt-2 {
+  margin-top: var(--space-2);
+}
+.mt-4 {
+  margin-top: var(--space-4);
+}
 
-.b2-page { display: flex; flex-direction: column; height: 100%; min-height: 0; max-width: none; margin: 0; padding: 0; gap: 0; overflow: hidden; }
-.b2-page-body { flex: 1; min-height: 0; min-width: 0; overflow: auto; padding: 20px 24px; display: flex; flex-direction: column; gap: 20px; }
-.b2-page :deep(.page-header) { width: 100%; }
-@media(max-width: 800px) { .b2-page-body { padding: 12px; } }
+.b2-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+}
+.b2-page-body {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: auto;
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.b2-page :deep(.page-header) {
+  width: 100%;
+}
+@media (max-width: 800px) {
+  .b2-page-body {
+    padding: 12px;
+  }
+}
 </style>

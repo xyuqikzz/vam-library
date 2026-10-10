@@ -4,8 +4,18 @@
       <h1 class="toolbar-title">{{ pageTitle }}</h1>
     </div>
     <div class="toolbar-right">
-      <UiButton :class="{ 'is-refreshing': isRefreshing }" :title="isRefreshing ? t('toolbar.refreshing') : t('toolbar.refresh')" :disabled="isRefreshing || isLibraryLoading" @click="handleRefresh" variant="secondary">
-        <Icon :class="{ 'spin-icon': isRefreshing || isLibraryLoading }" :size="14" name="outline-7" />
+      <UiButton
+        :class="{ 'is-refreshing': isRefreshing }"
+        :title="isRefreshing ? t('toolbar.refreshing') : t('toolbar.refresh')"
+        :disabled="isRefreshing || isLibraryLoading"
+        @click="handleRefresh"
+        variant="secondary"
+      >
+        <Icon
+          :class="{ 'spin-icon': isRefreshing || isLibraryLoading }"
+          :size="14"
+          name="outline-7"
+        />
         <span class="toolbar-btn-label">
           {{ isRefreshing || isLibraryLoading ? t('toolbar.refreshing') : t('toolbar.refresh') }}
         </span>
@@ -113,15 +123,16 @@ async function handleRefresh() {
 }
 
 @keyframes toolbar-spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .spin-icon {
   animation: toolbar-spin 1s linear infinite;
-}
-
-@media (max-width: 900px) {
 }
 
 @media (max-width: 720px) {

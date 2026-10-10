@@ -31,7 +31,7 @@ withDefaults(defineProps<Props>(), {
 }
 
 .skeleton-loader.circle {
-  border-radius: var(--radius-xl)%;
+  border-radius: var(--radius-xl) %;
 }
 
 .skeleton-loader.card {
@@ -53,7 +53,11 @@ withDefaults(defineProps<Props>(), {
 }
 
 @keyframes shimmer {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(100%); }
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
 }
 </style>

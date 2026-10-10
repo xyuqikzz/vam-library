@@ -23,19 +23,57 @@
           @invalid="$emit('invalid', $event)"
         />
 
-        <UiSwitch v-else-if="typeof value === 'boolean'" type="button" :model-value="value" :label="$t('ui.toggleSetting')" @update:model-value="updateObjectField(key, !value)" />
+        <UiSwitch
+          v-else-if="typeof value === 'boolean'"
+          type="button"
+          :model-value="value"
+          :label="$t('ui.toggleSetting')"
+          @update:model-value="updateObjectField(key, !value)"
+        />
 
-        <UiInput v-else-if="typeof value === 'number'" class="field-input number-input" type="number" :model-value="value" @input="updateObjectField(key, parseNumber(($event.target as HTMLInputElement).value, value))" />
+        <UiInput
+          v-else-if="typeof value === 'number'"
+          class="field-input number-input"
+          type="number"
+          :model-value="value"
+          @input="updateObjectField(key, parseNumber(($event.target as HTMLInputElement).value, value))"
+        />
 
-        <UiInput v-else-if="Array.isArray(value)" class="field-textarea" :model-value="formatArray(value)" spellcheck="false" @change="updateArrayField(key, ($event.target as HTMLTextAreaElement).value)" multiline />
+        <UiInput
+          v-else-if="Array.isArray(value)"
+          class="field-textarea"
+          :model-value="formatArray(value)"
+          spellcheck="false"
+          @change="updateArrayField(key, ($event.target as HTMLTextAreaElement).value)"
+          multiline
+        />
 
-        <UiInput v-else class="field-input" type="text" :model-value="stringValue(value)" @input="updateObjectField(key, ($event.target as HTMLInputElement).value)" />
+        <UiInput
+          v-else
+          class="field-input"
+          type="text"
+          :model-value="stringValue(value)"
+          @input="updateObjectField(key, ($event.target as HTMLInputElement).value)"
+        />
       </div>
     </template>
 
-    <UiInput v-else-if="Array.isArray(modelValue)" class="field-textarea root-array" :model-value="formatArray(modelValue)" spellcheck="false" @change="updateRootArray(($event.target as HTMLTextAreaElement).value)" multiline />
+    <UiInput
+      v-else-if="Array.isArray(modelValue)"
+      class="field-textarea root-array"
+      :model-value="formatArray(modelValue)"
+      spellcheck="false"
+      @change="updateRootArray(($event.target as HTMLTextAreaElement).value)"
+      multiline
+    />
 
-    <UiInput v-else class="field-input" type="text" :model-value="stringValue(modelValue)" @input="$emit('update:modelValue', ($event.target as HTMLInputElement).value)" />
+    <UiInput
+      v-else
+      class="field-input"
+      type="text"
+      :model-value="stringValue(modelValue)"
+      @input="$emit('update:modelValue', ($event.target as HTMLInputElement).value)"
+    />
   </div>
 </template>
 
@@ -305,9 +343,6 @@ function humanizeFieldKey(key: string) {
   outline: none;
 }
 
-.field-input {
-}
-
 .number-input {
   max-width: 180px;
 }
@@ -321,44 +356,6 @@ function humanizeFieldKey(key: string) {
 
 .root-array {
   min-height: 280px;
-}
-
-.field-input:focus,
-.field-textarea:focus {
-}
-
-.toggle-switch {
-  position: relative;
-  width: 44px;
-  height: 24px;
-  border: none;
-  border-radius: var(--radius-full);
-  background: var(--bg-hover);
-  cursor: pointer;
-  transition:
-    background var(--duration-base) var(--ease),
-    border-color var(--duration-base) var(--ease);
-}
-
-.toggle-switch.on {
-  border-color: var(--accent-primary);
-  background: var(--accent-primary);
-}
-
-.toggle-thumb {
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 18px;
-  height: 18px;
-  border-radius: var(--radius-xl)%;
-  background: var(--text-primary);
-  box-shadow: none;
-  transition: transform var(--duration-base) var(--ease);
-}
-
-.toggle-switch.on .toggle-thumb {
-  transform: translateX(20px);
 }
 
 @media (max-width: 760px) {

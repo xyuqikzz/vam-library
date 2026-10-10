@@ -1,47 +1,87 @@
 <template>
-<div class="appearances-view animate-fadeIn b2-page"><PageHeader :title="$t('sidebar.appearances')" ><template #filters><nav class="preset-type-tabs" :aria-label="t('gameContent.presetType')">
-      <UiChip v-for="kind in presetKinds" :key="kind" :class="{ active: presetKind === kind }" :aria-pressed="presetKind === kind" :disabled="managerBusy" @click="selectPresetKind(kind)" :selected="presetKind === kind">
-        {{ t(`gameContent.presetTypes.${kind}`) }}
-      </UiChip>
-    </nav><div class="content-tabs">
-      <UiChip :class="{ active: contentTab === 'files' }" :aria-pressed="contentTab === 'files'" :disabled="managerBusy" @click="contentTab = 'files'" :selected="contentTab === 'files'">{{ t('gameContent.presetFiles') }}</UiChip>
-      <UiChip :class="{ active: contentTab === 'packages' }" :aria-pressed="contentTab === 'packages'" :disabled="managerBusy" @click="contentTab = 'packages'" :selected="contentTab === 'packages'">{{ t('gameContent.packageView') }}</UiChip>
-    </div></template></PageHeader><div class="b2-page-body">
-
-
-    <GameContentManager v-show="contentTab === 'files'" :key="presetKind" :kind="presetKind"
-      @loaded="presetPackageIds = new Set($event)" @busy-change="managerBusy = $event" />
-    <ResourceDisplay
-      v-if="contentTab === 'packages'"
-      :packages="sortedPresets"
-      :view-mode="viewMode"
-      :result-count-label="t('gameContent.packageCount', { count: filteredPresets.length })"
-      :empty-title="t('gameContent.noPresetPackages', { type: t(`gameContent.presetTypes.${presetKind}`) })"
-      :empty-description="t('gameContent.empty')"
-      empty-icon="M12 8a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM5 20c0-3.866 3.134-7 7-7s7 3.134 7 7"
-      @update:view-mode="viewMode = $event"
-    >
-      <template #actions>
-        <UiButton :disabled="isScanning || !vamRootPath" @click="handleScan" variant="primary" size="lg">
-          <Icon  :size="14" name="outline-7" />
-          <span>{{ isScanning ? t('toolbar.scanning') : t('packages.scan') }}</span>
-        </UiButton>
-        <div class="sort-dropdown">
-          <select v-model="sortBy" class="sort-select">
-            <option value="name">{{ t('packages.sortByName') }}</option>
-            <option value="size">{{ t('packages.sortBySize') }}</option>
-            <option value="creator">{{ t('packages.sortByCreator') }}</option>
-          </select>
+  <div class="appearances-view animate-fadeIn b2-page">
+    <PageHeader :title="$t('sidebar.appearances')">
+      <template #filters>
+        <nav class="preset-type-tabs" :aria-label="t('gameContent.presetType')">
+          <UiChip
+            v-for="kind in presetKinds"
+            :key="kind"
+            :class="{ active: presetKind === kind }"
+            :aria-pressed="presetKind === kind"
+            :disabled="managerBusy"
+            @click="selectPresetKind(kind)"
+            :selected="presetKind === kind"
+          >
+            {{ t(`gameContent.presetTypes.${kind}`) }}
+          </UiChip>
+        </nav>
+        <div class="content-tabs">
+          <UiChip
+            :class="{ active: contentTab === 'files' }"
+            :aria-pressed="contentTab === 'files'"
+            :disabled="managerBusy"
+            @click="contentTab = 'files'"
+            :selected="contentTab === 'files'"
+          >
+            {{ t('gameContent.presetFiles') }}
+          </UiChip>
+          <UiChip
+            :class="{ active: contentTab === 'packages' }"
+            :aria-pressed="contentTab === 'packages'"
+            :disabled="managerBusy"
+            @click="contentTab = 'packages'"
+            :selected="contentTab === 'packages'"
+          >
+            {{ t('gameContent.packageView') }}
+          </UiChip>
         </div>
       </template>
-      <template #empty-action>
-        <UiButton @click="goToSettings" variant="secondary">
-          <Icon  :size="16" name="outline-15" />
-          {{ t('packages.selectDirectory') }}
-        </UiButton>
-      </template>
-    </ResourceDisplay>
-  </div></div>
+    </PageHeader>
+    <div class="b2-page-body">
+      <GameContentManager
+        v-show="contentTab === 'files'"
+        :key="presetKind"
+        :kind="presetKind"
+        @loaded="presetPackageIds = new Set($event)"
+        @busy-change="managerBusy = $event"
+      />
+      <ResourceDisplay
+        v-if="contentTab === 'packages'"
+        :packages="sortedPresets"
+        :view-mode="viewMode"
+        :result-count-label="t('gameContent.packageCount', { count: filteredPresets.length })"
+        :empty-title="t('gameContent.noPresetPackages', { type: t(`gameContent.presetTypes.${presetKind}`) })"
+        :empty-description="t('gameContent.empty')"
+        empty-icon="M12 8a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM5 20c0-3.866 3.134-7 7-7s7 3.134 7 7"
+        @update:view-mode="viewMode = $event"
+      >
+        <template #actions>
+          <UiButton
+            :disabled="isScanning || !vamRootPath"
+            @click="handleScan"
+            variant="primary"
+            size="lg"
+          >
+            <Icon :size="14" name="outline-7" />
+            <span>{{ isScanning ? t('toolbar.scanning') : t('packages.scan') }}</span>
+          </UiButton>
+          <div class="sort-dropdown">
+            <select v-model="sortBy" class="sort-select">
+              <option value="name">{{ t('packages.sortByName') }}</option>
+              <option value="size">{{ t('packages.sortBySize') }}</option>
+              <option value="creator">{{ t('packages.sortByCreator') }}</option>
+            </select>
+          </div>
+        </template>
+        <template #empty-action>
+          <UiButton @click="goToSettings" variant="secondary">
+            <Icon :size="16" name="outline-15" />
+            {{ t('packages.selectDirectory') }}
+          </UiButton>
+        </template>
+      </ResourceDisplay>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -144,9 +184,16 @@ function goToSettings() {
   position: relative;
   overflow: hidden;
 }
-.appearances-view > .game-content { flex: 1; min-height: 0; overflow: hidden; }
-.appearances-view > .resource-display { flex: 1; min-height: 0; height: auto; }
-
+.appearances-view > .game-content {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.appearances-view > .resource-display {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+}
 
 .sort-select {
   height: 30px;
@@ -160,10 +207,37 @@ function goToSettings() {
   transition: border-color var(--duration-fast) var(--ease);
 }
 
-.sort-select:focus { border-color: var(--accent-primary); }
+.sort-select:focus {
+  border-color: var(--accent-primary);
+}
 
-.b2-page { display: flex; flex-direction: column; height: 100%; min-height: 0; max-width: none; margin: 0; padding: 0; gap: 0; overflow: hidden; }
-.b2-page-body { flex: 1; min-height: 0; min-width: 0; overflow: auto; padding: 20px 24px; display: flex; flex-direction: column; gap: 20px; }
-.b2-page :deep(.page-header) { width: 100%; }
-@media(max-width: 800px) { .b2-page-body { padding: 12px; } }
+.b2-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+}
+.b2-page-body {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: auto;
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.b2-page :deep(.page-header) {
+  width: 100%;
+}
+@media (max-width: 800px) {
+  .b2-page-body {
+    padding: 12px;
+  }
+}
 </style>

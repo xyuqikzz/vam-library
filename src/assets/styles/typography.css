@@ -3,7 +3,12 @@
    ============================================================ */
 
 /* ── Headings ────────────────────────────────────────────────── */
-h1, h2, h3, h4, h5, h6 {
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
   font-weight: var(--font-semibold);
   line-height: var(--leading-tight);
   color: var(--text-primary);
@@ -42,31 +47,73 @@ h6 {
 }
 
 /* ── Size Classes ────────────────────────────────────────────── */
-.text-xs   { font-size: var(--text-xs); }
-.text-sm   { font-size: var(--text-sm); }
-.text-base { font-size: var(--text-base); }
-.text-md   { font-size: var(--text-md); }
-.text-lg   { font-size: var(--text-lg); }
-.text-xl   { font-size: var(--text-xl); }
-.text-2xl  { font-size: var(--text-2xl); }
-.text-3xl  { font-size: var(--text-3xl); }
+.text-xs {
+  font-size: var(--text-xs);
+}
+.text-sm {
+  font-size: var(--text-sm);
+}
+.text-base {
+  font-size: var(--text-base);
+}
+.text-md {
+  font-size: var(--text-md);
+}
+.text-lg {
+  font-size: var(--text-lg);
+}
+.text-xl {
+  font-size: var(--text-xl);
+}
+.text-2xl {
+  font-size: var(--text-2xl);
+}
+.text-3xl {
+  font-size: var(--text-3xl);
+}
 
 /* ── Weight Classes ──────────────────────────────────────────── */
-.font-normal   { font-weight: var(--font-normal); }
-.font-medium   { font-weight: var(--font-medium); }
-.font-semibold { font-weight: var(--font-semibold); }
-.font-bold     { font-weight: var(--font-bold); }
-.font-heavy    { font-weight: var(--font-heavy); }
+.font-normal {
+  font-weight: var(--font-normal);
+}
+.font-medium {
+  font-weight: var(--font-medium);
+}
+.font-semibold {
+  font-weight: var(--font-semibold);
+}
+.font-bold {
+  font-weight: var(--font-bold);
+}
+.font-heavy {
+  font-weight: var(--font-heavy);
+}
 
 /* ── Color Classes ───────────────────────────────────────────── */
-.text-primary   { color: var(--text-primary); }
-.text-secondary { color: var(--text-secondary); }
-.text-tertiary  { color: var(--text-tertiary); }
-.text-disabled  { color: var(--text-disabled); }
-.text-accent    { color: var(--accent-primary); }
-.text-success   { color: var(--color-success); }
-.text-warning   { color: var(--color-warning); }
-.text-error     { color: var(--color-error); }
+.text-primary {
+  color: var(--text-primary);
+}
+.text-secondary {
+  color: var(--text-secondary);
+}
+.text-tertiary {
+  color: var(--text-tertiary);
+}
+.text-disabled {
+  color: var(--text-disabled);
+}
+.text-accent {
+  color: var(--accent-primary);
+}
+.text-success {
+  color: var(--color-success);
+}
+.text-warning {
+  color: var(--color-warning);
+}
+.text-error {
+  color: var(--color-error);
+}
 
 /* ── Mono ────────────────────────────────────────────────────── */
 .font-mono {

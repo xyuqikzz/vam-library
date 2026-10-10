@@ -1,137 +1,323 @@
 <template>
-<div class="ingestion-view b2-page"><PageHeader :title="$t('ingestion.title')" :subtitle="t(sourceFiles.length ? 'ingestion.externalDescription' : 'ingestion.description')"><template #actions><UiButton :disabled="sourceBusy || (!sourceFiles.length && !sourceDir.trim()) || !targetDir" @click="handlePreview" variant="primary" size="lg">
-        {{ scanning ? t('ingestion.scanning') : t('ingestion.preview') }}
-      </UiButton></template></PageHeader><div class="b2-page-body">
-
-
-    <Transition name="status">
-      <section v-if="busy" ref="progressPanel" class="progress-panel glass-panel" role="status" aria-live="polite">
-        <div class="progress-heading">
-          <div class="progress-title"><span class="progress-spinner" aria-hidden="true" /><h3>{{ t(executing ? 'ingestion.executing' : 'ingestion.scanning') }}</h3></div>
-          <span v-if="executing" class="progress-percentage">{{ progressPercent }}%</span>
-        </div>
-        <progress :value="executing ? processedGroups : undefined" :max="Math.max(progress?.total || 0, 1)" :aria-label="t(executing ? 'ingestion.executing' : 'ingestion.scanning')" />
-        <p v-if="executing && progress" class="text-secondary">{{ t('ingestion.result', progress) }}</p>
-      </section>
-    </Transition>
-
-    <section class="config-panel glass-panel">
-      <template v-if="sourceFiles.length">
-        <span class="field-label">{{ t('ingestion.externalFiles', { count: sourceFiles.length }) }}</span>
-        <ul class="selected-files"><li v-for="path in sourceFiles" :key="path">{{ path }}</li></ul>
-        <UiButton :disabled="sourceBusy" @click="chooseSource()" variant="secondary">{{ t('ingestion.externalChooseFolder') }}</UiButton>
+  <div class="ingestion-view b2-page">
+    <PageHeader
+      :title="$t('ingestion.title')"
+      :subtitle="t(sourceFiles.length ? 'ingestion.externalDescription' : 'ingestion.description')"
+    >
+      <template #actions>
+        <UiButton
+          :disabled="sourceBusy || (!sourceFiles.length && !sourceDir.trim()) || !targetDir"
+          @click="handlePreview"
+          variant="primary"
+          size="lg"
+        >
+          {{ scanning ? t('ingestion.scanning') : t('ingestion.preview') }}
+        </UiButton>
       </template>
-      <label v-else for="ingestion-source">{{ t('ingestion.source') }}</label>
-      <div v-if="!sourceFiles.length" class="directory-row">
-        <div ref="sourcePicker" class="source-picker" @focusout="handleSourceFocusOut">
-          <UiInput id="ingestion-source" ref="sourceInput" v-model="sourceDir" :disabled="sourceBusy" :placeholder="t('ingestion.sourcePlaceholder')" role="combobox" aria-autocomplete="none" aria-haspopup="listbox" :aria-expanded="sourceMenuOpen" aria-controls="ingestion-common-paths" :aria-activedescendant="sourceMenuOpen && activePathIndex >= 0 ? `ingestion-common-path-${activePathIndex}` : undefined" autocomplete="off" @focus="openSourceMenu" @click="openSourceMenu" @keydown="handleSourceKeydown" />
-          <div v-if="sourceMenuOpen" class="source-dropdown">
-            <p class="source-dropdown-title">{{ t('ingestion.commonPaths') }}</p>
-            <div id="ingestion-common-paths" class="common-path-list" role="listbox" :aria-label="t('ingestion.commonPaths')">
-              <UiButton v-for="(path, index) in ingestionStore.commonPaths" :id="`ingestion-common-path-${index}`" :key="path" class="common-path-option" :class="{ active: activePathIndex === index }" role="option" :aria-selected="sourceDir === path" :title="path" @mouseenter="activePathIndex = index" @click="selectCommonPath(path)" variant="secondary">
-                <Icon  :size="18" name="outline-27" />
-                <span>{{ path }}</span>
-                <Icon v-if="sourceDir === path" class="common-path-check" :size="16" name="outline-28" />
+    </PageHeader>
+    <div class="b2-page-body">
+      <Transition name="status">
+        <section
+          v-if="busy"
+          ref="progressPanel"
+          class="progress-panel glass-panel"
+          role="status"
+          aria-live="polite"
+        >
+          <div class="progress-heading">
+            <div class="progress-title">
+              <span class="progress-spinner" aria-hidden="true" />
+              <h3>{{ t(executing ? 'ingestion.executing' : 'ingestion.scanning') }}</h3>
+            </div>
+            <span v-if="executing" class="progress-percentage">{{ progressPercent }}%</span>
+          </div>
+          <progress
+            :value="executing ? processedGroups : undefined"
+            :max="Math.max(progress?.total || 0, 1)"
+            :aria-label="t(executing ? 'ingestion.executing' : 'ingestion.scanning')"
+          />
+          <p v-if="executing && progress" class="text-secondary">
+            {{ t('ingestion.result', progress) }}
+          </p>
+        </section>
+      </Transition>
+
+      <section class="config-panel glass-panel">
+        <template v-if="sourceFiles.length">
+          <span class="field-label">
+            {{ t('ingestion.externalFiles', { count: sourceFiles.length }) }}
+          </span>
+          <ul class="selected-files">
+            <li v-for="path in sourceFiles" :key="path">{{ path }}</li>
+          </ul>
+          <UiButton :disabled="sourceBusy" @click="chooseSource()" variant="secondary">
+            {{ t('ingestion.externalChooseFolder') }}
+          </UiButton>
+        </template>
+        <label v-else for="ingestion-source">{{ t('ingestion.source') }}</label>
+        <div v-if="!sourceFiles.length" class="directory-row">
+          <div ref="sourcePicker" class="source-picker" @focusout="handleSourceFocusOut">
+            <UiInput
+              id="ingestion-source"
+              ref="sourceInput"
+              v-model="sourceDir"
+              :disabled="sourceBusy"
+              :placeholder="t('ingestion.sourcePlaceholder')"
+              role="combobox"
+              aria-autocomplete="none"
+              aria-haspopup="listbox"
+              :aria-expanded="sourceMenuOpen"
+              aria-controls="ingestion-common-paths"
+              :aria-activedescendant="sourceMenuOpen && activePathIndex >= 0 ? `ingestion-common-path-${activePathIndex}` : undefined"
+              autocomplete="off"
+              @focus="openSourceMenu"
+              @click="openSourceMenu"
+              @keydown="handleSourceKeydown"
+            />
+            <div v-if="sourceMenuOpen" class="source-dropdown">
+              <p class="source-dropdown-title">{{ t('ingestion.commonPaths') }}</p>
+              <div
+                id="ingestion-common-paths"
+                class="common-path-list"
+                role="listbox"
+                :aria-label="t('ingestion.commonPaths')"
+              >
+                <UiButton
+                  v-for="(path, index) in ingestionStore.commonPaths"
+                  :id="`ingestion-common-path-${index}`"
+                  :key="path"
+                  class="common-path-option"
+                  :class="{ active: activePathIndex === index }"
+                  role="option"
+                  :aria-selected="sourceDir === path"
+                  :title="path"
+                  @mouseenter="activePathIndex = index"
+                  @click="selectCommonPath(path)"
+                  variant="secondary"
+                >
+                  <Icon :size="18" name="outline-27" />
+                  <span>{{ path }}</span>
+                  <Icon
+                    v-if="sourceDir === path"
+                    class="common-path-check"
+                    :size="16"
+                    name="outline-28"
+                  />
+                </UiButton>
+              </div>
+              <UiButton class="add-common-path" @click="chooseSource(true)" variant="secondary">
+                <Icon :size="18" name="outline-29" />
+                {{ t('ingestion.addCommonPath') }}
+              </UiButton>
+              <p v-if="sourceMenuError" class="source-dropdown-error error-message" role="alert">
+                {{ sourceMenuError }}
+              </p>
+            </div>
+          </div>
+          <UiButton :disabled="sourceBusy" @click="chooseSource()" variant="secondary">
+            {{ t('settings.browse') }}
+          </UiButton>
+        </div>
+        <div class="target-directory">
+          <span class="field-label">{{ t('ingestion.target') }}</span>
+          <p class="target-path">{{ targetDir || t('ingestion.noGame') }}</p>
+        </div>
+        <fieldset :disabled="busy" class="rules">
+          <legend>{{ t('ingestion.rule') }}</legend>
+          <div class="rule-options">
+            <label
+              v-for="rule in rules"
+              :key="rule.value"
+              class="rule-option"
+              :class="{ selected: mode === rule.value, 'custom-rule': rule.value === 'custom' }"
+            >
+              <input
+                v-model="mode"
+                type="radio"
+                name="ingestion-rule"
+                :value="rule.value"
+                :aria-labelledby="`ingestion-rule-${rule.value}`"
+                :aria-describedby="`ingestion-rule-help-${rule.value}`"
+              />
+              <span class="rule-icon" aria-hidden="true">
+                <Icon :size="24" :path="rule.icon" />
+              </span>
+              <span class="rule-content">
+                <span :id="`ingestion-rule-${rule.value}`" class="rule-title">
+                  {{ t(rule.label) }}
+                </span>
+                <span :id="`ingestion-rule-help-${rule.value}`" class="rule-description">
+                  {{ t(`ingestion.ruleHelp.${rule.value}`) }}
+                </span>
+              </span>
+            </label>
+          </div>
+        </fieldset>
+        <template v-if="mode === 'custom'">
+          <label for="ingestion-custom">{{ t('ingestion.customFolder') }}</label>
+          <UiInput
+            id="ingestion-custom"
+            v-model="customFolder"
+            :disabled="busy"
+            :placeholder="t('ingestion.customPlaceholder')"
+          />
+        </template>
+        <div class="policy-notes">
+          <p class="policy-note">{{ t('ingestion.policy') }}</p>
+          <p class="dependency-note">{{ t('ingestion.dependencyNote') }}</p>
+        </div>
+      </section>
+
+      <p v-if="error" class="error-message" role="alert">{{ error }}</p>
+      <UiModal
+        ref="previewDialog"
+        aria-labelledby="ingestion-preview-title"
+        aria-describedby="ingestion-preview-summary"
+        @cancel.prevent="cancelPreview"
+        @close="handlePreviewClose"
+        imperative
+        :show-close="false"
+      >
+        <template v-if="preview">
+          <div class="preview-header">
+            <div>
+              <h3 id="ingestion-preview-title">{{ t('ingestion.previewTitle') }}</h3>
+              <p id="ingestion-preview-summary" class="text-secondary">
+                {{ t('ingestion.summary', { total: preview.total_files, moved: preview.move_count, retired: preview.retire_count, skipped: preview.skipped }) }}
+              </p>
+            </div>
+          </div>
+          <div class="preview-body">
+            <p v-if="!preview.groups.length" class="empty-message">{{ t('ingestion.empty') }}</p>
+            <div v-else class="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>{{ t('ingestion.package') }}</th>
+                    <th>{{ t('ingestion.action') }}</th>
+                    <th>{{ t('ingestion.paths') }}</th>
+                    <th>{{ t('ingestion.retired') }}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="group in visibleGroups" :key="group.source">
+                    <td class="package-cell" :title="group.package_id">{{ group.package_id }}</td>
+                    <td class="action-cell">
+                      <span class="action-tag" :class="{ incoming: group.incoming }">
+                        {{ t(group.incoming ? 'ingestion.move' : 'ingestion.keep') }}
+                      </span>
+                    </td>
+                    <td class="path-cell">
+                      <div :title="group.source">{{ group.source }}</div>
+                      <div v-if="group.incoming" class="text-secondary" :title="group.destination">
+                        → {{ group.destination }}
+                      </div>
+                    </td>
+                    <td>
+                      <details v-if="group.retired.length">
+                        <summary>
+                          {{ t('ingestion.retiredCount', { count: group.retired.length }) }}
+                        </summary>
+                        <div v-for="file in group.retired" :key="file.path" class="retired-path">
+                          {{ file.path }}
+                        </div>
+                      </details>
+                      <span v-else>—</span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div v-if="pageCount > 1" class="pagination">
+              <UiButton :disabled="page === 1" @click="page--" variant="secondary">
+                {{ t('common.back') }}
+              </UiButton>
+              <span>{{ page }} / {{ pageCount }}</span>
+              <UiButton :disabled="page === pageCount" @click="page++" variant="secondary">
+                {{ t('common.next') }}
               </UiButton>
             </div>
-            <UiButton class="add-common-path" @click="chooseSource(true)" variant="secondary">
-              <Icon  :size="18" name="outline-29" />
-              {{ t('ingestion.addCommonPath') }}
+            <details v-if="preview.warnings.length" class="warnings">
+              <summary>{{ t('ingestion.warnings', { count: preview.warnings.length }) }}</summary>
+              <p v-for="(warning, index) in preview.warnings" :key="index">{{ warning }}</p>
+            </details>
+          </div>
+          <div class="preview-actions">
+            <UiButton autofocus @click="cancelPreview" variant="secondary">
+              {{ t('common.cancel') }}
             </UiButton>
-            <p v-if="sourceMenuError" class="source-dropdown-error error-message" role="alert">{{ sourceMenuError }}</p>
+            <UiButton
+              :disabled="sourceBusy || consumed || !preview.groups.length"
+              @click="handleExecute"
+              variant="primary"
+              size="lg"
+            >
+              {{ t('ingestion.execute') }}
+            </UiButton>
           </div>
-        </div>
-        <UiButton :disabled="sourceBusy" @click="chooseSource()" variant="secondary">{{ t('settings.browse') }}</UiButton>
-      </div>
-      <div class="target-directory">
-        <span class="field-label">{{ t('ingestion.target') }}</span>
-        <p class="target-path">{{ targetDir || t('ingestion.noGame') }}</p>
-      </div>
-      <fieldset :disabled="busy" class="rules">
-        <legend>{{ t('ingestion.rule') }}</legend>
-        <div class="rule-options">
-          <label v-for="rule in rules" :key="rule.value" class="rule-option" :class="{ selected: mode === rule.value, 'custom-rule': rule.value === 'custom' }">
-            <input v-model="mode" type="radio" name="ingestion-rule" :value="rule.value" :aria-labelledby="`ingestion-rule-${rule.value}`" :aria-describedby="`ingestion-rule-help-${rule.value}`" />
-            <span class="rule-icon" aria-hidden="true"><Icon  :size="24" :path="rule.icon" /></span>
-            <span class="rule-content">
-              <span :id="`ingestion-rule-${rule.value}`" class="rule-title">{{ t(rule.label) }}</span>
-              <span :id="`ingestion-rule-help-${rule.value}`" class="rule-description">{{ t(`ingestion.ruleHelp.${rule.value}`) }}</span>
-            </span>
-          </label>
-        </div>
-      </fieldset>
-      <template v-if="mode === 'custom'">
-        <label for="ingestion-custom">{{ t('ingestion.customFolder') }}</label>
-        <UiInput id="ingestion-custom" v-model="customFolder" :disabled="busy" :placeholder="t('ingestion.customPlaceholder')" />
-      </template>
-      <div class="policy-notes">
-        <p class="policy-note">{{ t('ingestion.policy') }}</p>
-        <p class="dependency-note">{{ t('ingestion.dependencyNote') }}</p>
-      </div>
-    </section>
+        </template>
+      </UiModal>
 
-    <p v-if="error" class="error-message" role="alert">{{ error }}</p>
-    <UiModal ref="previewDialog" aria-labelledby="ingestion-preview-title" aria-describedby="ingestion-preview-summary" @cancel.prevent="cancelPreview" @close="handlePreviewClose" imperative :show-close="false">
-      <template v-if="preview">
-        <div class="preview-header">
+      <UiModal
+        ref="resultDialog"
+        aria-labelledby="ingestion-result-title"
+        aria-describedby="ingestion-result-summary"
+        imperative
+        :show-close="false"
+      >
+        <div class="result-heading">
+          <span class="result-icon" :class="{ incomplete: runIncomplete }" aria-hidden="true">
+            <Icon
+              :size="24"
+              :path="runIncomplete ? 'M12 8v5m0 3h.01M10.3 3.9 2.2 18a2 2 0 0 0 1.7 3h16.2a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z' : 'M5 12l4 4L19 6'"
+            />
+          </span>
+          <h3 id="ingestion-result-title">
+            {{ t(runIncomplete ? 'ingestion.incomplete' : 'ingestion.finished') }}
+          </h3>
+        </div>
+        <p id="ingestion-result-summary" class="text-secondary">
+          {{ status ? t('ingestion.result', status) : error }}
+        </p>
+        <dl v-if="status" class="result-stats">
           <div>
-            <h3 id="ingestion-preview-title">{{ t('ingestion.previewTitle') }}</h3>
-            <p id="ingestion-preview-summary" class="text-secondary">{{ t('ingestion.summary', { total: preview.total_files, moved: preview.move_count, retired: preview.retire_count, skipped: preview.skipped }) }}</p>
+            <dt>{{ t('ingestion.imported') }}</dt>
+            <dd>{{ status.moved }}</dd>
           </div>
-        </div>
-        <div class="preview-body">
-          <p v-if="!preview.groups.length" class="empty-message">{{ t('ingestion.empty') }}</p>
-          <div v-else class="table-scroll">
-            <table>
-              <thead><tr><th>{{ t('ingestion.package') }}</th><th>{{ t('ingestion.action') }}</th><th>{{ t('ingestion.paths') }}</th><th>{{ t('ingestion.retired') }}</th></tr></thead>
-              <tbody>
-                <tr v-for="group in visibleGroups" :key="group.source">
-                  <td class="package-cell" :title="group.package_id">{{ group.package_id }}</td>
-                  <td class="action-cell"><span class="action-tag" :class="{ incoming: group.incoming }">{{ t(group.incoming ? 'ingestion.move' : 'ingestion.keep') }}</span></td>
-                  <td class="path-cell"><div :title="group.source">{{ group.source }}</div><div v-if="group.incoming" class="text-secondary" :title="group.destination">→ {{ group.destination }}</div></td>
-                  <td><details v-if="group.retired.length"><summary>{{ t('ingestion.retiredCount', { count: group.retired.length }) }}</summary><div v-for="file in group.retired" :key="file.path" class="retired-path">{{ file.path }}</div></details><span v-else>—</span></td>
-                </tr>
-              </tbody>
-            </table>
+          <div>
+            <dt>{{ t('ingestion.recycled') }}</dt>
+            <dd>{{ status.retired }}</dd>
           </div>
-          <div v-if="pageCount > 1" class="pagination">
-            <UiButton :disabled="page === 1" @click="page--" variant="secondary">{{ t('common.back') }}</UiButton>
-            <span>{{ page }} / {{ pageCount }}</span>
-            <UiButton :disabled="page === pageCount" @click="page++" variant="secondary">{{ t('common.next') }}</UiButton>
+          <div :class="{ 'failed-stat': status.failed > 0 }">
+            <dt>{{ t('migration.failed') }}</dt>
+            <dd>{{ status.failed }}</dd>
           </div>
-          <details v-if="preview.warnings.length" class="warnings"><summary>{{ t('ingestion.warnings', { count: preview.warnings.length }) }}</summary><p v-for="(warning, index) in preview.warnings" :key="index">{{ warning }}</p></details>
+        </dl>
+        <div v-if="status?.errors.length || (status && error)" class="result-errors" role="alert">
+          <p v-if="error" class="error-message">{{ error }}</p>
+          <p v-for="(message, index) in status?.errors" :key="index" class="error-message">
+            {{ message }}
+          </p>
         </div>
-        <div class="preview-actions">
-          <UiButton autofocus @click="cancelPreview" variant="secondary">{{ t('common.cancel') }}</UiButton>
-          <UiButton :disabled="sourceBusy || consumed || !preview.groups.length" @click="handleExecute" variant="primary" size="lg">{{ t('ingestion.execute') }}</UiButton>
+        <p class="result-help text-secondary">
+          {{ t(result ? 'ingestion.afterRun' : 'ingestion.retryAfterFailure') }}
+        </p>
+        <div class="result-actions">
+          <RouterLink
+            v-if="status?.retired"
+            to="/trash"
+            class="btn btn-secondary"
+            @click="resultDialog?.close()"
+          >
+            {{ t('ingestion.openTrash') }}
+          </RouterLink>
+          <UiButton autofocus @click="resultDialog?.close()" variant="primary" size="lg">
+            {{ t('common.confirm') }}
+          </UiButton>
         </div>
-      </template>
-    </UiModal>
-
-    <UiModal ref="resultDialog" aria-labelledby="ingestion-result-title" aria-describedby="ingestion-result-summary" imperative :show-close="false">
-      <div class="result-heading">
-        <span class="result-icon" :class="{ incomplete: runIncomplete }" aria-hidden="true">
-          <Icon  :size="24" :path="runIncomplete ? 'M12 8v5m0 3h.01M10.3 3.9 2.2 18a2 2 0 0 0 1.7 3h16.2a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z' : 'M5 12l4 4L19 6'" />
-        </span>
-        <h3 id="ingestion-result-title">{{ t(runIncomplete ? 'ingestion.incomplete' : 'ingestion.finished') }}</h3>
-      </div>
-      <p id="ingestion-result-summary" class="text-secondary">{{ status ? t('ingestion.result', status) : error }}</p>
-      <dl v-if="status" class="result-stats">
-        <div><dt>{{ t('ingestion.imported') }}</dt><dd>{{ status.moved }}</dd></div>
-        <div><dt>{{ t('ingestion.recycled') }}</dt><dd>{{ status.retired }}</dd></div>
-        <div :class="{ 'failed-stat': status.failed > 0 }"><dt>{{ t('migration.failed') }}</dt><dd>{{ status.failed }}</dd></div>
-      </dl>
-      <div v-if="status?.errors.length || (status && error)" class="result-errors" role="alert">
-        <p v-if="error" class="error-message">{{ error }}</p>
-        <p v-for="(message, index) in status?.errors" :key="index" class="error-message">{{ message }}</p>
-      </div>
-      <p class="result-help text-secondary">{{ t(result ? 'ingestion.afterRun' : 'ingestion.retryAfterFailure') }}</p>
-      <div class="result-actions">
-        <RouterLink v-if="status?.retired" to="/trash" class="btn btn-secondary" @click="resultDialog?.close()">{{ t('ingestion.openTrash') }}</RouterLink>
-        <UiButton autofocus @click="resultDialog?.close()" variant="primary" size="lg">{{ t('common.confirm') }}</UiButton>
-      </div>
-    </UiModal>
-  </div></div>
+      </UiModal>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -379,118 +565,672 @@ async function handleExecute() {
 </script>
 
 <style scoped>
-.ingestion-view { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
- .preview-header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); }
-h2 { font-size: var(--text-xl); margin-bottom: var(--space-2); }
-h3 { font-size: var(--text-base); margin-bottom: var(--space-2); }
-p { font-size: var(--text-sm); line-height: 1.7; overflow-wrap: anywhere; }
-.config-panel, .progress-panel { padding: var(--space-5); min-width: 0; border-radius: var(--radius-md); }
-.config-panel { display: flex; flex-direction: column; gap: var(--space-3); }
-.selected-files { max-height: 180px; overflow: auto; padding: var(--space-3) var(--space-5); background: var(--bg-subtle); border-radius: var(--radius-sm); font-size: var(--text-xs); line-height: 1.8; overflow-wrap: anywhere; user-select: text; }
-label, legend, .field-label { font-size: var(--text-sm); font-weight: var(--font-medium); }
-.directory-row { display: flex; align-items: center; gap: var(--space-2); }
-.source-picker { position: relative; flex: 1; min-width: 0; }
-.source-dropdown { position: absolute; top: calc(100% + var(--space-2)); left: 0; right: 0; z-index: 10; padding: var(--space-2); background: var(--bg-surface); border: none; border-radius: var(--radius-md); box-shadow: none; }
-.source-dropdown-title { padding: var(--space-1) var(--space-2) var(--space-2); color: var(--text-secondary); font-size: var(--text-xs); }
-.common-path-list { max-height: 220px; overflow: auto; }
-.common-path-option, .add-common-path { display: flex; align-items: center; gap: var(--space-2); width: 100%; min-height: 38px; padding: var(--space-2); border-radius: var(--radius-sm); text-align: left; font-size: var(--text-sm); }
-.common-path-option > svg, .add-common-path > svg { flex-shrink: 0; color: var(--accent-primary-hover); }
-.common-path-option > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.common-path-option:hover, .common-path-option.active, .add-common-path:hover { background: var(--bg-hover); }
-.common-path-option[aria-selected='true'] { background: var(--accent-subtle); }
-.common-path-option:focus-visible, .add-common-path:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: -2px; }
-.common-path-check { margin-left: auto; }
-.add-common-path { color: var(--accent-primary-hover); }
-.common-path-list:not(:empty) + .add-common-path { margin-top: var(--space-2); border-top: 1px solid var(--border-subtle); border-radius: var(--radius-none) var(--radius-none) var(--radius-sm) var(--radius-sm); }
-.source-dropdown-error { padding: var(--space-2); font-size: var(--text-xs); }
-input[type='text'], input:not([type]) { min-width: 0; width: 100%; height: 38px; padding: 9px 12px; border: 1px solid var(--border-default); border-radius: var(--radius-sm); color: var(--text-primary); background: var(--bg-input, var(--bg-base)); font-size: var(--text-sm); }
-input:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
-.target-directory { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: baseline; gap: var(--space-3); padding: var(--space-3); background: var(--bg-subtle); border-radius: var(--radius-sm); }
-.target-directory .field-label { color: var(--text-secondary); }
-.target-path { color: var(--text-primary); margin: 0; user-select: text; }
-.rules { border: none; padding: 0; margin: var(--space-3) 0 0; min-width: 0; }
-.rule-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
-legend { margin-bottom: var(--space-3); }
-.rule-option { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-3); min-height: 156px; padding: var(--space-6); border: none; background: var(--bg-subtle); border-radius: var(--radius-lg); cursor: pointer; line-height: 1.5; transition: background var(--duration-fast) var(--ease), border-color var(--duration-fast) var(--ease); }
-.rules:not(:disabled) .rule-option:hover { background: var(--bg-hover); border-color: var(--border-strong); }
-.rules:disabled .rule-option { opacity: 0.5; cursor: not-allowed; }
-.rule-option:focus-within { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
-.rule-option.selected { background: var(--accent-subtle); border-color: var(--accent-primary); }
-.rules:not(:disabled) .rule-option.selected:hover { border-color: var(--accent-primary); }
-input[type='radio'] { position: absolute; top: var(--space-6); right: var(--space-6); width: 16px; height: 16px; accent-color: var(--accent-primary); cursor: inherit; }
-.rule-icon { display: grid; place-items: center; flex-shrink: 0; width: 48px; height: 48px; border-radius: var(--radius-md); color: var(--accent-primary-hover); background: var(--accent-muted); }
-.rule-content { display: flex; flex-direction: column; gap: var(--space-2); padding-right: var(--space-4); }
-.rule-title { color: var(--text-primary); font-size: var(--text-md); font-weight: var(--font-semibold); }
-.rule-description { color: var(--text-secondary); font-size: var(--text-sm); font-weight: var(--font-normal); line-height: 1.7; }
-.custom-rule { grid-column: 1 / -1; flex-direction: row; align-items: center; min-height: 100px; }
-.policy-notes { display: grid; gap: var(--space-2); border-top: 1px solid var(--border-subtle); padding-top: var(--space-4); margin-top: var(--space-1); }
-.policy-notes p { margin: 0; color: var(--text-secondary); font-size: var(--text-xs); font-weight: var(--font-normal); line-height: 1.8; }
-.table-scroll { overflow: auto; max-height: 480px; margin-top: var(--space-4); border: none; border-radius: var(--radius-sm); }
-table { width: 100%; min-width: 680px; table-layout: fixed; border-collapse: collapse; font-size: var(--text-sm); text-align: left; }
-th, td { padding: 12px; border-bottom: 1px solid var(--border-subtle); vertical-align: top; }
-th { font-weight: var(--font-medium); color: var(--text-secondary); white-space: nowrap; position: sticky; top: 0; background: var(--bg-surface); z-index: 1; }
-th:first-child { width: 24%; }
-th:nth-child(2) { width: 100px; }
-th:last-child { width: 140px; }
-tbody tr:hover { background: var(--bg-subtle); }
-.package-cell { font-weight: var(--font-medium); }
-.action-cell { white-space: nowrap; }
-.action-tag { display: inline-block; padding: 3px 8px; border-radius: var(--radius-sm); color: var(--text-secondary); background: var(--bg-subtle); font-size: var(--text-xs); }
-.action-tag.incoming { color: var(--accent-primary-hover); background: var(--accent-muted); }
-td { overflow-wrap: anywhere; }
-.path-cell { font-size: var(--text-xs); line-height: 1.7; user-select: text; }
-.path-cell > div { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.retired-path { margin-top: var(--space-2); max-width: 300px; color: var(--text-secondary); }
-summary { cursor: pointer; }
-.warnings, .pagination, .empty-message { margin-top: var(--space-4); }
-.pagination { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-3); }
-.error-message { color: var(--color-error); white-space: pre-wrap; }
-.progress-panel { position: sticky; top: 0; z-index: 5; border-color: var(--border-accent); background: var(--bg-surface); box-shadow: none; }
-.progress-heading, .progress-title { display: flex; align-items: center; gap: var(--space-3); }
-.progress-heading { justify-content: space-between; }
-.progress-title h3 { margin: 0; }
-.progress-percentage { color: var(--accent-primary-hover); font-size: var(--text-lg); font-weight: var(--font-semibold); font-variant-numeric: tabular-nums; }
-.progress-spinner { width: 16px; height: 16px; flex-shrink: 0; border: none; border-top-color: var(--accent-primary); border-radius: var(--radius-xl)%; animation: progress-spin 0.8s linear infinite; }
-progress { display: block; width: 100%; height: 6px; margin: var(--space-3) 0; overflow: hidden; appearance: none; border: none; border-radius: var(--radius-full); background: var(--bg-elevated); accent-color: var(--accent-primary); }
-progress::-webkit-progress-bar { background: var(--bg-elevated); border-radius: var(--radius-full); }
-progress::-webkit-progress-value { background: var(--accent-primary); border-radius: var(--radius-full); transition: width var(--duration-base) var(--ease); }
-progress::-moz-progress-bar { background: var(--accent-primary); border-radius: var(--radius-full); }
-progress:indeterminate { background: var(--bg-elevated); background-size: 200% 100%; animation: progress-scan 1.4s linear infinite; }
-progress:indeterminate::-webkit-progress-bar { background: transparent; }
-.preview-dialog, .result-dialog { margin: auto; width: min(520px, calc(100vw - 48px)); max-height: calc(100vh - 64px); overflow: auto; padding: var(--space-6); color: var(--text-primary); background: var(--bg-surface); border: none; border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); }
-.preview-dialog[open], .result-dialog[open] { animation: result-enter var(--duration-base) var(--ease-out); }
-.preview-dialog::backdrop, .result-dialog::backdrop { background: var(--bg-overlay); }
-.preview-dialog { width: min(1040px, calc(100vw - 48px)); overflow: hidden; }
-.preview-dialog[open] { display: flex; flex-direction: column; }
-.preview-header { flex-shrink: 0; }
-.preview-header h3 { font-size: var(--text-lg); }
-.preview-body { min-height: 0; overflow: auto; margin-top: var(--space-4); }
-.preview-body .table-scroll { margin-top: 0; max-height: none; }
-.preview-body .empty-message { margin-top: 0; }
-.preview-actions { display: flex; flex-shrink: 0; justify-content: flex-end; gap: var(--space-2); margin-top: var(--space-5); padding-top: var(--space-4); border-top: 1px solid var(--border-subtle); }
-.result-heading { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-3); }
-.result-heading h3 { margin: 0; font-size: var(--text-lg); }
-.result-icon { display: grid; place-items: center; width: 44px; height: 44px; border-radius: var(--radius-md); color: var(--color-success); background: var(--color-success-bg); }
-.result-icon.incomplete { color: var(--color-warning); background: var(--color-warning-bg); }
-.result-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-3); margin: var(--space-5) 0; padding: var(--space-4); background: var(--bg-subtle); border-radius: var(--radius-md); }
-.result-stats dt { font-size: var(--text-xs); color: var(--text-secondary); }
-.result-stats dd { margin: var(--space-2) 0 0; font-size: var(--text-2xl); font-weight: var(--font-semibold); font-variant-numeric: tabular-nums; }
-.failed-stat dd { color: var(--color-error); }
-.result-errors { max-height: 180px; overflow: auto; padding: var(--space-3); background: var(--color-error-bg); border-radius: var(--radius-sm); user-select: text; }
-.result-errors p + p { margin-top: var(--space-2); }
-.result-help { margin-top: var(--space-4); font-size: var(--text-xs); }
-.result-actions { display: flex; justify-content: flex-end; gap: var(--space-2); margin-top: var(--space-5); }
-.status-enter-active, .status-leave-active { transition: opacity var(--duration-fast) var(--ease), transform var(--duration-fast) var(--ease); }
-.status-enter-from, .status-leave-to { opacity: 0; transform: translateY(-4px); }
-@keyframes progress-spin { to { transform: rotate(360deg); } }
-@keyframes progress-scan { to { background-position: -200% 0; } }
-@keyframes result-enter { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-@media (max-width: 800px) {  .preview-header { align-items: flex-start; flex-direction: column; } .target-directory { grid-template-columns: 1fr; gap: var(--space-1); } }
-@media (max-width: 600px) { .rule-options { grid-template-columns: 1fr; gap: var(--space-3); } .rule-option { flex-direction: row; align-items: center; min-height: 112px; padding: var(--space-4); } .rule-content { padding-right: var(--space-5); } input[type='radio'] { top: var(--space-4); right: var(--space-4); } .result-actions { flex-wrap: wrap; } }
-@media (prefers-reduced-motion: reduce) { .rule-option, progress::-webkit-progress-value, .status-enter-active, .status-leave-active { transition: none; } .progress-spinner, progress:indeterminate, .preview-dialog[open], .result-dialog[open] { animation: none; } }
+.ingestion-view {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+.preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+h2 {
+  font-size: var(--text-xl);
+  margin-bottom: var(--space-2);
+}
+h3 {
+  font-size: var(--text-base);
+  margin-bottom: var(--space-2);
+}
+p {
+  font-size: var(--text-sm);
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.config-panel,
+.progress-panel {
+  padding: var(--space-5);
+  min-width: 0;
+  border-radius: var(--radius-md);
+}
+.config-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.selected-files {
+  max-height: 180px;
+  overflow: auto;
+  padding: var(--space-3) var(--space-5);
+  background: var(--bg-subtle);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+label,
+legend,
+.field-label {
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+}
+.directory-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.source-picker {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+.source-dropdown {
+  position: absolute;
+  top: calc(100% + var(--space-2));
+  left: 0;
+  right: 0;
+  z-index: 10;
+  padding: var(--space-2);
+  background: var(--bg-surface);
+  border: none;
+  border-radius: var(--radius-md);
+  box-shadow: none;
+}
+.source-dropdown-title {
+  padding: var(--space-1) var(--space-2) var(--space-2);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+}
+.common-path-list {
+  max-height: 220px;
+  overflow: auto;
+}
+.common-path-option,
+.add-common-path {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  min-height: 38px;
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  text-align: left;
+  font-size: var(--text-sm);
+}
+.common-path-option > svg,
+.add-common-path > svg {
+  flex-shrink: 0;
+  color: var(--accent-primary-hover);
+}
+.common-path-option > span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.common-path-option:hover,
+.common-path-option.active,
+.add-common-path:hover {
+  background: var(--bg-hover);
+}
+.common-path-option[aria-selected='true'] {
+  background: var(--accent-subtle);
+}
+.common-path-option:focus-visible,
+.add-common-path:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -2px;
+}
+.common-path-check {
+  margin-left: auto;
+}
+.add-common-path {
+  color: var(--accent-primary-hover);
+}
+.common-path-list:not(:empty) + .add-common-path {
+  margin-top: var(--space-2);
+  border-top: 1px solid var(--border-subtle);
+  border-radius: var(--radius-none) var(--radius-none) var(--radius-sm) var(--radius-sm);
+}
+.source-dropdown-error {
+  padding: var(--space-2);
+  font-size: var(--text-xs);
+}
+input[type='text'],
+input:not([type]) {
+  min-width: 0;
+  width: 100%;
+  height: 38px;
+  padding: 9px 12px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  background: var(--bg-input, var(--bg-base));
+  font-size: var(--text-sm);
+}
+input:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+.target-directory {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: baseline;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  background: var(--bg-subtle);
+  border-radius: var(--radius-sm);
+}
+.target-directory .field-label {
+  color: var(--text-secondary);
+}
+.target-path {
+  color: var(--text-primary);
+  margin: 0;
+  user-select: text;
+}
+.rules {
+  border: none;
+  padding: 0;
+  margin: var(--space-3) 0 0;
+  min-width: 0;
+}
+.rule-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+legend {
+  margin-bottom: var(--space-3);
+}
+.rule-option {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  min-height: 156px;
+  padding: var(--space-6);
+  border: none;
+  background: var(--bg-subtle);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  line-height: 1.5;
+  transition:
+    background var(--duration-fast) var(--ease),
+    border-color var(--duration-fast) var(--ease);
+}
+.rules:not(:disabled) .rule-option:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+}
+.rules:disabled .rule-option {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.rule-option:focus-within {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+.rule-option.selected {
+  background: var(--accent-subtle);
+  border-color: var(--accent-primary);
+}
+.rules:not(:disabled) .rule-option.selected:hover {
+  border-color: var(--accent-primary);
+}
+input[type='radio'] {
+  position: absolute;
+  top: var(--space-6);
+  right: var(--space-6);
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent-primary);
+  cursor: inherit;
+}
+.rule-icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-md);
+  color: var(--accent-primary-hover);
+  background: var(--accent-muted);
+}
+.rule-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-right: var(--space-4);
+}
+.rule-title {
+  color: var(--text-primary);
+  font-size: var(--text-md);
+  font-weight: var(--font-semibold);
+}
+.rule-description {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: var(--font-normal);
+  line-height: 1.7;
+}
+.custom-rule {
+  grid-column: 1 / -1;
+  flex-direction: row;
+  align-items: center;
+  min-height: 100px;
+}
+.policy-notes {
+  display: grid;
+  gap: var(--space-2);
+  border-top: 1px solid var(--border-subtle);
+  padding-top: var(--space-4);
+  margin-top: var(--space-1);
+}
+.policy-notes p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  font-weight: var(--font-normal);
+  line-height: 1.8;
+}
+.table-scroll {
+  overflow: auto;
+  max-height: 480px;
+  margin-top: var(--space-4);
+  border: none;
+  border-radius: var(--radius-sm);
+}
+table {
+  width: 100%;
+  min-width: 680px;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+  text-align: left;
+}
+th,
+td {
+  padding: 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  vertical-align: top;
+}
+th {
+  font-weight: var(--font-medium);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  position: sticky;
+  top: 0;
+  background: var(--bg-surface);
+  z-index: 1;
+}
+th:first-child {
+  width: 24%;
+}
+th:nth-child(2) {
+  width: 100px;
+}
+th:last-child {
+  width: 140px;
+}
+tbody tr:hover {
+  background: var(--bg-subtle);
+}
+.package-cell {
+  font-weight: var(--font-medium);
+}
+.action-cell {
+  white-space: nowrap;
+}
+.action-tag {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  background: var(--bg-subtle);
+  font-size: var(--text-xs);
+}
+.action-tag.incoming {
+  color: var(--accent-primary-hover);
+  background: var(--accent-muted);
+}
+td {
+  overflow-wrap: anywhere;
+}
+.path-cell {
+  font-size: var(--text-xs);
+  line-height: 1.7;
+  user-select: text;
+}
+.path-cell > div {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.retired-path {
+  margin-top: var(--space-2);
+  max-width: 300px;
+  color: var(--text-secondary);
+}
+summary {
+  cursor: pointer;
+}
+.warnings,
+.pagination,
+.empty-message {
+  margin-top: var(--space-4);
+}
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-3);
+}
+.error-message {
+  color: var(--color-error);
+  white-space: pre-wrap;
+}
+.progress-panel {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  border-color: var(--border-accent);
+  background: var(--bg-surface);
+  box-shadow: none;
+}
+.progress-heading,
+.progress-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.progress-heading {
+  justify-content: space-between;
+}
+.progress-title h3 {
+  margin: 0;
+}
+.progress-percentage {
+  color: var(--accent-primary-hover);
+  font-size: var(--text-lg);
+  font-weight: var(--font-semibold);
+  font-variant-numeric: tabular-nums;
+}
+.progress-spinner {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  border: none;
+  border-top-color: var(--accent-primary);
+  border-radius: var(--radius-xl) %;
+  animation: progress-spin 0.8s linear infinite;
+}
+progress {
+  display: block;
+  width: 100%;
+  height: 6px;
+  margin: var(--space-3) 0;
+  overflow: hidden;
+  appearance: none;
+  border: none;
+  border-radius: var(--radius-full);
+  background: var(--bg-elevated);
+  accent-color: var(--accent-primary);
+}
+progress::-webkit-progress-bar {
+  background: var(--bg-elevated);
+  border-radius: var(--radius-full);
+}
+progress::-webkit-progress-value {
+  background: var(--accent-primary);
+  border-radius: var(--radius-full);
+  transition: width var(--duration-base) var(--ease);
+}
+progress::-moz-progress-bar {
+  background: var(--accent-primary);
+  border-radius: var(--radius-full);
+}
+progress:indeterminate {
+  background: var(--bg-elevated);
+  background-size: 200% 100%;
+  animation: progress-scan 1.4s linear infinite;
+}
+progress:indeterminate::-webkit-progress-bar {
+  background: transparent;
+}
+.preview-dialog,
+.result-dialog {
+  margin: auto;
+  width: min(520px, calc(100vw - 48px));
+  max-height: calc(100vh - 64px);
+  overflow: auto;
+  padding: var(--space-6);
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  border: none;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+}
+.preview-dialog[open],
+.result-dialog[open] {
+  animation: result-enter var(--duration-base) var(--ease-out);
+}
+.preview-dialog::backdrop,
+.result-dialog::backdrop {
+  background: var(--bg-overlay);
+}
+.preview-dialog {
+  width: min(1040px, calc(100vw - 48px));
+  overflow: hidden;
+}
+.preview-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+.preview-header {
+  flex-shrink: 0;
+}
+.preview-header h3 {
+  font-size: var(--text-lg);
+}
+.preview-body {
+  min-height: 0;
+  overflow: auto;
+  margin-top: var(--space-4);
+}
+.preview-body .table-scroll {
+  margin-top: 0;
+  max-height: none;
+}
+.preview-body .empty-message {
+  margin-top: 0;
+}
+.preview-actions {
+  display: flex;
+  flex-shrink: 0;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border-subtle);
+}
+.result-heading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+.result-heading h3 {
+  margin: 0;
+  font-size: var(--text-lg);
+}
+.result-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-md);
+  color: var(--color-success);
+  background: var(--color-success-bg);
+}
+.result-icon.incomplete {
+  color: var(--color-warning);
+  background: var(--color-warning-bg);
+}
+.result-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin: var(--space-5) 0;
+  padding: var(--space-4);
+  background: var(--bg-subtle);
+  border-radius: var(--radius-md);
+}
+.result-stats dt {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+.result-stats dd {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-2xl);
+  font-weight: var(--font-semibold);
+  font-variant-numeric: tabular-nums;
+}
+.failed-stat dd {
+  color: var(--color-error);
+}
+.result-errors {
+  max-height: 180px;
+  overflow: auto;
+  padding: var(--space-3);
+  background: var(--color-error-bg);
+  border-radius: var(--radius-sm);
+  user-select: text;
+}
+.result-errors p + p {
+  margin-top: var(--space-2);
+}
+.result-help {
+  margin-top: var(--space-4);
+  font-size: var(--text-xs);
+}
+.result-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-5);
+}
+.status-enter-active,
+.status-leave-active {
+  transition:
+    opacity var(--duration-fast) var(--ease),
+    transform var(--duration-fast) var(--ease);
+}
+.status-enter-from,
+.status-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+@keyframes progress-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes progress-scan {
+  to {
+    background-position: -200% 0;
+  }
+}
+@keyframes result-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (max-width: 800px) {
+  .preview-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .target-directory {
+    grid-template-columns: 1fr;
+    gap: var(--space-1);
+  }
+}
+@media (max-width: 600px) {
+  .rule-options {
+    grid-template-columns: 1fr;
+    gap: var(--space-3);
+  }
+  .rule-option {
+    flex-direction: row;
+    align-items: center;
+    min-height: 112px;
+    padding: var(--space-4);
+  }
+  .rule-content {
+    padding-right: var(--space-5);
+  }
+  input[type='radio'] {
+    top: var(--space-4);
+    right: var(--space-4);
+  }
+  .result-actions {
+    flex-wrap: wrap;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rule-option,
+  progress::-webkit-progress-value,
+  .status-enter-active,
+  .status-leave-active {
+    transition: none;
+  }
+  .progress-spinner,
+  progress:indeterminate,
+  .preview-dialog[open],
+  .result-dialog[open] {
+    animation: none;
+  }
+}
 
-.b2-page { display: flex; flex-direction: column; height: 100%; min-height: 0; max-width: none; margin: 0; padding: 0; gap: 0; overflow: hidden; }
-.b2-page-body { flex: 1; min-height: 0; min-width: 0; overflow: auto; padding: 20px 24px; display: flex; flex-direction: column; gap: 20px; }
-.b2-page :deep(.page-header) { width: 100%; }
-@media(max-width: 800px) { .b2-page-body { padding: 12px; } }
+.b2-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+}
+.b2-page-body {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: auto;
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.b2-page :deep(.page-header) {
+  width: 100%;
+}
+@media (max-width: 800px) {
+  .b2-page-body {
+    padding: 12px;
+  }
+}
 </style>

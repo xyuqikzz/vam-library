@@ -2,7 +2,7 @@
   <div class="stat-card glass-card-component" :style="{ '--stat-color': color }">
     <div class="stat-header">
       <div class="stat-icon-wrapper">
-        <Icon  :size="20" :path="icon" />
+        <Icon :size="20" :path="icon" />
       </div>
       <div v-if="trend" :class="['stat-trend', `trend-${trend}`]">
         <Icon v-if="trend === 'up'" :size="12" name="outline-4" />

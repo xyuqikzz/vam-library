@@ -34,4 +34,45 @@ const items = computed(() => [
     cls: totalIssues.value > 0 ? 'has-issues' : 'all-clear',
   },
 ])
-</script><template><div class="stats-bar"><div v-for="(item, i) in items" :key="item.label" class="stat-entry"><span class="stat-label">{{ item.label }}</span><strong class="stat-value" :class="item.cls">{{ loading ? '—' : item.value }}</strong><span class="stat-note">{{ i === 3 ? t('ui.health') : i === 2 ? t('resourceType.scene') : t('sidebar.packages') }}</span></div></div></template><style scoped>.stats-bar { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }.stat-entry { display: flex; flex-direction: column; gap: 8px; padding: 18px; border-radius: var(--radius-lg); background: var(--bg-elevated); }.stat-label { font-size: var(--text-base); color: var(--text-secondary); }.stat-value { font-size: var(--text-stat); font-weight: var(--font-heavy); line-height: 1.1; color: var(--text-primary); }.stat-value.has-issues { color: var(--color-warning); }.stat-note { font-size: var(--text-sm); color: var(--text-tertiary); }</style>
+</script><template>
+  <div class="stats-bar">
+    <div v-for="(item, i) in items" :key="item.label" class="stat-entry">
+      <span class="stat-label">{{ item.label }}</span>
+      <strong class="stat-value" :class="item.cls">{{ loading ? '—' : item.value }}</strong>
+      <span class="stat-note">
+        {{ i === 3 ? t('ui.health') : i === 2 ? t('resourceType.scene') : t('sidebar.packages') }}
+      </span>
+    </div>
+  </div>
+</template><style scoped>
+.stats-bar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 14px;
+}
+.stat-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 18px;
+  border-radius: var(--radius-lg);
+  background: var(--bg-elevated);
+}
+.stat-label {
+  font-size: var(--text-base);
+  color: var(--text-secondary);
+}
+.stat-value {
+  font-size: var(--text-stat);
+  font-weight: var(--font-heavy);
+  line-height: 1.1;
+  color: var(--text-primary);
+}
+.stat-value.has-issues {
+  color: var(--color-warning);
+}
+.stat-note {
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+}
+</style>

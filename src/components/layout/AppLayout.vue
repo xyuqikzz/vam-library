@@ -5,7 +5,9 @@
         <strong>启动遇到问题</strong>
         <p>{{ visibleStartupError }}</p>
         <div class="startup-error-actions">
-          <UiButton class="primary" @click="retryStartup" variant="primary" size="lg">重试</UiButton>
+          <UiButton class="primary" @click="retryStartup" variant="primary" size="lg">
+            重试
+          </UiButton>
           <UiButton @click="openSettings" variant="secondary">打开设置</UiButton>
         </div>
       </div>
@@ -358,5 +360,4 @@ onMounted(async () => {
   overflow-x: hidden;
   padding: 0;
 }
-
 </style>

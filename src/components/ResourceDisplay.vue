@@ -758,14 +758,608 @@ function runQueuedAction() { const pending = queuedAction.value; if (!pending ||
 watch(() => sceneActions.value?.ready, runQueuedAction)
 watch(selectedPackage, pkg => { if (!pkg) { detailsExpanded.value = false; queuedAction.value = null } else if (queuedAction.value?.id !== pkg.id) queuedAction.value = null })
 function handleCardAction(item: MenuItem) { const pkg = selectedPackage.value; if (!pkg) return; if (item.value === 'launch' || item.value === 'extract') queueSceneAction(pkg, item.value); else if (item.value === 'open') void openPackageFolder(); else if (item.value === 'copy') void copyPackageName(); else if (item.value === 'share') openShareModal(); else if (item.value === 'complete') void completeSelectedPackageDependencies(); else if (item.value === 'delete') quickDeleteSelected(true) }
+function packageShortcut(event: KeyboardEvent, pkg: PackageDisplayItem) {
+  if (event.defaultPrevented || extractingCharacter.value || (event.target as HTMLElement).closest('input, textarea, select, [contenteditable="true"]')) return
+  const action = event.ctrlKey || event.metaKey ? ({ c: 'copy', o: 'open' } as Record<string, string>)[event.key.toLowerCase()] : event.key === 'Delete' ? 'delete' : undefined
+  if (!action) return
+  const item = cardMenuItems.value.find(item => item.value === action)
+  if (!item || item.disabled) return
+  event.preventDefault()
+  event.stopPropagation()
+  if (selectedPackage.value?.id !== pkg.id) selectPackage(pkg)
+  handleCardAction(item)
+}
 function setDetailTab(value: string) { detailTab.value = value; if (['direct','sub','reverse'].includes(value) && !dependencyPanelExpanded.value[value as DependencyPanelKey]) toggleDependencyPanel(value as DependencyPanelKey) }
 function closeDetails() { if (extractingCharacter.value) return; closeImagePreview(); selectedPackage.value = null }
 function viewChanged(value: string) { if (value === 'large-card' || value === 'small-card' || value === 'list') emit('update:viewMode', value) }
 defineExpose({ selectPackage, openDetails })
 </script>
-<template><div class="resource-display"><div class="resource-browser"><slot name="browser" :select-package="selectPackage" :open-details="openDetails" :launch-package="(pkg: PackageDisplayItem) => queueSceneAction(pkg, 'launch')"><div v-if="!hideControls" class="view-controls"><span class="result-count">{{ resultCountLabel }}</span><div class="controls-right"><slot name="actions" /><UiSegmented :model-value="viewMode" :options="viewOptions" :label="t('ui.view')" icon-only @update:model-value="viewChanged" /></div></div><div v-if="packages.length" class="resource-content-area"><div class="resource-content-scrollable"><div v-if="viewMode !== 'list'" class="package-grid" :class="{ 'landscape-grid': viewMode === 'small-card' }"><div v-for="pkg in paginatedPackages" :key="pkg.id" class="package-cell"><PackageCard :item="pkg" :image="thumbnails[pkg.id]" :landscape="viewMode === 'small-card'" :selected="selectedPackage?.id === pkg.id" :missing="missingCounts?.[pkg.id]" :can-launch="pkg.resource_types.includes('scene')"  @select="selectPackage(pkg)" @details="openDetails(pkg)" @launch="queueSceneAction(pkg, 'launch')" @more="openCardMenu(pkg, $event)" @image-error="onThumbError(pkg.id)" /></div></div><div v-else class="resource-list" role="table"><div class="list-header" role="row"><span>{{ t('packages.package') }}</span><span>{{ t('packages.type') }}</span><span>{{ t('packages.size') }}</span><span>{{ t('packages.deps') }}</span><span>{{ t('ui.status') }}</span><span>{{ t('packages.importTime') }}</span></div><div v-for="pkg in paginatedPackages" :key="pkg.id" class="list-row" :class="{ selected: selectedPackage?.id === pkg.id }" role="row" @contextmenu.prevent="openCardMenu(pkg, $event)"><div class="list-package" role="cell"><button type="button" class="list-open" @click="selectPackage(pkg)" @dblclick="openDetails(pkg)" @keydown.space.prevent="openDetails(pkg)"><img v-if="thumbnails[pkg.id]" data-resource-preview :src="thumbnails[pkg.id]" :alt="getVarFileName(pkg)" @error="onThumbError(pkg.id)" /><span v-else class="list-placeholder" /><span><strong>{{ pkg.name }}</strong><small>{{ pkg.creator }} · v{{ pkg.version }}</small></span></button></div><span role="cell" class="list-type" :style="{ color: resourceColor(pkg.resource_types[0]) }">{{ resourceTypeLabel(pkg.resource_types[0] || 'other') }}</span><span role="cell">{{ formatSize(pkg.size_bytes) }}</span><span role="cell">{{ pkg.dependency_count }}</span><span role="cell" :class="{ warning: missingCounts?.[pkg.id] }">{{ missingCounts?.[pkg.id] ? t('ui.missing', { count: missingCounts[pkg.id] }) : t('ui.installed') }}</span><span role="cell">{{ formatTime(pkg.scan_time) }}</span></div></div></div></div><div v-if="packages.length" class="pagination-bar"><span class="pagination-info">{{ paginationInfo }}</span><div class="pagination-controls"><select v-model.number="pageSize" :aria-label="t('ui.perPageLabel')" class="page-size-select" @change="currentPage = 1"><option v-for="size in pageSizes" :key="size" :value="size">{{ t('ui.perPage', { count: size }) }}</option></select><UiButton size="sm" variant="ghost" icon="chevrons-left" icon-only :aria-label="t('ui.firstPage')" :disabled="currentPage <= 1" @click="currentPage = 1" /><UiButton size="sm" variant="ghost" icon="chevron-left" icon-only :aria-label="t('gameContent.previous')" :disabled="currentPage <= 1" @click="currentPage--" /><span>{{ currentPage }} / {{ totalPages }}</span><UiButton size="sm" variant="ghost" icon="chevron-right" icon-only :aria-label="t('gameContent.next')" :disabled="currentPage >= totalPages" @click="currentPage++" /><UiButton size="sm" variant="ghost" icon="chevrons-right" icon-only :aria-label="t('ui.lastPage')" :disabled="currentPage >= totalPages" @click="currentPage = totalPages" /></div></div><div v-else class="empty-wrapper"><EmptyState :icon="emptyIcon" :title="emptyTitle" :description="emptyDescription"><template v-if="$slots['empty-action']" #action><slot name="empty-action" /></template></EmptyState></div></slot></div>
-<PackageDetailModal v-if="selectedPackage" :open="detailsExpanded" :title="selectedPackage.name" :images="selectedPackageImages" :image-urls="packageImageUrls" :fallback-image="detailThumb" :busy="extractingCharacter" @close="detailsExpanded = false" @image="openImagePreview"><PackageDetailPanel :item="selectedPackage" :image="previewImageUrl || detailThumb" :active-image="previewImage?.path" :images="selectedPackageImages" :image-urls="packageImageUrls" :expanded="detailsExpanded" :busy="extractingCharacter" :dependencies="directDependencyRows" :missing="incompleteDependencyCount" :loading="dependencyRelationsLoading" :error="dependencyLoadError" @close="closeDetails" @image="openImagePreview" @details="openDetails(selectedPackage)" @complete="completeSelectedPackageDependencies"><template #actions><PackageSceneExtractor ref="sceneActions" :key="selectedPackage.id + ':' + selectedPackage.file_path + ':' + selectedPackage.scan_time" :package-id="selectedPackage.id" @busy-change="extractingCharacter = $event"><template #actions="{ launch, extract, disabled, expanded, launching, panel }"><PackageActions :disabled="disabled" :launching="launching" :expanded="expanded" :panel="panel" :can-delete="showQuickDelete" :deleting="deleteLoading" :missing="showCompleteDependencyButton" :completing="dependencyCompletionLoading" @launch="launch" @extract="extract" @share="openShareModal" @open="openPackageFolder" @copy="copyPackageName" @delete="quickDeleteSelected(true)" @complete="completeSelectedPackageDependencies" /></template></PackageSceneExtractor></template><template v-if="detailsExpanded" #tabs><UiSegmented :model-value="detailTab" :options="detailTabs" :label="t('ui.overview')" class="detail-tabs" @update:model-value="setDetailTab" /></template><template v-if="detailsExpanded" #default><div v-if="detailTab === 'overview'" class="detail-overview"><p>{{ t('ui.overviewHelp') }}</p><dl class="detail-metadata"><div><dt>{{ t('packages.version') }}</dt><dd>v{{ selectedPackage.version }}</dd></div><div><dt>{{ t('ui.files') }}</dt><dd>{{ selectedPackage.content_count }}</dd></div><div><dt>{{ t('packages.size') }}</dt><dd>{{ formatSize(selectedPackage.size_bytes) }}</dd></div><div><dt>{{ t('ui.libraryDate') }}</dt><dd>{{ formatTime(selectedPackage.scan_time) }}</dd></div><div class="metadata-path"><dt>{{ t('ui.directory') }}</dt><dd>{{ selectedPackage.file_path }}</dd></div></dl><div class="content-types"><UiChip v-for="type in selectedPackage.resource_types" :key="type" :color="resourceColor(type)" disabled>{{ resourceTypeLabel(type) }}</UiChip></div><div v-if="incompleteDependencyCount" class="missing-notice"><span>{{ t('ui.missing', { count: incompleteDependencyCount }) }}</span><UiButton size="sm" :loading="dependencyCompletionLoading" @click="completeSelectedPackageDependencies">{{ t('ui.allDependencies') }}</UiButton></div></div><div v-else-if="detailTab === 'contents'"><p>{{ t('packages.files', { count: selectedPackage.content_count }) }}</p><div class="content-types"><UiChip v-for="type in selectedPackage.resource_types" :key="type" :color="resourceColor(type)" disabled>{{ resourceTypeLabel(type) }}</UiChip></div></div><div v-else class="expanded-dependencies"><p v-if="dependencyRelationsLoading" role="status">{{ t('common.loading') }}</p><p v-else-if="dependencyLoadError" role="alert">{{ dependencyLoadError }}</p><div v-for="dependency in dependencyPanelRows(detailTab as DependencyPanelKey)" :key="dependency.id" class="expanded-dependency"><span>{{ dependency.id }}</span><small>{{ dependency.statusText }}</small><UiButton v-if="dependency.status === 'missing' || dependency.status === 'lower-version'" size="sm" :loading="dependencyCompletionLoading" @click="completeSelectedPackageDependencies">{{ t('ui.complete') }}</UiButton></div><p v-if="!dependencyRelationsLoading && !dependencyLoadError && !dependencyPanelRows(detailTab as DependencyPanelKey).length">{{ t('ui.noData') }}</p></div></template></PackageDetailPanel></PackageDetailModal>
-<ShareModal :visible="shareModalVisible" :package-id="selectedPackage?.id || ''" @close="shareModalVisible = false" /><UiMenu v-model:open="cardMenuOpen" :anchor="cardMenuAnchor" :x="cardMenuPoint.x" :y="cardMenuPoint.y" :items="cardMenuItems" :label="t('ui.packageActions')" @select="handleCardAction" /><UiModal v-if="deleteConfirm" :title="t('packages.quickDeleteConfirmTitle')" :description="deleteConfirmMessage" :close-disabled="deleteLoading" @close="cancelQuickDelete"><UiCheckbox v-model="deleteConfirm.includeDependencies" :disabled="deleteLoading">{{ t('packages.deleteIncludeDeps') }}</UiCheckbox><p class="delete-scope">{{ deleteConfirm.includeDependencies ? t('packages.quickDeleteDepsScope') : t('packages.deleteIncludeDepsHint') }}</p><template #footer><UiButton :disabled="deleteLoading" @click="cancelQuickDelete">{{ t('common.cancel') }}</UiButton><UiButton variant="danger" :loading="deleteLoading" @click="confirmQuickDelete">{{ t('packages.confirmDelete') }}</UiButton></template></UiModal></div></template>
+<template>
+  <div class="resource-display">
+    <div class="resource-browser">
+      <slot
+        name="browser"
+        :select-package="selectPackage"
+        :open-details="openDetails"
+        :launch-package="(pkg: PackageDisplayItem) => queueSceneAction(pkg, 'launch')"
+      >
+        <div v-if="!hideControls" class="view-controls">
+          <span class="result-count">{{ resultCountLabel }}</span>
+          <div class="controls-right">
+            <slot name="actions" />
+            <UiSegmented
+              :model-value="viewMode"
+              :options="viewOptions"
+              :label="t('ui.view')"
+              icon-only
+              @update:model-value="viewChanged"
+            />
+          </div>
+        </div>
+        <div v-if="packages.length" class="resource-content-area">
+          <div class="resource-content-scrollable">
+            <div
+              v-if="viewMode !== 'list'"
+              class="package-grid"
+              :class="{ 'landscape-grid': viewMode === 'small-card' }"
+            >
+              <div v-for="pkg in paginatedPackages" :key="pkg.id" class="package-cell">
+                <PackageCard
+                  :item="pkg"
+                  @keydown="packageShortcut($event, pkg)"
+                  :image="thumbnails[pkg.id]"
+                  :landscape="viewMode === 'small-card'"
+                  :selected="selectedPackage?.id === pkg.id"
+                  :missing="missingCounts?.[pkg.id]"
+                  :can-launch="pkg.resource_types.includes('scene')"
+                  @select="selectPackage(pkg)"
+                  @details="openDetails(pkg)"
+                  @launch="queueSceneAction(pkg, 'launch')"
+                  @more="openCardMenu(pkg, $event)"
+                  @image-error="onThumbError(pkg.id)"
+                />
+              </div>
+            </div>
+            <div v-else class="resource-list" role="table">
+              <div class="list-header" role="row">
+                <span>{{ t('packages.package') }}</span>
+                <span>{{ t('packages.type') }}</span>
+                <span>{{ t('packages.size') }}</span>
+                <span>{{ t('packages.deps') }}</span>
+                <span>{{ t('ui.status') }}</span>
+                <span>{{ t('packages.importTime') }}</span>
+              </div>
+              <div
+                v-for="pkg in paginatedPackages"
+                :key="pkg.id"
+                class="list-row"
+                :class="{ selected: selectedPackage?.id === pkg.id }"
+                role="row"
+                @contextmenu.prevent="openCardMenu(pkg, $event)"
+              >
+                <div class="list-package" role="cell">
+                  <button
+                    type="button"
+                    class="list-open"
+                    @keydown="packageShortcut($event, pkg)"
+                    @click="selectPackage(pkg)"
+                    @dblclick="openDetails(pkg)"
+                    @keydown.space.prevent="openDetails(pkg)"
+                  >
+                    <img
+                      v-if="thumbnails[pkg.id]"
+                      data-resource-preview
+                      :src="thumbnails[pkg.id]"
+                      :alt="getVarFileName(pkg)"
+                      @error="onThumbError(pkg.id)"
+                    />
+                    <span v-else class="list-placeholder" />
+                    <span>
+                      <strong>{{ pkg.name }}</strong>
+                      <small>{{ pkg.creator }} · v{{ pkg.version }}</small>
+                    </span>
+                  </button>
+                </div>
+                <span
+                  role="cell"
+                  class="list-type"
+                  :style="{ color: resourceColor(pkg.resource_types[0]) }"
+                >
+                  {{ resourceTypeLabel(pkg.resource_types[0] || 'other') }}
+                </span>
+                <span role="cell">{{ formatSize(pkg.size_bytes) }}</span>
+                <span role="cell">{{ pkg.dependency_count }}</span>
+                <span role="cell" :class="{ warning: missingCounts?.[pkg.id] }">
+                  {{ missingCounts?.[pkg.id] ? t('ui.missing', { count: missingCounts[pkg.id] }) : t('ui.installed') }}
+                </span>
+                <span role="cell">{{ formatTime(pkg.scan_time) }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div v-if="packages.length" class="pagination-bar">
+          <span class="pagination-info">{{ paginationInfo }}</span>
+          <div class="pagination-controls">
+            <select
+              v-model.number="pageSize"
+              :aria-label="t('ui.perPageLabel')"
+              class="page-size-select"
+              @change="currentPage = 1"
+            >
+              <option v-for="size in pageSizes" :key="size" :value="size">
+                {{ t('ui.perPage', { count: size }) }}
+              </option>
+            </select>
+            <UiButton
+              size="sm"
+              variant="ghost"
+              icon="chevrons-left"
+              icon-only
+              :aria-label="t('ui.firstPage')"
+              :disabled="currentPage <= 1"
+              @click="currentPage = 1"
+            />
+            <UiButton
+              size="sm"
+              variant="ghost"
+              icon="chevron-left"
+              icon-only
+              :aria-label="t('gameContent.previous')"
+              :disabled="currentPage <= 1"
+              @click="currentPage--"
+            />
+            <span>{{ currentPage }} / {{ totalPages }}</span>
+            <UiButton
+              size="sm"
+              variant="ghost"
+              icon="chevron-right"
+              icon-only
+              :aria-label="t('gameContent.next')"
+              :disabled="currentPage >= totalPages"
+              @click="currentPage++"
+            />
+            <UiButton
+              size="sm"
+              variant="ghost"
+              icon="chevrons-right"
+              icon-only
+              :aria-label="t('ui.lastPage')"
+              :disabled="currentPage >= totalPages"
+              @click="currentPage = totalPages"
+            />
+          </div>
+        </div>
+        <div v-else class="empty-wrapper">
+          <EmptyState :icon="emptyIcon" :title="emptyTitle" :description="emptyDescription">
+            <template v-if="$slots['empty-action']" #action><slot name="empty-action" /></template>
+          </EmptyState>
+        </div>
+      </slot>
+    </div>
+    <PackageDetailModal
+      v-if="selectedPackage"
+      :open="detailsExpanded"
+      :title="selectedPackage.name"
+      :images="selectedPackageImages"
+      :image-urls="packageImageUrls"
+      :fallback-image="detailThumb"
+      :busy="extractingCharacter"
+      @close="detailsExpanded = false"
+      @image="openImagePreview"
+    >
+      <PackageDetailPanel
+        @keydown="packageShortcut($event, selectedPackage)"
+        :item="selectedPackage"
+        :image="previewImageUrl || detailThumb"
+        :active-image="previewImage?.path"
+        :images="selectedPackageImages"
+        :image-urls="packageImageUrls"
+        :expanded="detailsExpanded"
+        :busy="extractingCharacter"
+        :dependencies="directDependencyRows"
+        :missing="incompleteDependencyCount"
+        :loading="dependencyRelationsLoading"
+        :error="dependencyLoadError"
+        @close="closeDetails"
+        @image="openImagePreview"
+        @details="openDetails(selectedPackage)"
+        @complete="completeSelectedPackageDependencies"
+      >
+        <template #actions>
+          <PackageSceneExtractor
+            ref="sceneActions"
+            :key="selectedPackage.id + ':' + selectedPackage.file_path + ':' + selectedPackage.scan_time"
+            :package-id="selectedPackage.id"
+            @busy-change="extractingCharacter = $event"
+          >
+            <template #actions="{ launch, extract, disabled, expanded, launching, panel }">
+              <PackageActions
+                :disabled="disabled"
+                :launching="launching"
+                :expanded="expanded"
+                :panel="panel"
+                :can-delete="showQuickDelete"
+                :deleting="deleteLoading"
+                :missing="showCompleteDependencyButton"
+                :completing="dependencyCompletionLoading"
+                @launch="launch"
+                @extract="extract"
+                @share="openShareModal"
+                @open="openPackageFolder"
+                @copy="copyPackageName"
+                @delete="quickDeleteSelected(true)"
+                @complete="completeSelectedPackageDependencies"
+              />
+            </template>
+          </PackageSceneExtractor>
+        </template>
+        <template v-if="detailsExpanded" #tabs>
+          <UiSegmented
+            :model-value="detailTab"
+            :options="detailTabs"
+            :label="t('ui.overview')"
+            class="detail-tabs"
+            @update:model-value="setDetailTab"
+          />
+        </template>
+        <template v-if="detailsExpanded" #default>
+          <div v-if="detailTab === 'overview'" class="detail-overview">
+            <p>{{ t('ui.overviewHelp') }}</p>
+            <dl class="detail-metadata">
+              <div>
+                <dt>{{ t('packages.version') }}</dt>
+                <dd>v{{ selectedPackage.version }}</dd>
+              </div>
+              <div>
+                <dt>{{ t('ui.files') }}</dt>
+                <dd>{{ selectedPackage.content_count }}</dd>
+              </div>
+              <div>
+                <dt>{{ t('packages.size') }}</dt>
+                <dd>{{ formatSize(selectedPackage.size_bytes) }}</dd>
+              </div>
+              <div>
+                <dt>{{ t('ui.libraryDate') }}</dt>
+                <dd>{{ formatTime(selectedPackage.scan_time) }}</dd>
+              </div>
+              <div class="metadata-path">
+                <dt>{{ t('ui.directory') }}</dt>
+                <dd>{{ selectedPackage.file_path }}</dd>
+              </div>
+            </dl>
+            <div class="content-types">
+              <UiChip
+                v-for="type in selectedPackage.resource_types"
+                :key="type"
+                :color="resourceColor(type)"
+                disabled
+              >
+                {{ resourceTypeLabel(type) }}
+              </UiChip>
+            </div>
+            <div v-if="incompleteDependencyCount" class="missing-notice">
+              <span>{{ t('ui.missing', { count: incompleteDependencyCount }) }}</span>
+              <UiButton
+                size="sm"
+                :loading="dependencyCompletionLoading"
+                @click="completeSelectedPackageDependencies"
+              >
+                {{ t('ui.allDependencies') }}
+              </UiButton>
+            </div>
+          </div>
+          <div v-else-if="detailTab === 'contents'">
+            <p>{{ t('packages.files', { count: selectedPackage.content_count }) }}</p>
+            <div class="content-types">
+              <UiChip
+                v-for="type in selectedPackage.resource_types"
+                :key="type"
+                :color="resourceColor(type)"
+                disabled
+              >
+                {{ resourceTypeLabel(type) }}
+              </UiChip>
+            </div>
+          </div>
+          <div v-else class="expanded-dependencies">
+            <p v-if="dependencyRelationsLoading" role="status">{{ t('common.loading') }}</p>
+            <p v-else-if="dependencyLoadError" role="alert">{{ dependencyLoadError }}</p>
+            <div
+              v-for="dependency in dependencyPanelRows(detailTab as DependencyPanelKey)"
+              :key="dependency.id"
+              class="expanded-dependency"
+            >
+              <span>{{ dependency.id }}</span>
+              <small>{{ dependency.statusText }}</small>
+              <UiButton
+                v-if="dependency.status === 'missing' || dependency.status === 'lower-version'"
+                size="sm"
+                :loading="dependencyCompletionLoading"
+                @click="completeSelectedPackageDependencies"
+              >
+                {{ t('ui.complete') }}
+              </UiButton>
+            </div>
+            <p
+              v-if="!dependencyRelationsLoading && !dependencyLoadError && !dependencyPanelRows(detailTab as DependencyPanelKey).length"
+            >
+              {{ t('ui.noData') }}
+            </p>
+          </div>
+        </template>
+      </PackageDetailPanel>
+    </PackageDetailModal>
+    <ShareModal
+      :visible="shareModalVisible"
+      :package-id="selectedPackage?.id || ''"
+      @close="shareModalVisible = false"
+    />
+    <UiMenu
+      v-model:open="cardMenuOpen"
+      :anchor="cardMenuAnchor"
+      :x="cardMenuPoint.x"
+      :y="cardMenuPoint.y"
+      :items="cardMenuItems"
+      :label="t('ui.packageActions')"
+      @select="handleCardAction"
+    />
+    <UiModal
+      v-if="deleteConfirm"
+      :title="t('packages.quickDeleteConfirmTitle')"
+      :description="deleteConfirmMessage"
+      :close-disabled="deleteLoading"
+      @close="cancelQuickDelete"
+    >
+      <UiCheckbox v-model="deleteConfirm.includeDependencies" :disabled="deleteLoading">
+        {{ t('packages.deleteIncludeDeps') }}
+      </UiCheckbox>
+      <p class="delete-scope">
+        {{ deleteConfirm.includeDependencies ? t('packages.quickDeleteDepsScope') : t('packages.deleteIncludeDepsHint') }}
+      </p>
+      <template #footer>
+        <UiButton :disabled="deleteLoading" @click="cancelQuickDelete">
+          {{ t('common.cancel') }}
+        </UiButton>
+        <UiButton variant="danger" :loading="deleteLoading" @click="confirmQuickDelete">
+          {{ t('packages.confirmDelete') }}
+        </UiButton>
+      </template>
+    </UiModal>
+  </div>
+</template>
 <style scoped>
-.resource-display { display: flex; gap: 16px; height: 100%; min-width: 0; min-height: 0; position: relative; overflow: hidden; }.resource-browser { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 14px; }.view-controls { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-3); }.controls-right { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; }.result-count,.pagination-info { font-size: var(--text-sm); color: var(--text-tertiary); }.resource-content-area { flex: 1; min-height: 0; display: flex; }.resource-content-scrollable { flex: 1; overflow: auto; min-height: 0; min-width: 0; padding: 4px; }.package-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 14px; }.landscape-grid { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }.package-cell { min-width: 0; position: relative; }.cleanup-unprotect { position: absolute; bottom: 58px; left: 8px; z-index: 4; background: var(--bg-on-image); }.list-header,.list-row { display: grid; grid-template-columns: minmax(200px, 1fr) 80px 80px 55px 95px 100px; align-items: center; gap: 12px; min-width: 680px; }.list-header { height: 36px; font-size: var(--text-xs); color: var(--text-tertiary); }.list-row { min-height: 52px; border-radius: var(--radius-sm); font-size: var(--text-sm); padding: 0 8px; }.list-row + .list-row { border-top: 1px solid var(--border-subtle); }.list-row:hover { background: var(--bg-hover); }.list-row.selected { background: var(--accent-subtle); box-shadow: inset 3px 0 var(--accent-primary); }.list-package,.list-open { display: flex; align-items: center; min-width: 0; gap: 10px; }.list-open { width: 100%; text-align: left; border-radius: var(--radius-sm); }.list-open img,.list-placeholder { width: 40px; height: 30px; flex-shrink: 0; object-fit: cover; border-radius: var(--radius-xs); background: var(--thumb-other); }.list-open > span:last-child { min-width: 0; }.list-open strong,.list-open small { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }.list-open strong { font-size: var(--text-base); }.list-open small { color: var(--text-tertiary); font-size: var(--text-xs); }.warning { color: var(--color-warning); }.pagination-bar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: var(--space-2); padding: 4px; }.pagination-controls { display: flex; align-items: center; gap: 4px; font-size: var(--text-sm); }.page-size-select { min-width: 88px; border: none; border-radius: var(--radius-full); }.empty-wrapper { flex: 1; display: grid; place-items: center; }.detail-tabs { max-width: 100%; overflow-x: auto; }.detail-overview > p { color: var(--text-secondary); font-size: var(--text-base); }.detail-metadata { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 14px; }.detail-metadata div { padding: 12px; border-radius: var(--radius-icon); background: var(--bg-input); }.detail-metadata dt { color: var(--text-tertiary); font-size: var(--text-xs); }.detail-metadata dd { margin-top: 4px; font-size: var(--text-sm); overflow-wrap: anywhere; }.metadata-path { grid-column: span 2; }.content-types { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }.missing-notice { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); padding: 12px; margin-top: 14px; border-radius: var(--radius-icon); background: var(--color-warning-subtle); color: var(--color-warning); font-size: var(--text-base); }.expanded-dependency { display: flex; align-items: center; gap: 8px; min-height: 44px; font-size: var(--text-sm); border-bottom: 1px solid var(--border-subtle); }.expanded-dependency span { flex: 1; overflow-wrap: anywhere; }.expanded-dependency small { color: var(--text-tertiary); }.delete-scope { margin-top: var(--space-3); font-size: var(--text-base); color: var(--text-secondary); }@media(max-width: 760px) { .resource-display { flex-direction: column; } }
+.resource-display {
+  display: flex;
+  gap: 16px;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+}
+.resource-browser {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.view-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+.controls-right {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  flex-wrap: wrap;
+}
+.result-count,
+.pagination-info {
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+}
+.resource-content-area {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+.resource-content-scrollable {
+  flex: 1;
+  overflow: auto;
+  min-height: 0;
+  min-width: 0;
+  padding: 4px;
+}
+.package-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+  gap: 14px;
+}
+.landscape-grid {
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+}
+.package-cell {
+  min-width: 0;
+  position: relative;
+}
+.cleanup-unprotect {
+  position: absolute;
+  bottom: 58px;
+  left: 8px;
+  z-index: 4;
+  background: var(--bg-on-image);
+}
+.list-header,
+.list-row {
+  display: grid;
+  grid-template-columns: minmax(200px, 1fr) 80px 80px 55px 95px 100px;
+  align-items: center;
+  gap: 12px;
+  min-width: 680px;
+}
+.list-header {
+  height: 36px;
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+.list-row {
+  min-height: 52px;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  padding: 0 8px;
+}
+.list-row + .list-row {
+  border-top: 1px solid var(--border-subtle);
+}
+.list-row:hover {
+  background: var(--bg-hover);
+}
+.list-row.selected {
+  background: var(--accent-subtle);
+  box-shadow: inset 3px 0 var(--accent-primary);
+}
+.list-package,
+.list-open {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 10px;
+}
+.list-open {
+  width: 100%;
+  text-align: left;
+  border-radius: var(--radius-sm);
+}
+.list-open img,
+.list-placeholder {
+  width: 40px;
+  height: 30px;
+  flex-shrink: 0;
+  object-fit: cover;
+  border-radius: var(--radius-xs);
+  background: var(--thumb-other);
+}
+.list-open > span:last-child {
+  min-width: 0;
+}
+.list-open strong,
+.list-open small {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.list-open strong {
+  font-size: var(--text-base);
+}
+.list-open small {
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+}
+.warning {
+  color: var(--color-warning);
+}
+.pagination-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: 4px;
+}
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--text-sm);
+}
+.page-size-select {
+  min-width: 88px;
+  border: none;
+  border-radius: var(--radius-full);
+}
+.empty-wrapper {
+  flex: 1;
+  display: grid;
+  place-items: center;
+}
+.detail-tabs {
+  max-width: 100%;
+  overflow-x: auto;
+}
+.detail-overview > p {
+  color: var(--text-secondary);
+  font-size: var(--text-base);
+}
+.detail-metadata {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 14px;
+}
+.detail-metadata div {
+  padding: 12px;
+  border-radius: var(--radius-icon);
+  background: var(--bg-input);
+}
+.detail-metadata dt {
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+}
+.detail-metadata dd {
+  margin-top: 4px;
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+.metadata-path {
+  grid-column: span 2;
+}
+.content-types {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+.missing-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 12px;
+  margin-top: 14px;
+  border-radius: var(--radius-icon);
+  background: var(--color-warning-subtle);
+  color: var(--color-warning);
+  font-size: var(--text-base);
+}
+.expanded-dependency {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  font-size: var(--text-sm);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.expanded-dependency span {
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+.expanded-dependency small {
+  color: var(--text-tertiary);
+}
+.delete-scope {
+  margin-top: var(--space-3);
+  font-size: var(--text-base);
+  color: var(--text-secondary);
+}
+@media (max-width: 760px) {
+  .resource-display {
+    flex-direction: column;
+  }
+}
 </style>

@@ -4,7 +4,14 @@
       <slot name="header">
         <h3 class="panel-title">{{ title }}</h3>
       </slot>
-      <UiButton v-if="collapsible" class="collapse-toggle" :aria-label="isCollapsed ? 'Expand' : 'Collapse'" variant="secondary" icon-only>
+      <UiButton
+        v-if="collapsible"
+        class="collapse-toggle"
+        :aria-label="isCollapsed ? t('ui.expand') : t('ui.collapse')"
+        :aria-expanded="!isCollapsed"
+        variant="secondary"
+        icon-only
+      >
         <Icon :class="['collapse-icon', { rotated: isCollapsed }]" :size="16" name="outline-1" />
       </UiButton>
     </div>
@@ -20,6 +27,8 @@
 import Icon from '@/components/ui/Icon.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import { ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
+const { t } = useI18n()
 
 interface Props {
   title?: string
@@ -48,6 +57,7 @@ function toggleCollapse() {
 
 <style scoped>
 .glass-panel-component {
+  flex-shrink: 0;
   background: var(--bg-surface);
   border: none;
   border-radius: var(--radius-lg);
@@ -64,7 +74,7 @@ function toggleCollapse() {
   cursor: default;
 }
 
-.glass-panel-component:has(.collapsible) .panel-header {
+.glass-panel-component:has(.collapse-toggle) .panel-header {
   cursor: pointer;
 }
 

@@ -303,7 +303,198 @@ onActivated(() => window.addEventListener('keydown', focusSearch))
 onDeactivated(() => window.removeEventListener('keydown', focusSearch))
 onUnmounted(() => window.removeEventListener('keydown', focusSearch))
 </script>
-<template><div class="packages-view"><PageHeader :title="t('sidebar.packages')" :subtitle="packageSubtitle"><template #actions><SearchInput shortcut="Ctrl K" ref="searchInput" v-model="packageNameQuery" class="package-name-search" :placeholder="t('packages.searchNamePlaceholder')" /><UiButton icon="sort" :aria-expanded="sortMenuOpen" aria-haspopup="menu" @click="openSort">{{ t('ui.sort') }}</UiButton><UiSegmented :model-value="viewMode" :options="viewOptions" :label="t('ui.view')" icon-only @update:model-value="setView" /><UiButton variant="primary" size="lg" icon="refresh" :disabled="isScanning || !vamRootPath" :loading="isScanning" :loading-text="t('toolbar.scanning')" @click="handleScan">{{ t('packages.scan') }}</UiButton></template><template #filters><div class="type-filters"><UiChip v-for="filter in typeFilters" :key="filter.value" :selected="selectedType === filter.value" :count="typeCount(filter.value)" :color="filter.value === 'all' ? undefined : resourceColor(filter.value)" @click="selectType(filter.value)">{{ filter.label }}</UiChip></div><div class="extra-filters"><UiButton size="sm" variant="ghost" icon="folder" :aria-expanded="isFolderPanelOpen" aria-haspopup="menu" @click="openFolders">{{ t('ui.directory') }}: {{ selectedFolder || t('ui.all') }}<Icon name="chevron-down" :size="14" /></UiButton><UiChip :selected="issuesOnly" :count="problemIds.size" @click="issuesOnly = !issuesOnly">{{ t('ui.issues') }}</UiChip></div></template></PageHeader><div class="packages-content"><ResourceDisplay :packages="displayPackages" :view-mode="viewMode" :missing-counts="missingCounts" :result-count-label="t('packages.packagesCount', { count: displayPackages.length })" :empty-title="t('packages.noPackages')" :empty-description="t('packages.noPackagesDesc')" hide-controls show-quick-delete @update:view-mode="viewMode = $event" @package-deleted="handlePackageDeleted"><template #empty-action><UiButton variant="primary" size="lg" @click="goToSettings">{{ t('packages.selectDirectory') }}</UiButton></template></ResourceDisplay></div><UiMenu v-model:open="sortMenuOpen" :anchor="sortAnchor" :items="sortItems" :label="t('ui.sort')" @select="sortBy = $event.value" /><UiMenu v-model:open="isFolderPanelOpen" :anchor="folderAnchor" :items="[]" :label="t('ui.folders')"><div class="folder-tree"><div v-for="folder in flatFolderNodes" :key="folder.path || '__root__'" class="folder-tree-row" :class="{ active: selectedFolder === folder.path }" :style="{ paddingLeft: (folder.depth * 14) + 'px' }"><UiButton v-if="folder.hasChildren" variant="ghost" size="sm" :icon="folder.isExpanded ? 'chevron-down' : 'chevron-right'" icon-only :aria-label="folder.isExpanded ? t('packages.collapseFolder') : t('packages.expandFolder')" @click="toggleFolder(folder.path)" /><button type="button" role="menuitemradio" :aria-checked="selectedFolder === folder.path" class="folder-tree-item" @click="selectedFolder = folder.path; isFolderPanelOpen = false"><Icon name="folder" :size="16" /><span>{{ folder.label }}</span><small>{{ folder.count }}</small></button></div></div></UiMenu></div></template>
+<template>
+  <div class="packages-view">
+    <PageHeader :title="t('sidebar.packages')" :subtitle="packageSubtitle">
+      <template #actions>
+        <SearchInput
+          shortcut="Ctrl K"
+          ref="searchInput"
+          v-model="packageNameQuery"
+          class="package-name-search"
+          :placeholder="t('packages.searchNamePlaceholder')"
+        />
+        <UiButton icon="sort" :aria-expanded="sortMenuOpen" aria-haspopup="menu" @click="openSort">
+          {{ t('ui.sort') }}
+        </UiButton>
+        <UiSegmented
+          :model-value="viewMode"
+          :options="viewOptions"
+          :label="t('ui.view')"
+          icon-only
+          @update:model-value="setView"
+        />
+        <UiButton
+          variant="primary"
+          size="lg"
+          icon="refresh"
+          :disabled="isScanning || !vamRootPath"
+          :loading="isScanning"
+          :loading-text="t('toolbar.scanning')"
+          @click="handleScan"
+        >
+          {{ t('packages.scan') }}
+        </UiButton>
+      </template>
+      <template #filters>
+        <div class="type-filters">
+          <UiChip
+            v-for="filter in typeFilters"
+            :key="filter.value"
+            :selected="selectedType === filter.value"
+            :count="typeCount(filter.value)"
+            :color="filter.value === 'all' ? undefined : resourceColor(filter.value)"
+            @click="selectType(filter.value)"
+          >
+            {{ filter.label }}
+          </UiChip>
+        </div>
+        <div class="extra-filters">
+          <UiButton
+            size="sm"
+            variant="ghost"
+            icon="folder"
+            :aria-expanded="isFolderPanelOpen"
+            aria-haspopup="menu"
+            @click="openFolders"
+          >
+            {{ t('ui.directory') }}: {{ selectedFolder || t('ui.all') }}
+            <Icon name="chevron-down" :size="14" />
+          </UiButton>
+          <UiChip :selected="issuesOnly" :count="problemIds.size" @click="issuesOnly = !issuesOnly">
+            {{ t('ui.issues') }}
+          </UiChip>
+        </div>
+      </template>
+    </PageHeader>
+    <div class="packages-content">
+      <ResourceDisplay
+        :packages="displayPackages"
+        :view-mode="viewMode"
+        :missing-counts="missingCounts"
+        :result-count-label="t('packages.packagesCount', { count: displayPackages.length })"
+        :empty-title="t('packages.noPackages')"
+        :empty-description="t('packages.noPackagesDesc')"
+        hide-controls
+        show-quick-delete
+        @update:view-mode="viewMode = $event"
+        @package-deleted="handlePackageDeleted"
+      >
+        <template #empty-action>
+          <UiButton variant="primary" size="lg" @click="goToSettings">
+            {{ t('packages.selectDirectory') }}
+          </UiButton>
+        </template>
+      </ResourceDisplay>
+    </div>
+    <UiMenu
+      v-model:open="sortMenuOpen"
+      :anchor="sortAnchor"
+      :items="sortItems"
+      :label="t('ui.sort')"
+      @select="sortBy = $event.value"
+    />
+    <UiMenu
+      v-model:open="isFolderPanelOpen"
+      :anchor="folderAnchor"
+      :items="[]"
+      :label="t('ui.folders')"
+    >
+      <div class="folder-tree">
+        <div
+          v-for="folder in flatFolderNodes"
+          :key="folder.path || '__root__'"
+          class="folder-tree-row"
+          :class="{ active: selectedFolder === folder.path }"
+          :style="{ paddingLeft: (folder.depth * 14) + 'px' }"
+        >
+          <UiButton
+            v-if="folder.hasChildren"
+            variant="ghost"
+            size="sm"
+            :icon="folder.isExpanded ? 'chevron-down' : 'chevron-right'"
+            icon-only
+            :aria-label="folder.isExpanded ? t('packages.collapseFolder') : t('packages.expandFolder')"
+            @click="toggleFolder(folder.path)"
+          />
+          <button
+            type="button"
+            role="menuitemradio"
+            :aria-checked="selectedFolder === folder.path"
+            class="folder-tree-item"
+            @click="selectedFolder = folder.path; isFolderPanelOpen = false"
+          >
+            <Icon name="folder" :size="16" />
+            <span>{{ folder.label }}</span>
+            <small>{{ folder.count }}</small>
+          </button>
+        </div>
+      </div>
+    </UiMenu>
+  </div>
+</template>
 <style scoped>
-.packages-view { display: flex; flex-direction: column; height: 100%; min-height: 0; overflow: hidden; }.packages-content { flex: 1; min-height: 0; padding: 16px 20px; }.package-name-search { width: 280px; max-width: 100%; }.type-filters,.extra-filters { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }.folder-tree { min-width: 260px; max-width: calc(100vw - 32px); padding: 4px; }.folder-tree-row { display: flex; align-items: center; border-radius: var(--radius-sm); }.folder-tree-row.active { background: var(--bg-active); }.folder-tree-item { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; min-height: 36px; padding: 4px 8px; border-radius: var(--radius-sm); text-align: left; font-size: var(--text-base); }.folder-tree-item span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.folder-tree-item small { color: var(--text-tertiary); font-size: var(--text-xs); }@media(max-width: 800px) { .packages-content { padding: 12px; } }
+.packages-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+.packages-content {
+  flex: 1;
+  min-height: 0;
+  padding: 16px 20px;
+}
+.package-name-search {
+  width: 280px;
+  max-width: 100%;
+}
+.type-filters,
+.extra-filters {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.folder-tree {
+  min-width: 260px;
+  max-width: calc(100vw - 32px);
+  padding: 4px;
+}
+.folder-tree-row {
+  display: flex;
+  align-items: center;
+  border-radius: var(--radius-sm);
+}
+.folder-tree-row.active {
+  background: var(--bg-active);
+}
+.folder-tree-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  min-height: 36px;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  text-align: left;
+  font-size: var(--text-base);
+}
+.folder-tree-item span {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.folder-tree-item small {
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+}
+@media (max-width: 800px) {
+  .packages-content {
+    padding: 12px;
+  }
+}
 </style>

@@ -1,197 +1,321 @@
 <template>
-<div class="deduplication-view animate-fadeIn b2-page"><PageHeader :title="$t('sidebar.deduplication')" ><template #actions>
-      <UiButton :disabled="busy || !effectiveRoot" @click="handleScan" variant="primary" size="lg">
-        <span>{{ isDedupScanning ? $t('common.loading') : $t('deduplication.scanButton') }}</span>
-      </UiButton>
-      <UiButton v-if="cleanupList.length > 0 || archiveList.length > 0" :disabled="busy" @click="showCleanupPreview = true" variant="secondary">
-        <Icon  :size="14" name="outline-16" />
-        <span>{{ t('deduplication.reviewOrganize', { count: cleanupList.length, archive: archiveList.length }) }}</span>
-      </UiButton>
-      <UiButton v-if="trashList.length > 0" :disabled="isRestoring" @click="handleRestoreLatest" variant="secondary">
-        <Icon  :size="14" name="outline-17" />
-        <span>{{ $t('deduplication.restoreLatest', { count: trashList.length }) }}</span>
-      </UiButton>
-    </template></PageHeader><div class="b2-page-body">
-    <!-- Summary Cards -->
-    <section class="summary-grid stagger-children">
-      <StatCard
-        :title="$t('deduplication.duplicateGroups')"
-        :value="dedupSummary?.duplicate_groups ?? 0"
-        :subtitle="$t('deduplication.duplicateGroupsSub')"
-        :icon="icons.duplicates"
-        :trend="(dedupSummary?.duplicate_groups ?? 0) > 0 ? 'up' : 'neutral'"
-        :color="(dedupSummary?.duplicate_groups ?? 0) > 0 ? 'var(--color-warning)' : 'var(--color-success)'"
-      />
-      <StatCard
-        :title="$t('deduplication.wastedSpace')"
-        :value="((dedupSummary?.total_wasted_bytes ?? 0) > 0) ? formatSize(dedupSummary!.total_wasted_bytes) : '—'"
-        :subtitle="$t('deduplication.wastedSpaceSub')"
-        :icon="icons.space"
-        trend="neutral"
-        color="var(--color-error)"
-      />
-      <StatCard
-        :title="$t('deduplication.safeToClean')"
-        :value="dedupSummary?.safe_to_clean_count ?? 0"
-        :subtitle="$t('deduplication.safeToCleanSub')"
-        :icon="icons.clean"
-        trend="neutral"
-        color="var(--color-success)"
-      />
-    </section>
+  <div class="deduplication-view animate-fadeIn b2-page">
+    <PageHeader :title="$t('sidebar.deduplication')">
+      <template #actions>
+        <UiButton
+          :disabled="busy || !effectiveRoot"
+          @click="handleScan"
+          variant="primary"
+          size="lg"
+        >
+          <span>{{ isDedupScanning ? $t('common.loading') : $t('deduplication.scanButton') }}</span>
+        </UiButton>
+        <UiButton
+          v-if="cleanupList.length > 0 || archiveList.length > 0"
+          :disabled="busy"
+          @click="showCleanupPreview = true"
+          variant="secondary"
+        >
+          <Icon :size="14" name="outline-16" />
+          <span>
+            {{ t('deduplication.reviewOrganize', { count: cleanupList.length, archive: archiveList.length }) }}
+          </span>
+        </UiButton>
+        <UiButton
+          v-if="trashList.length > 0"
+          :disabled="isRestoring"
+          @click="handleRestoreLatest"
+          variant="secondary"
+        >
+          <Icon :size="14" name="outline-17" />
+          <span>{{ $t('deduplication.restoreLatest', { count: trashList.length }) }}</span>
+        </UiButton>
+      </template>
+    </PageHeader>
+    <div class="b2-page-body">
+      <!-- Summary Cards -->
+      <section class="summary-grid stagger-children">
+        <StatCard
+          :title="$t('deduplication.duplicateGroups')"
+          :value="dedupSummary?.duplicate_groups ?? 0"
+          :subtitle="$t('deduplication.duplicateGroupsSub')"
+          :icon="icons.duplicates"
+          :trend="(dedupSummary?.duplicate_groups ?? 0) > 0 ? 'up' : 'neutral'"
+          :color="(dedupSummary?.duplicate_groups ?? 0) > 0 ? 'var(--color-warning)' : 'var(--color-success)'"
+        />
+        <StatCard
+          :title="$t('deduplication.wastedSpace')"
+          :value="((dedupSummary?.total_wasted_bytes ?? 0) > 0) ? formatSize(dedupSummary!.total_wasted_bytes) : '—'"
+          :subtitle="$t('deduplication.wastedSpaceSub')"
+          :icon="icons.space"
+          trend="neutral"
+          color="var(--color-error)"
+        />
+        <StatCard
+          :title="$t('deduplication.safeToClean')"
+          :value="dedupSummary?.safe_to_clean_count ?? 0"
+          :subtitle="$t('deduplication.safeToCleanSub')"
+          :icon="icons.clean"
+          trend="neutral"
+          color="var(--color-success)"
+        />
+      </section>
 
-    <section class="scan-options glass-panel">
-      <label for="dedup-root">{{ t('deduplication.sourceDirectory') }}</label>
-      <div class="scan-directory-row">
-        <UiInput id="dedup-root" v-model="resourceRoot" :placeholder="defaultRoot" :disabled="busy" />
-        <UiButton :disabled="busy" @click="chooseRoot" variant="secondary">{{ t('deduplication.browse') }}</UiButton>
-      </div>
-      <p class="text-sm text-secondary">{{ t('deduplication.rules') }}</p>
-      <p class="text-xs text-tertiary">{{ t('deduplication.ordinaryRule') }}</p>
-      <p v-if="dedupSummary" class="text-xs">{{ t('deduplication.scanSummary', { count: dedupSummary.total_files, archive: dedupSummary.archive_count }) }}</p>
-      <details v-if="dedupSummary?.warnings.length" class="text-xs">
-        <summary>{{ t('deduplication.scanWarnings', { count: dedupSummary.warnings.length }) }}</summary>
-        <p v-for="warning in dedupSummary.warnings" :key="warning">{{ warning }}</p>
-      </details>
-    </section>
-    <!-- Action Bar -->
-
-
-    <!-- Keep groups at their natural height; paginate large scan results. -->
-    <section v-if="duplicateGroups.length > 0" class="dedup-content glass-panel">
-      <div class="dedup-header">
-        <h3 class="dedup-header-title">{{ t('deduplication.duplicates') }}</h3>
-        <span class="text-xs text-tertiary">{{ t('deduplication.filteredGroups', { count: filteredGroups.length, total: duplicateGroups.length }) }}</span>
-      </div>
-      <div class="dedup-search">
-        <UiInput v-model="groupSearch" type="search" :aria-label="t('deduplication.searchPaths')" :placeholder="t('deduplication.searchPaths')" search />
-        <span class="text-xs text-tertiary">{{ t('deduplication.pathsHint') }}</span>
-      </div>
-      <div ref="groupListEl" class="dedup-body">
-        <article v-for="group in visibleGroups" :key="group.id" class="dup-group">
-          <div class="dup-group-header">
-            <UiButton class="dup-group-toggle" :aria-expanded="!collapsedGroups.has(group.id)" @click="toggleGroup(group.id)" variant="secondary">
-              <span class="dup-expand-icon">{{ collapsedGroups.has(group.id) ? '▸' : '▾' }}</span>
-              <span class="dup-group-info">
-                <span class="dup-group-path text-sm">{{ group.resource_path }}</span>
-                <span class="dup-group-meta text-xs text-tertiary">
-                  {{ t('deduplication.copies', { count: group.file_count }) }} · {{ t('deduplication.wasted', { size: formatSize(group.total_wasted_bytes) }) }}
-                </span>
-              </span>
-            </UiButton>
-            <div class="dup-group-actions">
-              <UiButton class="text-xs" @click="copyPaths(group.instances.map(i => i.file_path))" variant="secondary">{{ t('deduplication.copyGroupPaths') }}</UiButton>
-              <UiButton v-if="!allSelectedFor(group)" class="dup-action-keep text-xs" :disabled="busy" @click="selectAllForKeep(group)" variant="secondary">{{ t('deduplication.keepAll') }}</UiButton>
-              <UiButton v-else class="dup-action-clean text-xs" :disabled="busy" @click="selectRecommendedForKeep(group)" variant="secondary">{{ t('deduplication.keepRecommended') }}</UiButton>
-            </div>
-          </div>
-          <div v-if="!collapsedGroups.has(group.id)" class="dup-instances">
-            <div v-for="instance in group.instances" :key="instance.file_path" class="dup-instance">
-              <input
-                type="checkbox"
-                :checked="selectedInstances[group.id]?.has(instance.file_path)"
-                :disabled="busy || instance.is_recommended_keep"
-                :aria-label="t('deduplication.keepFile', { path: instance.file_path })"
-                @change="toggleInstance(group.id, instance.file_path)"
-              />
-              <div class="dup-inst-info">
-                <div class="dup-inst-heading">
-                  <span class="dup-inst-name text-sm">{{ fileName(instance.file_path) }}</span>
-                  <span :class="['dup-status', instance.archive_destination ? 'archive' : selectedInstances[group.id]?.has(instance.file_path) ? 'keep' : 'recycle']">
-                    {{ instance.archive_destination ? t('deduplication.willArchive') : selectedInstances[group.id]?.has(instance.file_path) ? t('deduplication.keepStatus') : t('deduplication.recycleStatus') }}
-                  </span>
-                  <span v-if="instance.referenced_by.length" class="dup-source-badge text-xs" :title="instance.referenced_by.join('\n')">{{ t('deduplication.pinned') }}</span>
-                </div>
-                <span class="dup-file-path text-xs">{{ instance.file_path }}</span>
-                <span class="dup-inst-meta text-xs text-tertiary">{{ formatSize(instance.size_bytes) }} · {{ t('deduplication.modified') }}: {{ new Date(instance.modified_time).toLocaleString() }}</span>
-                <span v-if="instance.archive_destination" class="dup-file-path text-xs text-secondary">{{ t('deduplication.archiveTarget') }}: {{ instance.archive_destination }}</span>
-              </div>
-              <UiButton class="text-xs" :aria-label="t('deduplication.copyFilePath', { path: instance.file_path })" @click="copyPaths([instance.file_path])" variant="ghost">{{ t('deduplication.copyPath') }}</UiButton>
-            </div>
-          </div>
-        </article>
-        <p v-if="!filteredGroups.length" class="dedup-no-match text-sm text-secondary">{{ t('deduplication.noMatchingGroups') }}</p>
-      </div>
-      <nav class="dedup-pagination" :aria-label="t('deduplication.groupPages')">
-        <span class="text-xs text-tertiary">{{ t('deduplication.pageInfo', { page: currentPage, total: pageCount, size: pageSize }) }}</span>
-        <div class="dup-group-actions">
-          <UiButton :disabled="currentPage <= 1" @click="currentPage--" variant="ghost">{{ t('deduplication.previousPage') }}</UiButton>
-          <UiButton :disabled="currentPage >= pageCount" @click="currentPage++" variant="ghost">{{ t('deduplication.nextPage') }}</UiButton>
+      <section class="scan-options glass-panel">
+        <label for="dedup-root">{{ t('deduplication.sourceDirectory') }}</label>
+        <div class="scan-directory-row">
+          <UiInput
+            id="dedup-root"
+            v-model="resourceRoot"
+            :placeholder="defaultRoot"
+            :disabled="busy"
+          />
+          <UiButton :disabled="busy" @click="chooseRoot" variant="secondary">
+            {{ t('deduplication.browse') }}
+          </UiButton>
         </div>
-      </nav>
-    </section>
+        <p class="text-sm text-secondary">{{ t('deduplication.rules') }}</p>
+        <p class="text-xs text-tertiary">{{ t('deduplication.ordinaryRule') }}</p>
+        <p v-if="dedupSummary" class="text-xs">
+          {{ t('deduplication.scanSummary', { count: dedupSummary.total_files, archive: dedupSummary.archive_count }) }}
+        </p>
+        <details v-if="dedupSummary?.warnings.length" class="text-xs">
+          <summary>
+            {{ t('deduplication.scanWarnings', { count: dedupSummary.warnings.length }) }}
+          </summary>
+          <p v-for="warning in dedupSummary.warnings" :key="warning">{{ warning }}</p>
+        </details>
+      </section>
+      <!-- Action Bar -->
 
-    <!-- Empty State -->
-    <div v-else-if="hasScanned && duplicateGroups.length === 0" class="dedup-content glass-panel">
-      <div class="dedup-body">
+      <!-- Keep groups at their natural height; paginate large scan results. -->
+      <section v-if="duplicateGroups.length > 0" class="dedup-content glass-panel">
+        <div class="dedup-header">
+          <h3 class="dedup-header-title">{{ t('deduplication.duplicates') }}</h3>
+          <span class="text-xs text-tertiary">
+            {{ t('deduplication.filteredGroups', { count: filteredGroups.length, total: duplicateGroups.length }) }}
+          </span>
+        </div>
+        <div class="dedup-search">
+          <UiInput
+            v-model="groupSearch"
+            type="search"
+            :aria-label="t('deduplication.searchPaths')"
+            :placeholder="t('deduplication.searchPaths')"
+            search
+          />
+          <span class="text-xs text-tertiary">{{ t('deduplication.pathsHint') }}</span>
+        </div>
+        <div ref="groupListEl" class="dedup-body">
+          <article v-for="group in visibleGroups" :key="group.id" class="dup-group">
+            <div class="dup-group-header">
+              <UiButton
+                class="dup-group-toggle"
+                :aria-expanded="!collapsedGroups.has(group.id)"
+                @click="toggleGroup(group.id)"
+                variant="secondary"
+              >
+                <span class="dup-expand-icon">{{ collapsedGroups.has(group.id) ? '▸' : '▾' }}</span>
+                <span class="dup-group-info">
+                  <span class="dup-group-path text-sm">{{ group.resource_path }}</span>
+                  <span class="dup-group-meta text-xs text-tertiary">
+                    {{ t('deduplication.copies', { count: group.file_count }) }} ·
+                    {{ t('deduplication.wasted', { size: formatSize(group.total_wasted_bytes) }) }}
+                  </span>
+                </span>
+              </UiButton>
+              <div class="dup-group-actions">
+                <UiButton
+                  class="text-xs"
+                  @click="copyPaths(group.instances.map(i => i.file_path))"
+                  variant="secondary"
+                >
+                  {{ t('deduplication.copyGroupPaths') }}
+                </UiButton>
+                <UiButton
+                  v-if="!allSelectedFor(group)"
+                  class="dup-action-keep text-xs"
+                  :disabled="busy"
+                  @click="selectAllForKeep(group)"
+                  variant="secondary"
+                >
+                  {{ t('deduplication.keepAll') }}
+                </UiButton>
+                <UiButton
+                  v-else
+                  class="dup-action-clean text-xs"
+                  :disabled="busy"
+                  @click="selectRecommendedForKeep(group)"
+                  variant="secondary"
+                >
+                  {{ t('deduplication.keepRecommended') }}
+                </UiButton>
+              </div>
+            </div>
+            <div v-if="!collapsedGroups.has(group.id)" class="dup-instances">
+              <div
+                v-for="instance in group.instances"
+                :key="instance.file_path"
+                class="dup-instance"
+              >
+                <input
+                  type="checkbox"
+                  :checked="selectedInstances[group.id]?.has(instance.file_path)"
+                  :disabled="busy || instance.is_recommended_keep"
+                  :aria-label="t('deduplication.keepFile', { path: instance.file_path })"
+                  @change="toggleInstance(group.id, instance.file_path)"
+                />
+                <div class="dup-inst-info">
+                  <div class="dup-inst-heading">
+                    <span class="dup-inst-name text-sm">{{ fileName(instance.file_path) }}</span>
+                    <span
+                      :class="['dup-status', instance.archive_destination ? 'archive' : selectedInstances[group.id]?.has(instance.file_path) ? 'keep' : 'recycle']"
+                    >
+                      {{ instance.archive_destination ? t('deduplication.willArchive') : selectedInstances[group.id]?.has(instance.file_path) ? t('deduplication.keepStatus') : t('deduplication.recycleStatus') }}
+                    </span>
+                    <span
+                      v-if="instance.referenced_by.length"
+                      class="dup-source-badge text-xs"
+                      :title="instance.referenced_by.join('\n')"
+                    >
+                      {{ t('deduplication.pinned') }}
+                    </span>
+                  </div>
+                  <span class="dup-file-path text-xs">{{ instance.file_path }}</span>
+                  <span class="dup-inst-meta text-xs text-tertiary">
+                    {{ formatSize(instance.size_bytes) }} · {{ t('deduplication.modified') }}:
+                    {{ new Date(instance.modified_time).toLocaleString() }}
+                  </span>
+                  <span
+                    v-if="instance.archive_destination"
+                    class="dup-file-path text-xs text-secondary"
+                  >
+                    {{ t('deduplication.archiveTarget') }}: {{ instance.archive_destination }}
+                  </span>
+                </div>
+                <UiButton
+                  class="text-xs"
+                  :aria-label="t('deduplication.copyFilePath', { path: instance.file_path })"
+                  @click="copyPaths([instance.file_path])"
+                  variant="ghost"
+                >
+                  {{ t('deduplication.copyPath') }}
+                </UiButton>
+              </div>
+            </div>
+          </article>
+          <p v-if="!filteredGroups.length" class="dedup-no-match text-sm text-secondary">
+            {{ t('deduplication.noMatchingGroups') }}
+          </p>
+        </div>
+        <nav class="dedup-pagination" :aria-label="t('deduplication.groupPages')">
+          <span class="text-xs text-tertiary">
+            {{ t('deduplication.pageInfo', { page: currentPage, total: pageCount, size: pageSize }) }}
+          </span>
+          <div class="dup-group-actions">
+            <UiButton :disabled="currentPage <= 1" @click="currentPage--" variant="ghost">
+              {{ t('deduplication.previousPage') }}
+            </UiButton>
+            <UiButton :disabled="currentPage >= pageCount" @click="currentPage++" variant="ghost">
+              {{ t('deduplication.nextPage') }}
+            </UiButton>
+          </div>
+        </nav>
+      </section>
+
+      <!-- Empty State -->
+      <div v-else-if="hasScanned && duplicateGroups.length === 0" class="dedup-content glass-panel">
+        <div class="dedup-body">
           <EmptyState
             :icon="icons.empty"
             :title="$t('deduplication.noDuplicates')"
             :description="emptyStateDescription"
           />
+        </div>
       </div>
-    </div>
 
-    <div v-else class="dedup-content glass-panel">
-      <div class="dedup-body">
-        <EmptyState
-          :icon="icons.empty"
-          :title="$t('deduplication.noDuplicates')"
-          :description="$t('deduplication.noDuplicatesDesc')"
-        />
+      <div v-else class="dedup-content glass-panel">
+        <div class="dedup-body">
+          <EmptyState
+            :icon="icons.empty"
+            :title="$t('deduplication.noDuplicates')"
+            :description="$t('deduplication.noDuplicatesDesc')"
+          />
+        </div>
       </div>
-    </div>
 
-    <!-- Cleanup Preview Modal -->
-    <UiModal v-if="showCleanupPreview" :show-close="false"  :close-disabled="isCleaning" @close="showCleanupPreview = false">
-          <div class="modal-header">
-            <h3 class="modal-title">
-              <Icon class="title-icon" :size="18" name="outline-18" />
-              {{ $t('deduplication.confirmModalTitle') }}
-            </h3>
-            <UiButton :disabled="isCleaning" @click="showCleanupPreview = false" variant="ghost" icon-only :aria-label="$t('common.close')">
-              <Icon  :size="16" name="outline-9" />
-            </UiButton>
-          </div>
-          <div class="modal-body">
-            <p class="share-desc text-secondary text-sm">
-              {{ $t('deduplication.confirmModalDesc') }}
-            </p>
-            <div class="cleanup-scroll-list list-scrollbar">
-              <div v-for="item in cleanupList" :key="item.file_path" class="cleanup-preview-item">
-                <span class="path text-xs text-primary truncate" :title="item.file_path">{{ item.file_path }}</span>
-                <span class="meta text-xs text-tertiary">
-                  {{ fileName(item.file_path) }} &middot; {{ formatSize(item.size_bytes) }}
-                </span>
-              </div>
-            </div>
-            <div v-if="archiveList.length" class="cleanup-scroll-list list-scrollbar">
-              <strong>{{ t('deduplication.archivePreview') }}</strong>
-              <div v-for="item in archiveList" :key="item.file_path" class="cleanup-preview-item">
-                <span class="text-xs">{{ item.file_path }} → {{ item.archive_destination }}</span>
-              </div>
-            </div>
-            <div class="cleanup-summary border-t">
-              <span class="text-xs text-primary">{{ $t('deduplication.filesToClean', { count: cleanupList.length }) }}</span>
-              <span class="text-xs text-primary">
-                {{ $t('deduplication.estimatedFreedSpace', { size: '' }) }}
-                <strong class="highlight-red font-numeric">
-                  {{ formatSize(cleanupList.reduce((sum, item) => sum + item.size_bytes, 0)) }}
-                </strong>
+      <!-- Cleanup Preview Modal -->
+      <UiModal
+        v-if="showCleanupPreview"
+        :show-close="false"
+        :close-disabled="isCleaning"
+        @close="showCleanupPreview = false"
+      >
+        <div class="modal-header">
+          <h3 class="modal-title">
+            <Icon class="title-icon" :size="18" name="outline-18" />
+            {{ $t('deduplication.confirmModalTitle') }}
+          </h3>
+          <UiButton
+            :disabled="isCleaning"
+            @click="showCleanupPreview = false"
+            variant="ghost"
+            icon-only
+            :aria-label="$t('common.close')"
+          >
+            <Icon :size="16" name="outline-9" />
+          </UiButton>
+        </div>
+        <div class="modal-body">
+          <p class="share-desc text-secondary text-sm">
+            {{ $t('deduplication.confirmModalDesc') }}
+          </p>
+          <div class="cleanup-scroll-list list-scrollbar">
+            <div v-for="item in cleanupList" :key="item.file_path" class="cleanup-preview-item">
+              <span class="path text-xs text-primary truncate" :title="item.file_path">
+                {{ item.file_path }}
+              </span>
+              <span class="meta text-xs text-tertiary">
+                {{ fileName(item.file_path) }} &middot; {{ formatSize(item.size_bytes) }}
               </span>
             </div>
-            <div class="action-footer">
-              <UiButton :disabled="isCleaning" @click="showCleanupPreview = false" variant="secondary">
-                {{ $t('common.cancel') }}
-              </UiButton>
-              <UiButton :disabled="isCleaning" @click="handleCleanup" variant="danger">
-                <span v-if="isCleaning" class="spinner"></span>
-                <span>{{ isCleaning ? $t('deduplication.cleaning') : $t('deduplication.confirmCleanup') }}</span>
-              </UiButton>
+          </div>
+          <div v-if="archiveList.length" class="cleanup-scroll-list list-scrollbar">
+            <strong>{{ t('deduplication.archivePreview') }}</strong>
+            <div v-for="item in archiveList" :key="item.file_path" class="cleanup-preview-item">
+              <span class="text-xs">{{ item.file_path }} → {{ item.archive_destination }}</span>
             </div>
           </div>
-        </UiModal>
-  </div></div>
+          <div class="cleanup-summary border-t">
+            <span class="text-xs text-primary">
+              {{ $t('deduplication.filesToClean', { count: cleanupList.length }) }}
+            </span>
+            <span class="text-xs text-primary">
+              {{ $t('deduplication.estimatedFreedSpace', { size: '' }) }}
+              <strong class="highlight-red font-numeric">
+                {{ formatSize(cleanupList.reduce((sum, item) => sum + item.size_bytes, 0)) }}
+              </strong>
+            </span>
+          </div>
+          <div class="action-footer">
+            <UiButton
+              :disabled="isCleaning"
+              @click="showCleanupPreview = false"
+              variant="secondary"
+            >
+              {{ $t('common.cancel') }}
+            </UiButton>
+            <UiButton :disabled="isCleaning" @click="handleCleanup" variant="danger">
+              <span v-if="isCleaning" class="spinner"></span>
+              <span>
+                {{ isCleaning ? $t('deduplication.cleaning') : $t('deduplication.confirmCleanup') }}
+              </span>
+            </UiButton>
+          </div>
+        </div>
+      </UiModal>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -487,10 +611,30 @@ const icons = {
 </script>
 
 <style scoped>
-.scan-options { padding: 16px; display: flex; flex-direction: column; gap: 10px; }
-.scan-directory-row { display: flex; gap: 8px; }
-.scan-directory-row input { flex: 1; min-width: 0; padding: 9px 12px; background: var(--bg-base); border: 1px solid var(--border-subtle); border-radius: var(--radius-xs); color: var(--text-primary); }
-.scan-options details { max-height: 160px; overflow: auto; overflow-wrap: anywhere; }
+.scan-options {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.scan-directory-row {
+  display: flex;
+  gap: 8px;
+}
+.scan-directory-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 12px;
+  background: var(--bg-base);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xs);
+  color: var(--text-primary);
+}
+.scan-options details {
+  max-height: 160px;
+  overflow: auto;
+  overflow-wrap: anywhere;
+}
 
 .deduplication-view {
   display: flex;
@@ -506,7 +650,9 @@ const icons = {
 }
 
 @media (max-width: 1000px) {
-  .summary-grid { grid-template-columns: 1fr; }
+  .summary-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .spin-icon {
@@ -543,37 +689,165 @@ const icons = {
   font-variant-numeric: tabular-nums;
 }
 
-.dedup-search { display: flex; align-items: center; gap: 12px; padding: 12px 16px; flex-wrap: wrap; }
-.dedup-search input { flex: 1 1 280px; min-width: 0; padding: 8px 10px; background: var(--bg-input); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); }
-.dedup-body { min-height: 260px; max-height: 65vh; overflow-y: auto; padding: 12px; display: block; }
-.dup-group { border: none; border-radius: var(--radius-md); overflow: hidden; }
-.dup-group + .dup-group { margin-top: 12px; }
-.dup-group-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px; background: var(--bg-hover); flex-wrap: wrap; }
-.dup-group-toggle { display: flex; align-items: center; gap: 8px; text-align: left; flex: 1 1 260px; min-width: 0; }
-.dup-group-info { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.dup-group-path { color: var(--text-primary); font-weight: var(--font-semibold); overflow-wrap: anywhere; }
-.dup-group-meta, .dup-inst-meta { font-variant-numeric: tabular-nums; }
-.dup-group-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.dup-action-keep { color: var(--color-success); }
-.dup-action-clean { color: var(--accent-primary); }
-.dup-expand-icon { color: var(--text-tertiary); flex: 0 0 14px; }
-.dup-instances { border-top: 1px solid var(--border-subtle); }
-.dup-instance { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; align-items: start; gap: 12px; padding: 14px; }
-.dup-instance + .dup-instance { border-top: 1px solid var(--border-subtle); }
-.dup-instance > input { margin-top: 4px; }
-.dup-inst-info { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-.dup-inst-heading { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.dup-inst-name { font-weight: var(--font-medium); overflow-wrap: anywhere; }
-.dup-file-path, .dup-inst-name { -webkit-user-select: text; user-select: text; }
-.dup-file-path { display: block; overflow-wrap: anywhere; white-space: normal; line-height: 1.65; color: var(--text-secondary); }
-.dup-status, .dup-source-badge { padding: 2px 7px; border-radius: var(--radius-progress); font-size: var(--text-xs); white-space: nowrap; }
-.dup-status.keep { color: var(--color-success); background: var(--color-success-bg); }
-.dup-status.recycle { color: var(--color-error); background: var(--color-error-bg); }
-.dup-status.archive, .dup-source-badge { color: var(--color-info); background: var(--color-info-bg); }
-.dedup-pagination { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 12px 16px; border-top: 1px solid var(--border-subtle); }
-.dedup-no-match { padding: 24px; text-align: center; }
+.dedup-search {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  flex-wrap: wrap;
+}
+.dedup-search input {
+  flex: 1 1 280px;
+  min-width: 0;
+  padding: 8px 10px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+.dedup-body {
+  min-height: 260px;
+  max-height: 65vh;
+  overflow-y: auto;
+  padding: 12px;
+  display: block;
+}
+.dup-group {
+  border: none;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.dup-group + .dup-group {
+  margin-top: 12px;
+}
+.dup-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  background: var(--bg-hover);
+  flex-wrap: wrap;
+}
+.dup-group-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+  flex: 1 1 260px;
+  min-width: 0;
+}
+.dup-group-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.dup-group-path {
+  color: var(--text-primary);
+  font-weight: var(--font-semibold);
+  overflow-wrap: anywhere;
+}
+.dup-group-meta,
+.dup-inst-meta {
+  font-variant-numeric: tabular-nums;
+}
+.dup-group-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.dup-action-keep {
+  color: var(--color-success);
+}
+.dup-action-clean {
+  color: var(--accent-primary);
+}
+.dup-expand-icon {
+  color: var(--text-tertiary);
+  flex: 0 0 14px;
+}
+.dup-instances {
+  border-top: 1px solid var(--border-subtle);
+}
+.dup-instance {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+  padding: 14px;
+}
+.dup-instance + .dup-instance {
+  border-top: 1px solid var(--border-subtle);
+}
+.dup-instance > input {
+  margin-top: 4px;
+}
+.dup-inst-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.dup-inst-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.dup-inst-name {
+  font-weight: var(--font-medium);
+  overflow-wrap: anywhere;
+}
+.dup-file-path,
+.dup-inst-name {
+  -webkit-user-select: text;
+  user-select: text;
+}
+.dup-file-path {
+  display: block;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  line-height: 1.65;
+  color: var(--text-secondary);
+}
+.dup-status,
+.dup-source-badge {
+  padding: 2px 7px;
+  border-radius: var(--radius-progress);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+.dup-status.keep {
+  color: var(--color-success);
+  background: var(--color-success-bg);
+}
+.dup-status.recycle {
+  color: var(--color-error);
+  background: var(--color-error-bg);
+}
+.dup-status.archive,
+.dup-source-badge {
+  color: var(--color-info);
+  background: var(--color-info-bg);
+}
+.dedup-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border-subtle);
+}
+.dedup-no-match {
+  padding: 24px;
+  text-align: center;
+}
 @media (max-width: 700px) {
-  .dup-instance { grid-template-columns: 16px minmax(0, 1fr); }
+  .dup-instance {
+    grid-template-columns: 16px minmax(0, 1fr);
+  }
 }
 
 /* ── Cleanup Modal ────────────────────────────────────────── */
@@ -665,7 +939,7 @@ const icons = {
   height: 16px;
   border: none;
   border-top-color: var(--text-primary);
-  border-radius: var(--radius-xl)%;
+  border-radius: var(--radius-xl) %;
   animation: spin 1s linear infinite;
 }
 
@@ -687,26 +961,61 @@ const icons = {
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* Modal Animations */
 
 @keyframes scaleUp {
-  from { transform: scale(0.92); opacity: 0; }
-  to { transform: scale(1); opacity: 1; }
+  from {
+    transform: scale(0.92);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 
-.fade-enter-active, .fade-leave-active {
+.fade-enter-active,
+.fade-leave-active {
   transition: opacity 0.2s var(--ease);
 }
 
-.fade-enter-from, .fade-leave-to {
+.fade-enter-from,
+.fade-leave-to {
   opacity: 0;
 }
 
-.b2-page { display: flex; flex-direction: column; height: 100%; min-height: 0; max-width: none; margin: 0; padding: 0; gap: 0; overflow: hidden; }
-.b2-page-body { flex: 1; min-height: 0; min-width: 0; overflow: auto; padding: 20px 24px; display: flex; flex-direction: column; gap: 20px; }
-.b2-page :deep(.page-header) { width: 100%; }
-@media(max-width: 800px) { .b2-page-body { padding: 12px; } }
+.b2-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+}
+.b2-page-body {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: auto;
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.b2-page :deep(.page-header) {
+  width: 100%;
+}
+@media (max-width: 800px) {
+  .b2-page-body {
+    padding: 12px;
+  }
+}
 </style>

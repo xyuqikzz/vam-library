@@ -94,9 +94,18 @@ async function openSettings() {
 </script>
 
 <template>
-  <UiModal ref="dialog" aria-labelledby="external-import-title" aria-describedby="external-import-description" @cancel.prevent="cancel" imperative :show-close="false">
+  <UiModal
+    ref="dialog"
+    aria-labelledby="external-import-title"
+    aria-describedby="external-import-description"
+    @cancel.prevent="cancel"
+    imperative
+    :show-close="false"
+  >
     <h3 id="external-import-title">{{ t('ingestion.externalTitle') }}</h3>
-    <p id="external-import-description">{{ t('ingestion.externalQuestion', { count: files.length }) }}</p>
+    <p id="external-import-description">
+      {{ t('ingestion.externalQuestion', { count: files.length }) }}
+    </p>
     <ul class="file-list">
       <li v-for="path in files" :key="path">{{ path }}</li>
     </ul>
@@ -105,38 +114,125 @@ async function openSettings() {
       <legend>{{ t('ingestion.rule') }}</legend>
       <label :class="{ selected: mode === 'flatten' }">
         <input v-model="mode" type="radio" name="external-import-mode" value="flatten" />
-        <span>{{ t('migration.modeFlatten') }}<small>{{ t('ingestion.ruleHelp.flatten') }}</small></span>
+        <span>
+          {{ t('migration.modeFlatten') }}
+          <small>{{ t('ingestion.ruleHelp.flatten') }}</small>
+        </span>
       </label>
       <label :class="{ selected: mode === 'by_type' }">
         <input v-model="mode" type="radio" name="external-import-mode" value="by_type" />
-        <span>{{ t('migration.modeByType') }}<small>{{ t('ingestion.ruleHelp.by_type') }}</small></span>
+        <span>
+          {{ t('migration.modeByType') }}
+          <small>{{ t('ingestion.ruleHelp.by_type') }}</small>
+        </span>
       </label>
     </fieldset>
     <p class="help">{{ t('ingestion.externalHelp') }}</p>
     <p v-if="error" class="error" role="alert">{{ error }}</p>
     <div class="actions">
-      <UiButton :disabled="navigating" autofocus @click="cancel" variant="secondary">{{ t('common.cancel') }}</UiButton>
-      <UiButton v-if="!targetDir" @click="openSettings" variant="primary" size="lg">{{ t('ingestion.externalSettings') }}</UiButton>
-      <UiButton v-else :disabled="navigating" @click="previewImport" variant="primary" size="lg">{{ t('ingestion.preview') }}</UiButton>
+      <UiButton :disabled="navigating" autofocus @click="cancel" variant="secondary">
+        {{ t('common.cancel') }}
+      </UiButton>
+      <UiButton v-if="!targetDir" @click="openSettings" variant="primary" size="lg">
+        {{ t('ingestion.externalSettings') }}
+      </UiButton>
+      <UiButton v-else :disabled="navigating" @click="previewImport" variant="primary" size="lg">
+        {{ t('ingestion.preview') }}
+      </UiButton>
     </div>
   </UiModal>
 </template>
 
 <style scoped>
-.external-import-dialog { margin: auto; width: min(560px, calc(100vw - 48px)); max-height: calc(100vh - 64px); overflow: auto; padding: var(--space-6); color: var(--text-primary); background: var(--bg-surface); border: none; border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); }
-.external-import-dialog::backdrop { background: var(--bg-overlay); }
-h3 { font-size: var(--text-lg); margin-bottom: var(--space-3); }
-p { font-size: var(--text-sm); line-height: 1.7; overflow-wrap: anywhere; }
-.file-list { margin: var(--space-3) 0; padding: var(--space-3) var(--space-5); max-height: 160px; overflow: auto; background: var(--bg-subtle); border-radius: var(--radius-sm); font-size: var(--text-xs); overflow-wrap: anywhere; user-select: text; }
-.target-path { color: var(--text-secondary); user-select: text; }
-fieldset { border: none; padding: 0; margin: var(--space-4) 0; display: grid; gap: var(--space-2); }
-legend { font-size: var(--text-sm); margin-bottom: var(--space-2); }
-label { display: flex; gap: var(--space-3); align-items: center; padding: var(--space-3); border: none; border-radius: var(--radius-sm); cursor: pointer; font-size: var(--text-sm); }
-label.selected { border-color: var(--accent-primary); background: var(--accent-subtle); }
-label:focus-within, button:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
-input { accent-color: var(--accent-primary); }
-small { display: block; color: var(--text-secondary); margin-top: var(--space-1); line-height: 1.6; }
-.help { color: var(--text-secondary); font-size: var(--text-xs); }
-.error { color: var(--color-error); }
-.actions { display: flex; justify-content: flex-end; gap: var(--space-2); margin-top: var(--space-4); }
+.external-import-dialog {
+  margin: auto;
+  width: min(560px, calc(100vw - 48px));
+  max-height: calc(100vh - 64px);
+  overflow: auto;
+  padding: var(--space-6);
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  border: none;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+}
+.external-import-dialog::backdrop {
+  background: var(--bg-overlay);
+}
+h3 {
+  font-size: var(--text-lg);
+  margin-bottom: var(--space-3);
+}
+p {
+  font-size: var(--text-sm);
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.file-list {
+  margin: var(--space-3) 0;
+  padding: var(--space-3) var(--space-5);
+  max-height: 160px;
+  overflow: auto;
+  background: var(--bg-subtle);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+.target-path {
+  color: var(--text-secondary);
+  user-select: text;
+}
+fieldset {
+  border: none;
+  padding: 0;
+  margin: var(--space-4) 0;
+  display: grid;
+  gap: var(--space-2);
+}
+legend {
+  font-size: var(--text-sm);
+  margin-bottom: var(--space-2);
+}
+label {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  padding: var(--space-3);
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: var(--text-sm);
+}
+label.selected {
+  border-color: var(--accent-primary);
+  background: var(--accent-subtle);
+}
+label:focus-within,
+button:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+input {
+  accent-color: var(--accent-primary);
+}
+small {
+  display: block;
+  color: var(--text-secondary);
+  margin-top: var(--space-1);
+  line-height: 1.6;
+}
+.help {
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+}
+.error {
+  color: var(--color-error);
+}
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
 </style>

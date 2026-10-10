@@ -1,185 +1,214 @@
 <template>
-  <UiModal v-if="visible" :show-close="false"  :close-disabled="isZipping" @close="handleClose">
+  <UiModal v-if="visible" :show-close="false" :close-disabled="isZipping" @close="handleClose">
+    <!-- Header -->
+    <div class="modal-header">
+      <h3 class="modal-title">
+        <Icon class="title-icon" :size="18" name="outline-8" />
+        {{ $t('share.title') }}
+      </h3>
+      <UiButton
+        :disabled="isZipping"
+        @click="handleClose"
+        variant="ghost"
+        icon-only
+        :aria-label="$t('common.close')"
+      >
+        <Icon :size="16" name="outline-9" />
+      </UiButton>
+    </div>
 
-        <!-- Header -->
-        <div class="modal-header">
-          <h3 class="modal-title">
-            <Icon class="title-icon" :size="18" name="outline-8" />
-            {{ $t('share.title') }}
-          </h3>
-          <UiButton :disabled="isZipping" @click="handleClose" variant="ghost" icon-only :aria-label="$t('common.close')">
-            <Icon  :size="16" name="outline-9" />
+    <!-- Body -->
+    <div class="modal-body">
+      <p class="share-desc text-secondary text-sm">
+        {{ $t('share.desc') }}
+      </p>
+
+      <!-- Loading State -->
+      <div v-if="loading" class="loading-state">
+        <div class="spinner"></div>
+        <p class="text-secondary text-sm">{{ $t('share.preparing') }}</p>
+      </div>
+
+      <!-- Error Phase State -->
+      <div v-else-if="phase === 'error'" class="status-panel error-panel">
+        <div class="status-icon-wrapper error">
+          <Icon :size="36" name="outline-10" />
+        </div>
+        <h4 class="text-sm font-semibold text-primary" style="margin-top: var(--space-2);">
+          {{ $t('common.error') }}
+        </h4>
+        <p
+          class="text-secondary text-xs"
+          style="margin-top: var(--space-1); text-align: center; max-width: 90%;"
+        >
+          {{ $t('share.failed', { error: progressError || 'Unknown Error' }) }}
+        </p>
+        <UiButton @click="fetchPreview" variant="secondary">
+          {{ $t('download.actions.retry') }}
+        </UiButton>
+      </div>
+
+      <!-- Done Phase State -->
+      <div v-else-if="phase === 'done'" class="status-panel success-panel">
+        <div class="status-icon-wrapper success">
+          <Icon class="checkmark" :size="36" name="outline-11" />
+        </div>
+        <h4 class="text-sm font-semibold text-primary" style="margin-top: var(--space-2);">
+          {{ $t('share.successTitle') }}
+        </h4>
+        <p
+          class="text-secondary text-xs"
+          style="margin-top: var(--space-1); text-align: center; max-width: 90%;"
+        >
+          {{ $t('share.successDesc') }}
+        </p>
+        <div class="success-actions">
+          <UiButton @click="revealZip" variant="secondary">
+            {{ $t('share.reveal') }}
+          </UiButton>
+          <UiButton @click="handleClose" variant="primary" size="lg">
+            {{ $t('share.close') }}
           </UiButton>
         </div>
+      </div>
 
-        <!-- Body -->
-        <div class="modal-body">
-          <p class="share-desc text-secondary text-sm">
-            {{ $t('share.desc') }}
+      <!-- Zipping Phase State -->
+      <div v-else-if="phase === 'zipping'" class="status-panel zipping-panel">
+        <div class="progress-info">
+          <span class="text-primary text-sm font-semibold">{{ $t('share.zipping') }}</span>
+          <span class="text-secondary text-sm font-semibold font-numeric">
+            {{ percentage.toFixed(0) }}%
+          </span>
+        </div>
+        <div class="progress-track" style="margin-top: var(--space-2);">
+          <div class="progress-fill" :style="{ width: `${percentage}%` }"></div>
+        </div>
+        <div class="zipping-details" style="margin-top: var(--space-3);">
+          <p class="current-file text-xs text-primary truncate" :title="currentFile">
+            {{ currentFile }}
           </p>
+          <p class="file-counts text-xs text-secondary font-numeric" style="margin-top: 2px;">
+            {{ processedFiles }} / {{ totalFiles }}
+          </p>
+        </div>
+      </div>
 
-          <!-- Loading State -->
-          <div v-if="loading" class="loading-state">
-            <div class="spinner"></div>
-            <p class="text-secondary text-sm">{{ $t('share.preparing') }}</p>
+      <!-- Preview & Action State -->
+      <div v-else class="preview-layout animate-fadeIn">
+        <!-- Summary Stats Card -->
+        <div class="summary-stats-card">
+          <div class="stat-column">
+            <span class="stat-val font-numeric">{{ totalFiles }}</span>
+            <span class="stat-lbl text-xs text-tertiary">
+              {{ $t('share.packageCount', { count: totalFiles }).split(':')[0] }}
+            </span>
           </div>
-
-          <!-- Error Phase State -->
-          <div v-else-if="phase === 'error'" class="status-panel error-panel">
-            <div class="status-icon-wrapper error">
-              <Icon  :size="36" name="outline-10" />
-            </div>
-            <h4 class="text-sm font-semibold text-primary" style="margin-top: var(--space-2);">
-              {{ $t('common.error') }}
-            </h4>
-            <p class="text-secondary text-xs" style="margin-top: var(--space-1); text-align: center; max-width: 90%;">
-              {{ $t('share.failed', { error: progressError || 'Unknown Error' }) }}
-            </p>
-            <UiButton @click="fetchPreview" variant="secondary">
-              {{ $t('download.actions.retry') }}
-            </UiButton>
-          </div>
-
-          <!-- Done Phase State -->
-          <div v-else-if="phase === 'done'" class="status-panel success-panel">
-            <div class="status-icon-wrapper success">
-              <Icon class="checkmark" :size="36" name="outline-11" />
-            </div>
-            <h4 class="text-sm font-semibold text-primary" style="margin-top: var(--space-2);">
-              {{ $t('share.successTitle') }}
-            </h4>
-            <p class="text-secondary text-xs" style="margin-top: var(--space-1); text-align: center; max-width: 90%;">
-              {{ $t('share.successDesc') }}
-            </p>
-            <div class="success-actions">
-              <UiButton @click="revealZip" variant="secondary">
-                {{ $t('share.reveal') }}
-              </UiButton>
-              <UiButton @click="handleClose" variant="primary" size="lg">
-                {{ $t('share.close') }}
-              </UiButton>
-            </div>
-          </div>
-
-          <!-- Zipping Phase State -->
-          <div v-else-if="phase === 'zipping'" class="status-panel zipping-panel">
-            <div class="progress-info">
-              <span class="text-primary text-sm font-semibold">{{ $t('share.zipping') }}</span>
-              <span class="text-secondary text-sm font-semibold font-numeric">{{ percentage.toFixed(0) }}%</span>
-            </div>
-            <div class="progress-track" style="margin-top: var(--space-2);">
-              <div class="progress-fill" :style="{ width: `${percentage}%` }"></div>
-            </div>
-            <div class="zipping-details" style="margin-top: var(--space-3);">
-              <p class="current-file text-xs text-primary truncate" :title="currentFile">
-                {{ currentFile }}
-              </p>
-              <p class="file-counts text-xs text-secondary font-numeric" style="margin-top: 2px;">
-                {{ processedFiles }} / {{ totalFiles }}
-              </p>
-            </div>
-          </div>
-
-          <!-- Preview & Action State -->
-          <div v-else class="preview-layout animate-fadeIn">
-
-            <!-- Summary Stats Card -->
-            <div class="summary-stats-card">
-              <div class="stat-column">
-                <span class="stat-val font-numeric">{{ totalFiles }}</span>
-                <span class="stat-lbl text-xs text-tertiary">{{ $t('share.packageCount', { count: totalFiles }).split(':')[0] }}</span>
-              </div>
-              <div class="stat-divider"></div>
-              <div class="stat-column">
-                <span class="stat-val font-numeric">{{ formatSize(totalSizeBytes) }}</span>
-                <span class="stat-lbl text-xs text-tertiary">{{ $t('share.totalSize', { size: '' }).split(':')[0] }}</span>
-              </div>
-            </div>
-
-            <!-- Exclusion List Panel -->
-            <div class="exclusion-list-card">
-              <div v-if="!excludeListPath" class="exclusion-import-trigger" @click="handleImportExcludeList">
-                <Icon class="import-icon" :size="14" name="outline-12" />
-                <span class="text-xs">{{ $t('share.importExcludeBtn') }}</span>
-              </div>
-              <div v-else class="exclusion-active-state">
-                <div class="exclusion-info-wrapper">
-                  <Icon class="active-icon" :size="14" name="outline-13" />
-                  <div class="exclusion-text">
-                    <p class="exclusion-title text-xs truncate" :title="excludeListName">
-                      {{ $t('share.importedExcludeList', { name: excludeListName }) }}
-                    </p>
-                    <p v-if="excludedCount > 0" class="exclusion-subtitle text-xs text-secondary">
-                      {{ $t('share.excludedInfo', { count: excludedCount }) }}
-                    </p>
-                  </div>
-                </div>
-                <UiButton class="text-xs" @click="handleClearExcludeList" variant="secondary">
-                  {{ $t('share.clearExcludeList') }}
-                </UiButton>
-              </div>
-            </div>
-
-            <!-- Content Lists -->
-            <div class="list-sections-container">
-              <!-- Selected Target -->
-              <div class="selected-target-wrapper">
-                <h5 class="section-title text-xs text-tertiary">{{ $t('share.selectedPackage') }}</h5>
-                <div class="selected-package-row text-sm text-primary">
-                  <span class="type-dot type-scene"></span>
-                  <span class="package-name truncate" :title="packageId">{{ packageId }}</span>
-                </div>
-              </div>
-
-              <!-- Dependencies To Pack -->
-              <div class="dependency-list-wrapper">
-                <h5 class="section-title text-xs text-tertiary">
-                  {{ $t('share.dependencies') }}
-                  <span class="count-badge font-numeric" v-if="dependencies.length > 0">{{ dependencies.length }}</span>
-                </h5>
-                <div v-if="dependencies.length === 0" class="empty-list-hint text-xs text-tertiary">
-                  {{ $t('share.noDependencies') }}
-                </div>
-                <div v-else class="list-scrollbar list-content">
-                  <div v-for="dep in dependencies" :key="dep.id" class="list-item-row text-sm">
-                    <span class="dep-name truncate text-primary" :title="dep.id">{{ dep.id }}</span>
-                    <span class="dep-size font-numeric text-secondary text-xs">{{ formatSize(dep.size_bytes) }}</span>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Missing Dependencies (Warning list) -->
-              <div v-if="missingDependencies.length > 0" class="dependency-list-wrapper missing-wrapper">
-                <h5 class="section-title text-xs text-error">
-                  {{ $t('share.missingDependencies') }}
-                  <span class="count-badge missing font-numeric">{{ missingDependencies.length }}</span>
-                </h5>
-                <div class="list-scrollbar list-content missing-list">
-                  <div v-for="missing in missingDependencies" :key="missing" class="list-item-row text-sm missing-row">
-                    <span class="dep-name truncate text-error" :title="missing">{{ missing }}</span>
-                    <span class="dep-status text-error text-xs">{{ $t('share.missing') }}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Warning Banner -->
-            <div v-if="missingDependencies.length > 0" class="warning-banner text-xs">
-              <Icon class="warn-icon" :size="14" name="outline-14" />
-              <span>{{ $t('share.missingCount', { count: missingDependencies.length }) }}</span>
-            </div>
-
-            <!-- Confirm Button -->
-            <div class="action-footer">
-              <UiButton @click="startSharing" variant="primary" size="lg">
-                {{ $t('share.confirmBtn') }}
-              </UiButton>
-            </div>
-
+          <div class="stat-divider"></div>
+          <div class="stat-column">
+            <span class="stat-val font-numeric">{{ formatSize(totalSizeBytes) }}</span>
+            <span class="stat-lbl text-xs text-tertiary">
+              {{ $t('share.totalSize', { size: '' }).split(':')[0] }}
+            </span>
           </div>
         </div>
 
-      </UiModal>
+        <!-- Exclusion List Panel -->
+        <div class="exclusion-list-card">
+          <div
+            v-if="!excludeListPath"
+            class="exclusion-import-trigger"
+            @click="handleImportExcludeList"
+          >
+            <Icon class="import-icon" :size="14" name="outline-12" />
+            <span class="text-xs">{{ $t('share.importExcludeBtn') }}</span>
+          </div>
+          <div v-else class="exclusion-active-state">
+            <div class="exclusion-info-wrapper">
+              <Icon class="active-icon" :size="14" name="outline-13" />
+              <div class="exclusion-text">
+                <p class="exclusion-title text-xs truncate" :title="excludeListName">
+                  {{ $t('share.importedExcludeList', { name: excludeListName }) }}
+                </p>
+                <p v-if="excludedCount > 0" class="exclusion-subtitle text-xs text-secondary">
+                  {{ $t('share.excludedInfo', { count: excludedCount }) }}
+                </p>
+              </div>
+            </div>
+            <UiButton class="text-xs" @click="handleClearExcludeList" variant="secondary">
+              {{ $t('share.clearExcludeList') }}
+            </UiButton>
+          </div>
+        </div>
+
+        <!-- Content Lists -->
+        <div class="list-sections-container">
+          <!-- Selected Target -->
+          <div class="selected-target-wrapper">
+            <h5 class="section-title text-xs text-tertiary">{{ $t('share.selectedPackage') }}</h5>
+            <div class="selected-package-row text-sm text-primary">
+              <span class="type-dot type-scene"></span>
+              <span class="package-name truncate" :title="packageId">{{ packageId }}</span>
+            </div>
+          </div>
+
+          <!-- Dependencies To Pack -->
+          <div class="dependency-list-wrapper">
+            <h5 class="section-title text-xs text-tertiary">
+              {{ $t('share.dependencies') }}
+              <span class="count-badge font-numeric" v-if="dependencies.length > 0">
+                {{ dependencies.length }}
+              </span>
+            </h5>
+            <div v-if="dependencies.length === 0" class="empty-list-hint text-xs text-tertiary">
+              {{ $t('share.noDependencies') }}
+            </div>
+            <div v-else class="list-scrollbar list-content">
+              <div v-for="dep in dependencies" :key="dep.id" class="list-item-row text-sm">
+                <span class="dep-name truncate text-primary" :title="dep.id">{{ dep.id }}</span>
+                <span class="dep-size font-numeric text-secondary text-xs">
+                  {{ formatSize(dep.size_bytes) }}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Missing Dependencies (Warning list) -->
+          <div
+            v-if="missingDependencies.length > 0"
+            class="dependency-list-wrapper missing-wrapper"
+          >
+            <h5 class="section-title text-xs text-error">
+              {{ $t('share.missingDependencies') }}
+              <span class="count-badge missing font-numeric">{{ missingDependencies.length }}</span>
+            </h5>
+            <div class="list-scrollbar list-content missing-list">
+              <div
+                v-for="missing in missingDependencies"
+                :key="missing"
+                class="list-item-row text-sm missing-row"
+              >
+                <span class="dep-name truncate text-error" :title="missing">{{ missing }}</span>
+                <span class="dep-status text-error text-xs">{{ $t('share.missing') }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Warning Banner -->
+        <div v-if="missingDependencies.length > 0" class="warning-banner text-xs">
+          <Icon class="warn-icon" :size="14" name="outline-14" />
+          <span>{{ $t('share.missingCount', { count: missingDependencies.length }) }}</span>
+        </div>
+
+        <!-- Confirm Button -->
+        <div class="action-footer">
+          <UiButton @click="startSharing" variant="primary" size="lg">
+            {{ $t('share.confirmBtn') }}
+          </UiButton>
+        </div>
+      </div>
+    </div>
+  </UiModal>
 </template>
 
 <script setup lang="ts">
@@ -454,7 +483,7 @@ function handleClose() {
   height: 32px;
   border: none;
   border-top-color: var(--accent-primary);
-  border-radius: var(--radius-xl)%;
+  border-radius: var(--radius-xl) %;
   animation: spin 1s linear infinite;
 }
 
@@ -475,7 +504,7 @@ function handleClose() {
   justify-content: center;
   width: 60px;
   height: 60px;
-  border-radius: var(--radius-xl)%;
+  border-radius: var(--radius-xl) %;
 }
 
 .status-icon-wrapper.success {
@@ -620,7 +649,7 @@ function handleClose() {
 .type-dot {
   width: 8px;
   height: 8px;
-  border-radius: var(--radius-xl)%;
+  border-radius: var(--radius-xl) %;
 }
 
 .type-dot.type-scene {
@@ -720,7 +749,9 @@ function handleClose() {
 
 /* Animations */
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .checkmark {
@@ -728,20 +759,34 @@ function handleClose() {
 }
 
 @keyframes scaleIn {
-  from { transform: scale(0.8); opacity: 0; }
-  to { transform: scale(1); opacity: 1; }
+  from {
+    transform: scale(0.8);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 
-.fade-enter-active, .fade-leave-active {
+.fade-enter-active,
+.fade-leave-active {
   transition: opacity 0.25s var(--ease);
 }
-.fade-enter-from, .fade-leave-to {
+.fade-enter-from,
+.fade-leave-to {
   opacity: 0;
 }
 
 @keyframes scaleUp {
-  from { transform: scale(0.95); opacity: 0; }
-  to { transform: scale(1); opacity: 1; }
+  from {
+    transform: scale(0.95);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 
 .font-numeric {

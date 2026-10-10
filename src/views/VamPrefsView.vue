@@ -1,86 +1,124 @@
 <template>
-<div class="vam-prefs-view animate-fadeIn b2-page"><PageHeader :title="$t('vamPrefs.title')" :subtitle="$t('vamPrefs.subtitle')"><template #actions>
-          <UiButton type="button" @click="selectVamRoot" variant="secondary">
-            {{ $t('vamPrefs.selectRoot') }}
-          </UiButton>
-          <UiButton type="button" :disabled="!canRead || isLoading" @click="loadPrefs" variant="secondary">
-            {{ isLoading ? $t('common.loading') : $t('common.refresh') }}
-          </UiButton>
-          <UiButton type="button" :disabled="!canSave" @click="savePrefs" variant="primary" size="lg">
-            {{ isSaving ? $t('common.loading') : $t('vamPrefs.saveWithBackup') }}
-          </UiButton>
-        </template></PageHeader><div class="b2-page-body">
-
-
-    <GlassPanel :title="$t('vamPrefs.currentFile')">
-      <div class="prefs-toolbar">
-        <div class="path-display">
-          <Icon  :size="14" name="outline-53" />
-          <span class="path-text truncate">{{ prefsPath || $t('vamPrefs.pathPending') }}</span>
-        </div>
-
-      </div>
-
-      <div class="status-grid">
-        <div class="status-item">
-          <span class="status-label">{{ $t('vamPrefs.vamRoot') }}</span>
-          <span class="status-value truncate">{{ appStore.vamRootPath || $t('settings.notConfigured') }}</span>
-        </div>
-        <div class="status-item">
-          <span class="status-label">{{ $t('vamPrefs.fileStatus') }}</span>
-          <span :class="['status-pill', prefsExists ? 'ok' : 'warn']">
-            {{ prefsExists ? $t('vamPrefs.fileExists') : $t('vamPrefs.fileMissing') }}
-          </span>
-        </div>
-      </div>
-
-      <p class="warning-text">{{ $t('vamPrefs.runningWarning') }}</p>
-    </GlassPanel>
-
-    <GlassPanel :title="$t('vamPrefs.editor')">
-      <div class="editor-actions">
-        <div class="mode-selector">
-          <UiChip :class="['', { active: editorMode === 'visual' }]" type="button" @click="editorMode = 'visual'" :selected="editorMode === 'visual'">
-            {{ $t('vamPrefs.visualMode') }}
-          </UiChip>
-          <UiChip :class="['', { active: editorMode === 'json' }]" type="button" @click="editorMode = 'json'" :selected="editorMode === 'json'">
-            {{ $t('vamPrefs.jsonMode') }}
-          </UiChip>
-        </div>
-        <UiButton v-if="editorMode === 'json'" type="button" :disabled="!prefsContent" @click="formatContent" variant="secondary">
-          {{ $t('vamPrefs.formatJson') }}
+  <div class="vam-prefs-view animate-fadeIn b2-page">
+    <PageHeader :title="$t('vamPrefs.title')" :subtitle="$t('vamPrefs.subtitle')">
+      <template #actions>
+        <UiButton type="button" @click="selectVamRoot" variant="secondary">
+          {{ $t('vamPrefs.selectRoot') }}
         </UiButton>
-        <UiButton type="button" :disabled="!prefsContent" @click="copyContent" variant="secondary">
-          {{ $t('common.copy') }}
+        <UiButton
+          type="button"
+          :disabled="!canRead || isLoading"
+          @click="loadPrefs"
+          variant="secondary"
+        >
+          {{ isLoading ? $t('common.loading') : $t('common.refresh') }}
         </UiButton>
-      </div>
+        <UiButton type="button" :disabled="!canSave" @click="savePrefs" variant="primary" size="lg">
+          {{ isSaving ? $t('common.loading') : $t('vamPrefs.saveWithBackup') }}
+        </UiButton>
+      </template>
+    </PageHeader>
+    <div class="b2-page-body">
+      <GlassPanel :title="$t('vamPrefs.currentFile')">
+        <div class="prefs-toolbar">
+          <div class="path-display">
+            <Icon :size="14" name="outline-53" />
+            <span class="path-text truncate">{{ prefsPath || $t('vamPrefs.pathPending') }}</span>
+          </div>
+        </div>
 
-      <div v-if="editorMode === 'visual'" class="visual-editor-shell">
-        <JsonVisualEditor
-          v-if="prefsValue !== null"
-          :model-value="prefsValue"
-          @update:model-value="updateVisualValue"
-          @invalid="showVisualError"
+        <div class="status-grid">
+          <div class="status-item">
+            <span class="status-label">{{ $t('vamPrefs.vamRoot') }}</span>
+            <span class="status-value truncate">
+              {{ appStore.vamRootPath || $t('settings.notConfigured') }}
+            </span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">{{ $t('vamPrefs.fileStatus') }}</span>
+            <span :class="['status-pill', prefsExists ? 'ok' : 'warn']">
+              {{ prefsExists ? $t('vamPrefs.fileExists') : $t('vamPrefs.fileMissing') }}
+            </span>
+          </div>
+        </div>
+
+        <p class="warning-text">{{ $t('vamPrefs.runningWarning') }}</p>
+      </GlassPanel>
+
+      <GlassPanel :title="$t('vamPrefs.editor')">
+        <div class="editor-actions">
+          <div class="mode-selector">
+            <UiChip
+              :class="['', { active: editorMode === 'visual' }]"
+              type="button"
+              @click="editorMode = 'visual'"
+              :selected="editorMode === 'visual'"
+            >
+              {{ $t('vamPrefs.visualMode') }}
+            </UiChip>
+            <UiChip
+              :class="['', { active: editorMode === 'json' }]"
+              type="button"
+              @click="editorMode = 'json'"
+              :selected="editorMode === 'json'"
+            >
+              {{ $t('vamPrefs.jsonMode') }}
+            </UiChip>
+          </div>
+          <UiButton
+            v-if="editorMode === 'json'"
+            type="button"
+            :disabled="!prefsContent"
+            @click="formatContent"
+            variant="secondary"
+          >
+            {{ $t('vamPrefs.formatJson') }}
+          </UiButton>
+          <UiButton
+            type="button"
+            :disabled="!prefsContent"
+            @click="copyContent"
+            variant="secondary"
+          >
+            {{ $t('common.copy') }}
+          </UiButton>
+        </div>
+
+        <div v-if="editorMode === 'visual'" class="visual-editor-shell">
+          <JsonVisualEditor
+            v-if="prefsValue !== null"
+            :model-value="prefsValue"
+            @update:model-value="updateVisualValue"
+            @invalid="showVisualError"
+          />
+          <div v-else class="empty-editor">
+            {{ $t('vamPrefs.editorPlaceholder') }}
+          </div>
+        </div>
+
+        <UiInput
+          v-else
+          v-model="prefsContent"
+          class="prefs-editor"
+          spellcheck="false"
+          :placeholder="$t('vamPrefs.editorPlaceholder')"
+          @input="syncJsonContent"
+          multiline
         />
-        <div v-else class="empty-editor">
-          {{ $t('vamPrefs.editorPlaceholder') }}
+
+        <div class="editor-footer">
+          <span :class="['validation-message', jsonError ? 'error' : 'ok']">
+            {{ jsonError || $t('vamPrefs.jsonValid') }}
+          </span>
+          <span v-if="isDirty" class="dirty-dot">{{ $t('vamPrefs.unsaved') }}</span>
         </div>
-      </div>
+      </GlassPanel>
 
-      <UiInput v-else v-model="prefsContent" class="prefs-editor" spellcheck="false" :placeholder="$t('vamPrefs.editorPlaceholder')" @input="syncJsonContent" multiline />
-
-      <div class="editor-footer">
-        <span :class="['validation-message', jsonError ? 'error' : 'ok']">
-          {{ jsonError || $t('vamPrefs.jsonValid') }}
-        </span>
-        <span v-if="isDirty" class="dirty-dot">{{ $t('vamPrefs.unsaved') }}</span>
-      </div>
-    </GlassPanel>
-
-    <GlassPanel v-if="lastBackupPath" :title="$t('vamPrefs.lastBackup')">
-      <p class="backup-path">{{ lastBackupPath }}</p>
-    </GlassPanel>
-  </div></div>
+      <GlassPanel v-if="lastBackupPath" :title="$t('vamPrefs.lastBackup')">
+        <p class="backup-path">{{ lastBackupPath }}</p>
+      </GlassPanel>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -298,7 +336,6 @@ function stringifyPrefsValue() {
   min-width: 0;
 }
 
-
 .editor-actions {
   display: flex;
   align-items: center;
@@ -400,9 +437,6 @@ function stringifyPrefsValue() {
   outline: none;
 }
 
-.prefs-editor:focus {
-}
-
 .editor-footer {
   display: flex;
   align-items: center;
@@ -447,8 +481,33 @@ function stringifyPrefsValue() {
   }
 }
 
-.b2-page { display: flex; flex-direction: column; height: 100%; min-height: 0; max-width: none; margin: 0; padding: 0; gap: 0; overflow: hidden; }
-.b2-page-body { flex: 1; min-height: 0; min-width: 0; overflow: auto; padding: 20px 24px; display: flex; flex-direction: column; gap: 20px; }
-.b2-page :deep(.page-header) { width: 100%; }
-@media(max-width: 800px) { .b2-page-body { padding: 12px; } }
+.b2-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+}
+.b2-page-body {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: auto;
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.b2-page :deep(.page-header) {
+  width: 100%;
+}
+@media (max-width: 800px) {
+  .b2-page-body {
+    padding: 12px;
+  }
+}
 </style>

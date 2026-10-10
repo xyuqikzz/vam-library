@@ -1,4 +1,26 @@
-<template><div class="search-input-wrapper"><UiInput ref="inputRef" :model-value="modelValue" :placeholder="placeholder || t('ui.search')" :aria-label="placeholder || t('ui.search')" :shortcut="modelValue ? undefined : shortcut" search @input="onInput" /><UiButton v-if="modelValue" class="search-clear" icon="close" icon-only size="sm" variant="ghost" :aria-label="clearButtonLabel" @click="onClear" /></div></template>
+<template>
+  <div class="search-input-wrapper">
+    <UiInput
+      ref="inputRef"
+      :model-value="modelValue"
+      :placeholder="placeholder || t('ui.search')"
+      :aria-label="placeholder || t('ui.search')"
+      :shortcut="modelValue ? undefined : shortcut"
+      search
+      @input="onInput"
+    />
+    <UiButton
+      v-if="modelValue"
+      class="search-clear"
+      icon="close"
+      icon-only
+      size="sm"
+      variant="ghost"
+      :aria-label="clearButtonLabel"
+      @click="onClear"
+    />
+  </div>
+</template>
 
 <script setup lang="ts">
 import UiButton from '@/components/ui/UiButton.vue'
@@ -52,4 +74,22 @@ defineExpose({
 })
 </script>
 
-<style scoped>.search-input-wrapper { position: relative; min-width: 0; width: 100%; max-width: 380px; }.search-input-wrapper :deep(.ui-input-field) { width: 100%; }.search-input-wrapper:has(.search-clear) :deep(input) { padding-right: 30px; }.search-clear { position: absolute; right: 4px; top: 4px; }</style>
+<style scoped>
+.search-input-wrapper {
+  position: relative;
+  min-width: 0;
+  width: 100%;
+  max-width: 380px;
+}
+.search-input-wrapper :deep(.ui-input-field) {
+  width: 100%;
+}
+.search-input-wrapper:has(.search-clear) :deep(input) {
+  padding-right: 30px;
+}
+.search-clear {
+  position: absolute;
+  right: 4px;
+  top: 4px;
+}
+</style>

@@ -1,176 +1,213 @@
 <template>
-<div class="statistics-view animate-fadeIn b2-page"><PageHeader :title="$t('sidebar.statistics')" :subtitle="$t('ui.statisticsSubtitle')"><template #actions><UiButton :disabled="loading" @click="loadPackages" variant="secondary">
-        <Icon  :size="14" name="outline-7" />
-        <span>{{ loading ? '加载中' : '刷新' }}</span>
-      </UiButton></template><template #filters><div class="statistics-tabs">
-      <UiChip :class="['', { active: activeTab === 'overview' }]" @click="activeTab = 'overview'" :selected="activeTab === 'overview'">总览概况</UiChip>
-      <UiChip :class="['', { active: activeTab === 'analysis' }]" @click="activeTab = 'analysis'" :selected="activeTab === 'analysis'">资源分析</UiChip>
-    </div></template></PageHeader><div class="b2-page-body">
+  <div class="statistics-view animate-fadeIn b2-page">
+    <PageHeader :title="$t('sidebar.statistics')" :subtitle="$t('ui.statisticsSubtitle')">
+      <template #actions>
+        <UiButton :disabled="loading" @click="loadPackages" variant="secondary">
+          <Icon :size="14" name="outline-7" />
+          <span>{{ loading ? '加载中' : '刷新' }}</span>
+        </UiButton>
+      </template>
+      <template #filters>
+        <div class="statistics-tabs">
+          <UiChip
+            :class="['', { active: activeTab === 'overview' }]"
+            @click="activeTab = 'overview'"
+            :selected="activeTab === 'overview'"
+          >
+            总览概况
+          </UiChip>
+          <UiChip
+            :class="['', { active: activeTab === 'analysis' }]"
+            @click="activeTab = 'analysis'"
+            :selected="activeTab === 'analysis'"
+          >
+            资源分析
+          </UiChip>
+        </div>
+      </template>
+    </PageHeader>
+    <div class="b2-page-body">
+      <div v-if="loading" class="loading-panel glass-panel">正在加载统计数据...</div>
 
+      <div v-else-if="packages.length === 0" class="empty-panel glass-panel">
+        <h2>暂无统计数据</h2>
+        <p>请先选择 VAM 目录并完成扫描，数据统计会在这里显示。</p>
+      </div>
 
+      <template v-else>
+        <div v-if="activeTab === 'overview'" class="statistics-content">
+          <section class="stats-card glass-panel">
+            <h2 class="section-title">概况</h2>
+            <div class="summary-grid">
+              <div class="summary-item">
+                <div class="summary-icon icon-green">
+                  <Icon :size="18" name="outline-47" />
+                </div>
+                <div>
+                  <span class="summary-label">总资源包数</span>
+                  <strong class="summary-value">{{ formatNumber(totalPackages) }}</strong>
+                </div>
+              </div>
+              <div class="summary-item">
+                <div class="summary-icon icon-blue">
+                  <Icon :size="18" name="outline-48" />
+                </div>
+                <div>
+                  <span class="summary-label">总文件大小</span>
+                  <strong class="summary-value highlight">{{ formatSize(totalSizeBytes) }}</strong>
+                </div>
+              </div>
+              <div class="summary-item">
+                <div class="summary-icon icon-purple">
+                  <Icon :size="18" name="outline-49" />
+                </div>
+                <div>
+                  <span class="summary-label">平均包大小</span>
+                  <strong class="summary-value">{{ formatSize(averageSizeBytes) }}</strong>
+                </div>
+              </div>
+            </div>
+          </section>
 
+          <section class="stats-card glass-panel">
+            <h2 class="section-title">存储空间分布</h2>
+            <div class="directory-table">
+              <div class="directory-head">
+                <span>目录名称</span>
+                <span>文件数</span>
+                <span>大小</span>
+                <span>占比</span>
+              </div>
+              <div class="directory-row root-row">
+                <span class="directory-name">
+                  <Icon :size="14" name="outline-50" />
+                  AddonPackages
+                </span>
+                <span>{{ totalPackages }}</span>
+                <span>{{ formatSize(totalSizeBytes) }}</span>
+                <span>100%</span>
+              </div>
+              <div v-for="row in directoryRows" :key="row.name" class="directory-row">
+                <span class="directory-name child-name">
+                  <Icon :size="14" name="outline-51" />
+                  {{ row.name }}
+                </span>
+                <span>{{ row.count }}</span>
+                <span>{{ formatSize(row.sizeBytes) }}</span>
+                <span>{{ formatPercent(row.sizeBytes / totalSizeBytes) }}</span>
+              </div>
+            </div>
+          </section>
 
-    <div v-if="loading" class="loading-panel glass-panel">正在加载统计数据...</div>
+          <section class="stats-card glass-panel">
+            <h2 class="section-title">资源库健康度</h2>
+            <div class="health-layout">
+              <div class="health-ring" :style="healthRingStyle">
+                <div class="health-ring-inner">
+                  <strong>{{ totalHealthIssues }}</strong>
+                  <span>个异常</span>
+                  <small>{{ formatPercent(healthIssueRate) }}</small>
+                </div>
+              </div>
+              <div class="health-bars">
+                <div v-for="item in healthItems" :key="item.label" class="health-item">
+                  <div class="bar-label">
+                    <span>{{ item.label }}</span>
+                    <strong>{{ item.count }} 个</strong>
+                  </div>
+                  <div class="track">
+                    <div
+                      class="fill"
+                      :class="item.className"
+                      :style="{ width: `${item.percent}%` }"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
 
-    <div v-else-if="packages.length === 0" class="empty-panel glass-panel">
-      <h2>暂无统计数据</h2>
-      <p>请先选择 VAM 目录并完成扫描，数据统计会在这里显示。</p>
+          <section class="stats-card glass-panel">
+            <h2 class="section-title">类别分布</h2>
+            <div class="category-layout">
+              <div class="donut" :style="{ background: categoryDonutGradient }">
+                <div class="donut-inner">
+                  <strong>{{ totalPackages }}</strong>
+                  <span>总计</span>
+                </div>
+              </div>
+              <div class="category-grid">
+                <div v-for="item in categoryRows" :key="item.type" class="category-row">
+                  <div class="category-name">
+                    <span class="type-dot" :style="{ background: item.color }" />
+                    <span>{{ item.label }}</span>
+                    <strong>{{ item.count }}</strong>
+                  </div>
+                  <div class="category-track">
+                    <div
+                      class="category-fill"
+                      :style="{ width: `${item.percent}%`, background: item.color }"
+                    />
+                  </div>
+                  <span class="category-percent">{{ item.percent.toFixed(1) }}%</span>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <div v-else class="statistics-content">
+          <section class="stats-card glass-panel">
+            <h2 class="section-title analysis-title">作者 TOP 20</h2>
+            <p class="section-description">
+              按资源包数量排序，条形长度相对榜首；占比基于全部资源包。
+            </p>
+            <div class="rank-list">
+              <div class="rank-row chart-head" aria-hidden="true">
+                <span>#</span>
+                <span>作者</span>
+                <span>数量对比</span>
+                <span>包数</span>
+                <span>占比</span>
+              </div>
+              <div v-for="(item, index) in authorTopRows" :key="item.creator" class="rank-row">
+                <span class="rank-index">{{ index + 1 }}</span>
+                <span class="rank-name" :title="item.creator">{{ item.creator }}</span>
+                <div class="rank-track" aria-hidden="true">
+                  <div
+                    class="rank-fill"
+                    :style="{ width: `${item.count / authorTopRows[0].count * 100}%` }"
+                  />
+                </div>
+                <span class="rank-count">{{ formatNumber(item.count) }}</span>
+                <span class="rank-percent">{{ formatPercent(item.percent / 100) }}</span>
+              </div>
+            </div>
+          </section>
+
+          <section class="stats-card glass-panel">
+            <h2 class="section-title">文件大小分布</h2>
+            <div class="size-list">
+              <div class="size-row chart-head" aria-hidden="true">
+                <span>大小区间</span>
+                <span>资源包占比</span>
+                <span>包数</span>
+                <span>占比</span>
+              </div>
+              <div v-for="item in sizeDistributionRows" :key="item.label" class="size-row">
+                <span class="size-label">{{ item.label }}</span>
+                <div class="size-track" aria-hidden="true">
+                  <div class="size-fill" :style="{ width: `${item.percent}%` }" />
+                </div>
+                <span class="size-count">{{ formatNumber(item.count) }}</span>
+                <span class="size-percent">{{ formatPercent(item.percent / 100) }}</span>
+              </div>
+            </div>
+          </section>
+        </div>
+      </template>
     </div>
-
-    <template v-else>
-      <div v-if="activeTab === 'overview'" class="statistics-content">
-        <section class="stats-card glass-panel">
-          <h2 class="section-title">概况</h2>
-          <div class="summary-grid">
-            <div class="summary-item">
-              <div class="summary-icon icon-green">
-                <Icon  :size="18" name="outline-47" />
-              </div>
-              <div>
-                <span class="summary-label">总资源包数</span>
-                <strong class="summary-value">{{ formatNumber(totalPackages) }}</strong>
-              </div>
-            </div>
-            <div class="summary-item">
-              <div class="summary-icon icon-blue">
-                <Icon  :size="18" name="outline-48" />
-              </div>
-              <div>
-                <span class="summary-label">总文件大小</span>
-                <strong class="summary-value highlight">{{ formatSize(totalSizeBytes) }}</strong>
-              </div>
-            </div>
-            <div class="summary-item">
-              <div class="summary-icon icon-purple">
-                <Icon  :size="18" name="outline-49" />
-              </div>
-              <div>
-                <span class="summary-label">平均包大小</span>
-                <strong class="summary-value">{{ formatSize(averageSizeBytes) }}</strong>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section class="stats-card glass-panel">
-          <h2 class="section-title">存储空间分布</h2>
-          <div class="directory-table">
-            <div class="directory-head">
-              <span>目录名称</span>
-              <span>文件数</span>
-              <span>大小</span>
-              <span>占比</span>
-            </div>
-            <div class="directory-row root-row">
-              <span class="directory-name">
-                <Icon  :size="14" name="outline-50" />
-                AddonPackages
-              </span>
-              <span>{{ totalPackages }}</span>
-              <span>{{ formatSize(totalSizeBytes) }}</span>
-              <span>100%</span>
-            </div>
-            <div v-for="row in directoryRows" :key="row.name" class="directory-row">
-              <span class="directory-name child-name">
-                <Icon  :size="14" name="outline-51" />
-                {{ row.name }}
-              </span>
-              <span>{{ row.count }}</span>
-              <span>{{ formatSize(row.sizeBytes) }}</span>
-              <span>{{ formatPercent(row.sizeBytes / totalSizeBytes) }}</span>
-            </div>
-          </div>
-        </section>
-
-        <section class="stats-card glass-panel">
-          <h2 class="section-title">资源库健康度</h2>
-          <div class="health-layout">
-            <div class="health-ring" :style="healthRingStyle">
-              <div class="health-ring-inner">
-                <strong>{{ totalHealthIssues }}</strong>
-                <span>个异常</span>
-                <small>{{ formatPercent(healthIssueRate) }}</small>
-              </div>
-            </div>
-            <div class="health-bars">
-              <div v-for="item in healthItems" :key="item.label" class="health-item">
-                <div class="bar-label">
-                  <span>{{ item.label }}</span>
-                  <strong>{{ item.count }} 个</strong>
-                </div>
-                <div class="track">
-                  <div class="fill" :class="item.className" :style="{ width: `${item.percent}%` }" />
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section class="stats-card glass-panel">
-          <h2 class="section-title">类别分布</h2>
-          <div class="category-layout">
-            <div class="donut" :style="{ background: categoryDonutGradient }">
-              <div class="donut-inner">
-                <strong>{{ totalPackages }}</strong>
-                <span>总计</span>
-              </div>
-            </div>
-            <div class="category-grid">
-              <div v-for="item in categoryRows" :key="item.type" class="category-row">
-                <div class="category-name">
-                  <span class="type-dot" :style="{ background: item.color }" />
-                  <span>{{ item.label }}</span>
-                  <strong>{{ item.count }}</strong>
-                </div>
-                <div class="category-track">
-                  <div class="category-fill" :style="{ width: `${item.percent}%`, background: item.color }" />
-                </div>
-                <span class="category-percent">{{ item.percent.toFixed(1) }}%</span>
-              </div>
-            </div>
-          </div>
-        </section>
-      </div>
-
-      <div v-else class="statistics-content">
-        <section class="stats-card glass-panel">
-          <h2 class="section-title analysis-title">作者 TOP 20</h2>
-          <p class="section-description">按资源包数量排序，条形长度相对榜首；占比基于全部资源包。</p>
-          <div class="rank-list">
-            <div class="rank-row chart-head" aria-hidden="true">
-              <span>#</span><span>作者</span><span>数量对比</span><span>包数</span><span>占比</span>
-            </div>
-            <div v-for="(item, index) in authorTopRows" :key="item.creator" class="rank-row">
-              <span class="rank-index">{{ index + 1 }}</span>
-              <span class="rank-name" :title="item.creator">{{ item.creator }}</span>
-              <div class="rank-track" aria-hidden="true">
-                <div class="rank-fill" :style="{ width: `${item.count / authorTopRows[0].count * 100}%` }" />
-              </div>
-              <span class="rank-count">{{ formatNumber(item.count) }}</span>
-              <span class="rank-percent">{{ formatPercent(item.percent / 100) }}</span>
-            </div>
-          </div>
-        </section>
-
-        <section class="stats-card glass-panel">
-          <h2 class="section-title">文件大小分布</h2>
-          <div class="size-list">
-            <div class="size-row chart-head" aria-hidden="true">
-              <span>大小区间</span><span>资源包占比</span><span>包数</span><span>占比</span>
-            </div>
-            <div v-for="item in sizeDistributionRows" :key="item.label" class="size-row">
-              <span class="size-label">{{ item.label }}</span>
-              <div class="size-track" aria-hidden="true">
-                <div class="size-fill" :style="{ width: `${item.percent}%` }" />
-              </div>
-              <span class="size-count">{{ formatNumber(item.count) }}</span>
-              <span class="size-percent">{{ formatPercent(item.percent / 100) }}</span>
-            </div>
-          </div>
-        </section>
-      </div>
-    </template>
-  </div></div>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -577,8 +614,11 @@ function formatPercent(value: number): string {
   place-items: center;
   width: 126px;
   height: 126px;
-  border-radius: var(--radius-xl)%;
-  background: conic-gradient(var(--color-error) 0 var(--health-angle), var(--accent-muted) var(--health-angle) 360deg);
+  border-radius: var(--radius-xl) %;
+  background: conic-gradient(
+    var(--color-error) 0 var(--health-angle),
+    var(--accent-muted) var(--health-angle) 360deg
+  );
 }
 
 .health-ring-inner,
@@ -589,7 +629,7 @@ function formatPercent(value: number): string {
   justify-content: center;
   width: 98px;
   height: 98px;
-  border-radius: var(--radius-xl)%;
+  border-radius: var(--radius-xl) %;
   background: var(--bg-surface);
   color: var(--text-primary);
 }
@@ -696,7 +736,7 @@ function formatPercent(value: number): string {
 .type-dot {
   width: 9px;
   height: 9px;
-  border-radius: var(--radius-xl)%;
+  border-radius: var(--radius-xl) %;
   flex-shrink: 0;
 }
 
@@ -860,8 +900,33 @@ function formatPercent(value: number): string {
   }
 }
 
-.b2-page { display: flex; flex-direction: column; height: 100%; min-height: 0; max-width: none; margin: 0; padding: 0; gap: 0; overflow: hidden; }
-.b2-page-body { flex: 1; min-height: 0; min-width: 0; overflow: auto; padding: 20px 24px; display: flex; flex-direction: column; gap: 20px; }
-.b2-page :deep(.page-header) { width: 100%; }
-@media(max-width: 800px) { .b2-page-body { padding: 12px; } }
+.b2-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+}
+.b2-page-body {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: auto;
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.b2-page :deep(.page-header) {
+  width: 100%;
+}
+@media (max-width: 800px) {
+  .b2-page-body {
+    padding: 12px;
+  }
+}
 </style>

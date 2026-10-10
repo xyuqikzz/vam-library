@@ -168,71 +168,308 @@ defineExpose({ launch: launchScene, extract: toggleExtraction, ready: computed((
 
 <template>
   <div class="package-scene-actions">
-    <slot name="actions" :launch="launchScene" :extract="toggleExtraction" :disabled="busy || choosingDirectory || loading || !selectedScene" :expanded="expanded" :launching="launching" :panel="`package-extraction-${packageId}`" />
-    <section class="scene-extractor" :aria-label="t('gameContent.sceneActions')">
+    <slot
+      name="actions"
+      :launch="launchScene"
+      :extract="toggleExtraction"
+      :disabled="busy || choosingDirectory || loading || !selectedScene"
+      :expanded="expanded"
+      :launching="launching"
+      :panel="`package-extraction-${packageId}`"
+    />
+    <details class="scene-extractor" :open="expanded || !!launchError || !!error">
+      <summary>{{ t('gameContent.sceneActions') }}</summary>
       <div class="extract-body" :aria-busy="loading || detailLoading || busy">
         <p v-if="loading" role="status">{{ t('gameContent.readingPackageScenes') }}</p>
-        <div v-else-if="error"><p class="error" role="alert">{{ error }}</p><UiButton @click="loadScenes" variant="secondary">{{ t('gameContent.retry') }}</UiButton></div>
+        <div v-else-if="error">
+          <p class="error" role="alert">{{ error }}</p>
+          <UiButton @click="loadScenes" variant="secondary">{{ t('gameContent.retry') }}</UiButton>
+        </div>
         <p v-else-if="loaded && !scenes.length">{{ t('gameContent.noPackageScenes') }}</p>
         <template v-if="scenes.length">
-          <label>{{ t('gameContent.selectPackageScene', { count: scenes.length }) }}
-            <select v-model="sceneKey" :disabled="busy"><option v-for="scene in scenes" :key="scene.key" :value="scene.key">{{ scene.source.path.replace(/^Saves\/scene\//i, '') }}</option></select>
+          <label>
+            {{ t('gameContent.selectPackageScene', { count: scenes.length }) }}
+            <select v-model="sceneKey" :disabled="busy">
+              <option v-for="scene in scenes" :key="scene.key" :value="scene.key">
+                {{ scene.source.path.replace(/^Saves\/scene\//i, '') }}
+              </option>
+            </select>
           </label>
-          <label>{{ t('gameContent.launchMode') }}<select v-model="launchMode" :disabled="busy"><option value="desktop">{{ t('gameContent.desktopMode') }}</option><option value="vr">{{ t('gameContent.vrMode') }}</option></select></label>
-          <p>{{ t('gameContent.launchHelp') }} <RouterLink to="/settings">{{ t('gameContent.setupSceneMod') }}</RouterLink></p>
+          <label>
+            {{ t('gameContent.launchMode') }}
+            <select v-model="launchMode" :disabled="busy">
+              <option value="desktop">{{ t('gameContent.desktopMode') }}</option>
+              <option value="vr">{{ t('gameContent.vrMode') }}</option>
+            </select>
+          </label>
+          <p>
+            {{ t('gameContent.launchHelp') }}
+            <RouterLink to="/settings">{{ t('gameContent.setupSceneMod') }}</RouterLink>
+          </p>
           <p v-if="launching" role="status">{{ t('gameContent.launchWaiting') }}</p>
           <p v-if="launchSucceeded" role="status">{{ t('gameContent.sceneLoaded') }}</p>
           <p v-if="launchError" class="error" role="alert">{{ launchError }}</p>
           <div v-show="expanded" :id="`package-extraction-${packageId}`" class="extraction-panel">
             <p v-if="detailLoading" role="status">{{ t('common.loading') }}</p>
             <figure v-if="detail" class="scene-preview">
-              <img v-if="detail.image && !previewFailed" data-resource-preview :src="detail.image" :alt="t('gameContent.scenePreview')" @error="previewFailed = true" />
-              <p v-else class="preview-empty">{{ t(previewFailed ? 'gameContent.imageFailed' : 'gameContent.noScenePreview') }}</p>
-              <figcaption v-if="detail.image && !previewFailed">{{ t('gameContent.scenePreviewHelp') }}</figcaption>
+              <img
+                v-if="detail.image && !previewFailed"
+                data-resource-preview
+                :src="detail.image"
+                :alt="t('gameContent.scenePreview')"
+                @error="previewFailed = true"
+              />
+              <p v-else class="preview-empty">
+                {{ t(previewFailed ? 'gameContent.imageFailed' : 'gameContent.noScenePreview') }}
+              </p>
+              <figcaption v-if="detail.image && !previewFailed">
+                {{ t('gameContent.scenePreviewHelp') }}
+              </figcaption>
             </figure>
-            <div v-if="detailError"><p class="error" role="alert">{{ detailError }}</p><UiButton @click="loadDetail" variant="secondary">{{ t('gameContent.retry') }}</UiButton></div>
-            <p v-else-if="detail && !detail.characters.length">{{ t('gameContent.noCharacters') }}</p>
+            <div v-if="detailError">
+              <p class="error" role="alert">{{ detailError }}</p>
+              <UiButton @click="loadDetail" variant="secondary">
+                {{ t('gameContent.retry') }}
+              </UiButton>
+            </div>
+            <p v-else-if="detail && !detail.characters.length">
+              {{ t('gameContent.noCharacters') }}
+            </p>
             <form v-else-if="detail?.characters.length" @submit.prevent="save">
-              <label>{{ t('gameContent.selectCharacter') }}
-                <select v-model="characterIndex" :disabled="busy"><option v-for="person in detail.characters" :key="person.index" :value="person.index">{{ person.name }} · {{ person.character || '—' }}</option></select>
+              <label>
+                {{ t('gameContent.selectCharacter') }}
+                <select v-model="characterIndex" :disabled="busy">
+                  <option
+                    v-for="person in detail.characters"
+                    :key="person.index"
+                    :value="person.index"
+                  >
+                    {{ person.name }} · {{ person.character || '—' }}
+                  </option>
+                </select>
               </label>
               <p v-if="character">{{ t('gameContent.characterContents', character) }}</p>
               <p v-if="character?.error" class="error" role="alert">{{ character.error }}</p>
               <template v-else>
-                <label>{{ t('gameContent.filename') }}<UiInput v-model="name" required maxlength="120" :disabled="busy" /></label>
-                <label>{{ t('gameContent.outputDirectory') }}<UiInput v-model="outputDirectory" required :disabled="busy || choosingDirectory" :placeholder="defaultDirectory" spellcheck="false" /></label>
-                <div class="directory-actions"><UiButton type="button" :disabled="busy || choosingDirectory" @click="browseOutputDirectory" variant="secondary">{{ t('gameContent.chooseOutputDirectory') }}</UiButton><UiButton type="button" :disabled="busy || choosingDirectory || outputDirectory === defaultDirectory" @click="outputDirectory = defaultDirectory" variant="secondary">{{ t('gameContent.resetOutputDirectory') }}</UiButton></div>
+                <label>
+                  {{ t('gameContent.filename') }}
+                  <UiInput v-model="name" required maxlength="120" :disabled="busy" />
+                </label>
+                <label>
+                  {{ t('gameContent.outputDirectory') }}
+                  <UiInput
+                    v-model="outputDirectory"
+                    required
+                    :disabled="busy || choosingDirectory"
+                    :placeholder="defaultDirectory"
+                    spellcheck="false"
+                  />
+                </label>
+                <div class="directory-actions">
+                  <UiButton
+                    type="button"
+                    :disabled="busy || choosingDirectory"
+                    @click="browseOutputDirectory"
+                    variant="secondary"
+                  >
+                    {{ t('gameContent.chooseOutputDirectory') }}
+                  </UiButton>
+                  <UiButton
+                    type="button"
+                    :disabled="busy || choosingDirectory || outputDirectory === defaultDirectory"
+                    @click="outputDirectory = defaultDirectory"
+                    variant="secondary"
+                  >
+                    {{ t('gameContent.resetOutputDirectory') }}
+                  </UiButton>
+                </div>
                 <p>{{ t('gameContent.outputDirectoryHelp') }}</p>
-                <UiButton class="primary" :disabled="busy || choosingDirectory || !name.trim() || !outputDirectory.trim()" type="submit" variant="primary" size="lg">{{ t(saving ? 'gameContent.working' : 'gameContent.saveAppearance') }}</UiButton>
+                <UiButton
+                  class="primary"
+                  :disabled="busy || choosingDirectory || !name.trim() || !outputDirectory.trim()"
+                  type="submit"
+                  variant="primary"
+                  size="lg"
+                >
+                  {{ t(saving ? 'gameContent.working' : 'gameContent.saveAppearance') }}
+                </UiButton>
               </template>
             </form>
             <p v-if="saveError" class="error" role="alert">{{ saveError }}</p>
-            <div v-if="savedPath" class="saved" role="status"><p>{{ t('gameContent.appearanceSaved') }}</p><p class="path">{{ savedDisplayPath }}</p><RouterLink v-if="savedInLibrary" :to="{ path: '/appearances', query: { appearance: savedPath } }">{{ t('gameContent.viewAppearances') }}</RouterLink></div>
-            <details><summary>{{ t('gameContent.extractScope') }}</summary><p>{{ t('gameContent.extractHelp') }}</p></details>
+            <div v-if="savedPath" class="saved" role="status">
+              <p>{{ t('gameContent.appearanceSaved') }}</p>
+              <p class="path">{{ savedDisplayPath }}</p>
+              <RouterLink
+                v-if="savedInLibrary"
+                :to="{ path: '/appearances', query: { appearance: savedPath } }"
+              >
+                {{ t('gameContent.viewAppearances') }}
+              </RouterLink>
+            </div>
+            <details>
+              <summary>{{ t('gameContent.extractScope') }}</summary>
+              <p>{{ t('gameContent.extractHelp') }}</p>
+            </details>
           </div>
         </template>
-        <details v-if="warnings.length"><summary>{{ t('gameContent.warnings', { count: warnings.length }) }}</summary><p v-for="warning in warnings" :key="warning" class="error">{{ warning }}</p></details>
+        <details v-if="warnings.length">
+          <summary>{{ t('gameContent.warnings', { count: warnings.length }) }}</summary>
+          <p v-for="warning in warnings" :key="warning" class="error">{{ warning }}</p>
+        </details>
       </div>
-    </section>
+    </details>
   </div>
 </template>
 
 <style scoped>
-.scene-extractor { flex-shrink: 0; min-width: 0; border: none; border-radius: var(--radius-md); background: var(--bg-surface); }
-button, input, select { font: inherit; font-size: var(--text-sm); color: var(--text-primary); border: 1px solid var(--border-default); border-radius: var(--radius-sm); background: var(--bg-surface); min-height: 34px; padding: 7px 10px; }
-button { cursor: pointer; }button:hover:not(:disabled) { background: var(--bg-hover); }button:disabled, input:disabled, select:disabled { opacity: .5; cursor: not-allowed; }
-button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible, a:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
-.package-scene-actions { flex-shrink: 0; min-width: 0; }
-.extract-body { display: flex; flex-direction: column; gap: 12px; padding: 12px; }
-.extraction-panel { display: flex; flex-direction: column; gap: 12px; border-top: 1px solid var(--border-subtle); padding-top: 12px; }
-.scene-preview { margin: 0; min-width: 0; }.scene-preview img { display: block; width: 100%; height: 120px; object-fit: contain; background: var(--bg-base); border-radius: var(--radius-sm); }
-.scene-preview figcaption { margin-top: 6px; color: var(--text-tertiary); font-size: var(--text-xs); line-height: 1.5; }.preview-empty { padding: 8px 0; }
-form { display: flex; flex-direction: column; gap: 10px; }
-.directory-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-label { display: flex; flex-direction: column; gap: 6px; font-size: var(--text-sm); color: var(--text-secondary); }
-select, input { width: 100%; min-width: 0; }select option { background: var(--bg-surface); }
-p { font-size: var(--text-sm); color: var(--text-secondary); line-height: 1.6; overflow-wrap: anywhere; margin: 0; }
-.primary { background: var(--accent-primary); color: var(--accent-ink); border-color: transparent; }.primary:hover:not(:disabled) { background: var(--accent-hover, var(--accent-primary)); }
-.error { color: var(--color-error); }.saved { display: flex; flex-direction: column; gap: 6px; }.path { user-select: text; }a { color: var(--accent-primary); font-size: var(--text-sm); }
-summary { cursor: pointer; font-size: var(--text-sm); color: var(--text-secondary); }details p { margin-top: 8px; }
+.scene-extractor {
+  flex-shrink: 0;
+  min-width: 0;
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+}
+button,
+input,
+select {
+  font: inherit;
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  min-height: 34px;
+  padding: 7px 10px;
+}
+button {
+  cursor: pointer;
+}
+button:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+button:disabled,
+input:disabled,
+select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+summary:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+.package-scene-actions {
+  flex-shrink: 0;
+  min-width: 0;
+}
+.extract-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+}
+.extraction-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 12px;
+}
+.scene-preview {
+  margin: 0;
+  min-width: 0;
+}
+.scene-preview img {
+  display: block;
+  width: 100%;
+  height: 120px;
+  object-fit: contain;
+  background: var(--bg-base);
+  border-radius: var(--radius-sm);
+}
+.scene-preview figcaption {
+  margin-top: 6px;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+.preview-empty {
+  padding: 8px 0;
+}
+form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.directory-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+select,
+input {
+  width: 100%;
+  min-width: 0;
+}
+select option {
+  background: var(--bg-surface);
+}
+p {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  margin: 0;
+}
+.primary {
+  background: var(--accent-primary);
+  color: var(--accent-ink);
+  border-color: transparent;
+}
+.primary:hover:not(:disabled) {
+  background: var(--accent-primary-hover);
+}
+.error {
+  color: var(--color-error);
+}
+.saved {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.path {
+  user-select: text;
+}
+a {
+  color: var(--accent-primary);
+  font-size: var(--text-sm);
+}
+summary {
+  cursor: pointer;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+details p {
+  margin-top: 8px;
+}
+.scene-extractor {
+  background: var(--bg-input);
+}
+.scene-extractor > summary {
+  padding: 10px 12px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  border-radius: var(--radius-md);
+}
 </style>

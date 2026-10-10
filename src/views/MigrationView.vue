@@ -1,5 +1,7 @@
 <template>
-<div class="migration-view animate-fadeIn b2-page"><PageHeader :title="$t('sidebar.migration')" ><template #actions>
+  <div class="migration-view animate-fadeIn b2-page">
+    <PageHeader :title="$t('sidebar.migration')">
+      <template #actions>
         <!-- Step 0 Actions -->
         <template v-if="currentStep === 0">
           <UiButton :disabled="isRestoringAll" @click="handleRestoreAll" variant="ghost">
@@ -25,7 +27,11 @@
           <UiButton @click="currentStep = 1" variant="ghost">
             {{ $t('common.back') }}
           </UiButton>
-          <UiButton v-if="preview?.plan_id && (preview.operations.length > 0 || preview.cleanup_empty_dirs)" @click="handleExecute" variant="secondary">
+          <UiButton
+            v-if="preview?.plan_id && (preview.operations.length > 0 || preview.cleanup_empty_dirs)"
+            @click="handleExecute"
+            variant="secondary"
+          >
             {{ $t('common.confirm') }}
           </UiButton>
         </template>
@@ -35,224 +41,292 @@
           <UiButton @click="resetWizard" variant="ghost">
             {{ $t('migration.startNew') }}
           </UiButton>
-          <UiButton v-if="migrationResult.rollback_available" :disabled="isRollingBack" @click="handleRollback" variant="ghost">
+          <UiButton
+            v-if="migrationResult.rollback_available"
+            :disabled="isRollingBack"
+            @click="handleRollback"
+            variant="ghost"
+          >
             {{ isRollingBack ? $t('migration.rollingBack') : $t('migration.rollback') }}
           </UiButton>
         </template>
-      </template><template #filters><div class="step-indicator">
-        <div
-          v-for="(step, index) in steps"
-          :key="index"
-          :class="['step', { active: currentStep === index, completed: currentStep > index }]"
-        >
-          <div class="step-number">
-            <Icon v-if="currentStep > index" :size="14" name="outline-30" />
-            <span v-else>{{ index + 1 }}</span>
-          </div>
-          <span class="step-label">{{ step }}</span>
-          <div v-if="index < steps.length - 1" class="step-connector" />
-        </div>
-      </div></template></PageHeader><div class="b2-page-body">
-    <!-- Top Action Bar -->
-
-
-    <!-- Step 0: Mode Selection -->
-    <div v-if="currentStep === 0" class="step-content">
-      <h2 class="step-title">{{ $t('migration.chooseMode') }}</h2>
-      <p class="step-description text-secondary">{{ $t('migration.chooseModeDesc') }}</p>
-
-      <div class="mode-grid stagger-children">
-        <UiButton v-for="mode in modes" :key="mode.id" :class="['mode-card glass-card-component', { selected: selectedMode === mode.id }]" @click="selectedMode = mode.id" variant="secondary">
-          <div class="mode-icon-wrapper" :style="{ '--mode-color': mode.color }">
-            <Icon  :size="24" :path="mode.icon" />
-          </div>
-          <h3 class="mode-title">{{ mode.title }}</h3>
-          <p class="mode-description">{{ mode.description }}</p>
-          <div v-if="selectedMode === mode.id" class="selected-indicator">
-            <Icon  :size="16" name="outline-31" />
-          </div>
-        </UiButton>
-      </div>
-
-
-    </div>
-
-    <!-- Step 1: Configure -->
-    <div v-else-if="currentStep === 1" class="step-content">
-      <h2 class="step-title">{{ $t('migration.configureTitle') }}</h2>
-      <p class="step-description text-secondary">{{ $t('migration.configureDesc') }}</p>
-
-      <div class="config-form">
-        <div class="config-field">
-          <label class="config-label text-sm">{{ $t('migration.sourceDirectory') }}</label>
-          <div class="config-input-row">
-            <UiInput v-model="config.sourceDir" type="text" class="config-input" :placeholder="$t('migration.sourceDirectoryPlaceholder')" />
-            <span class="config-hint text-xs text-tertiary">{{ $t('migration.sourceDirectoryHint') }}</span>
+      </template>
+      <template #filters>
+        <div class="step-indicator">
+          <div
+            v-for="(step, index) in steps"
+            :key="index"
+            :class="['step', { active: currentStep === index, completed: currentStep > index }]"
+          >
+            <div class="step-number">
+              <Icon v-if="currentStep > index" :size="14" name="outline-30" />
+              <span v-else>{{ index + 1 }}</span>
+            </div>
+            <span class="step-label">{{ step }}</span>
+            <div v-if="index < steps.length - 1" class="step-connector" />
           </div>
         </div>
+      </template>
+    </PageHeader>
+    <div class="b2-page-body">
+      <!-- Top Action Bar -->
 
-        <div class="config-field">
-          <label class="config-label text-sm">{{ $t('migration.targetDirectory') }}</label>
-          <div class="target-option-row">
-            <UiChip v-for="option in targetOptions" :key="option.id" :class="['config-toggle', { active: config.targetKind === option.id }]" @click="config.targetKind = option.id" :selected="config.targetKind === option.id">
-              {{ option.label }}
-            </UiChip>
-          </div>
-          <div class="selected-target">
-            <span class="selected-target-path truncate">{{ selectedTargetDir || $t('migration.targetDirectoryPlaceholder') }}</span>
-          </div>
-          <span class="config-hint text-xs text-tertiary">{{ $t('migration.targetDirectoryHint') }}</span>
-        </div>
+      <!-- Step 0: Mode Selection -->
+      <div v-if="currentStep === 0" class="step-content">
+        <h2 class="step-title">{{ $t('migration.chooseMode') }}</h2>
+        <p class="step-description text-secondary">{{ $t('migration.chooseModeDesc') }}</p>
 
-        <div class="config-field">
-          <label class="config-label text-sm">{{ $t('migration.operation') }}</label>
-          <div class="config-toggle-row">
-            <UiChip :class="['config-toggle', { active: config.action === 'move' }]" @click="config.action = 'move'" :selected="config.action === 'move'">
-              {{ $t('migration.move') }}
-            </UiChip>
-            <UiChip :class="['config-toggle', { active: config.action === 'copy' }]" @click="config.action = 'copy'" :selected="config.action === 'copy'">
-              {{ $t('migration.copySafe') }}
-            </UiChip>
-          </div>
+        <div class="mode-grid stagger-children">
+          <UiButton
+            v-for="mode in modes"
+            :key="mode.id"
+            :class="['mode-card glass-card-component', { selected: selectedMode === mode.id }]"
+            @click="selectedMode = mode.id"
+            variant="secondary"
+          >
+            <div class="mode-icon-wrapper" :style="{ '--mode-color': mode.color }">
+              <Icon :size="24" :path="mode.icon" />
+            </div>
+            <h3 class="mode-title">{{ mode.title }}</h3>
+            <p class="mode-description">{{ mode.description }}</p>
+            <div v-if="selectedMode === mode.id" class="selected-indicator">
+              <Icon :size="16" name="outline-31" />
+            </div>
+          </UiButton>
         </div>
       </div>
 
+      <!-- Step 1: Configure -->
+      <div v-else-if="currentStep === 1" class="step-content">
+        <h2 class="step-title">{{ $t('migration.configureTitle') }}</h2>
+        <p class="step-description text-secondary">{{ $t('migration.configureDesc') }}</p>
 
-    </div>
+        <div class="config-form">
+          <div class="config-field">
+            <label class="config-label text-sm">{{ $t('migration.sourceDirectory') }}</label>
+            <div class="config-input-row">
+              <UiInput
+                v-model="config.sourceDir"
+                type="text"
+                class="config-input"
+                :placeholder="$t('migration.sourceDirectoryPlaceholder')"
+              />
+              <span class="config-hint text-xs text-tertiary">
+                {{ $t('migration.sourceDirectoryHint') }}
+              </span>
+            </div>
+          </div>
 
-    <!-- Step 2: Preview -->
-    <div v-else-if="currentStep === 2" class="step-content">
-      <h2 class="step-title">{{ $t('migration.previewTitle') }}</h2>
-      <p class="step-description text-secondary">
-        {{ $t('migration.previewDesc', { count: preview?.total_operations ?? 0, action: config.action === 'copy' ? $t('migration.actionCopy') : $t('migration.actionMove'), size: formatSize(preview?.total_size_bytes ?? 0) }) }}
-      </p>
+          <div class="config-field">
+            <label class="config-label text-sm">{{ $t('migration.targetDirectory') }}</label>
+            <div class="target-option-row">
+              <UiChip
+                v-for="option in targetOptions"
+                :key="option.id"
+                :class="['config-toggle', { active: config.targetKind === option.id }]"
+                @click="config.targetKind = option.id"
+                :selected="config.targetKind === option.id"
+              >
+                {{ option.label }}
+              </UiChip>
+            </div>
+            <div class="selected-target">
+              <span class="selected-target-path truncate">
+                {{ selectedTargetDir || $t('migration.targetDirectoryPlaceholder') }}
+              </span>
+            </div>
+            <span class="config-hint text-xs text-tertiary">
+              {{ $t('migration.targetDirectoryHint') }}
+            </span>
+          </div>
 
-      <p v-if="preview" class="text-sm text-secondary">{{ t('migration.diskSummary', { count: preview.total_files, skipped: preview.skipped }) }}</p>
-      <p v-if="preview?.cleanup_empty_dirs" class="text-sm text-secondary">{{ t('migration.emptyDirHint') }}</p>
-      <details v-if="preview?.warnings.length" class="preview-warnings">
-        <summary>{{ t('migration.scanWarnings', { count: preview.warnings.length }) }}</summary>
-        <p v-for="warning in preview.warnings" :key="warning" class="text-xs">{{ warning }}</p>
-      </details>
-      <!-- Conflicts -->
-      <div v-if="preview && preview.conflicts.length > 0" class="preview-warnings">
-        <div class="warning-header">
-          <Icon  :size="14" name="outline-32" />
-          <span>{{ $t('migration.conflictsDetected', { count: preview.conflicts.length }) }}</span>
-        </div>
-        <div v-for="(conflict, i) in preview.conflicts.slice(0, 5)" :key="i" class="warning-item text-xs">
-          {{ conflict }}
-        </div>
-        <div v-if="preview.conflicts.length > 5" class="warning-more text-xs text-tertiary">
-          {{ $t('migration.andMore', { count: preview.conflicts.length - 5 }) }}
+          <div class="config-field">
+            <label class="config-label text-sm">{{ $t('migration.operation') }}</label>
+            <div class="config-toggle-row">
+              <UiChip
+                :class="['config-toggle', { active: config.action === 'move' }]"
+                @click="config.action = 'move'"
+                :selected="config.action === 'move'"
+              >
+                {{ $t('migration.move') }}
+              </UiChip>
+              <UiChip
+                :class="['config-toggle', { active: config.action === 'copy' }]"
+                @click="config.action = 'copy'"
+                :selected="config.action === 'copy'"
+              >
+                {{ $t('migration.copySafe') }}
+              </UiChip>
+            </div>
+          </div>
         </div>
       </div>
 
-      <!-- Operations List -->
-      <div v-if="preview && preview.operations.length > 0" class="preview-list glass-panel">
-        <div class="preview-list-header text-xs text-tertiary">
-          <span>{{ $t('migration.package_header') }}</span>
-          <span>{{ $t('migration.type_header') }}</span>
-          <span>{{ $t('migration.size_header') }}</span>
-          <span>{{ $t('migration.destination') }}</span>
-        </div>
-        <div
-          v-for="op in preview.operations.slice(0, 50)"
-          :key="op.source"
-          :class="['preview-row', { 'preview-conflict': op.conflict !== 'none' }]"
-        >
-          <span class="preview-cell name" :title="op.source">{{ fileName(op.source) }}</span>
-          <span class="preview-cell type">{{ op.resource_type }}</span>
-          <span class="preview-cell size">{{ formatSize(op.size_bytes) }}</span>
-          <span class="preview-cell dest text-xs text-tertiary">{{ op.destination }}</span>
-        </div>
-        <div v-if="preview.operations.length > 50" class="preview-more text-xs text-tertiary">
-          {{ $t('migration.andMoreFiles', { count: preview.operations.length - 50 }) }}
-        </div>
-      </div>
+      <!-- Step 2: Preview -->
+      <div v-else-if="currentStep === 2" class="step-content">
+        <h2 class="step-title">{{ $t('migration.previewTitle') }}</h2>
+        <p class="step-description text-secondary">
+          {{ $t('migration.previewDesc', { count: preview?.total_operations ?? 0, action: config.action === 'copy' ? $t('migration.actionCopy') : $t('migration.actionMove'), size: formatSize(preview?.total_size_bytes ?? 0) }) }}
+        </p>
 
-      <!-- Empty State -->
-      <div v-else-if="preview && preview.operations.length === 0" class="preview-empty">
-        <EmptyState
-          icon="M4 7V4a2 2 0 0 1 2-2h8.5L20 7.5V20a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-3M2 12h16M6 9v6"
-          :title="$t('migration.noOperations')"
-          :description="$t('migration.noOperationsDesc')"
-        />
-      </div>
-
-      <div v-if="!preview" class="preview-loading">
-        <div class="dep-spinner" />
-        <p class="text-sm text-secondary">{{ $t('migration.computingPlan') }}</p>
-      </div>
-
-
-    </div>
-
-    <!-- Step 3: Execute -->
-    <div v-else-if="currentStep === 3" class="step-content">
-      <h2 class="step-title">
-        {{ migrationResult ? $t('migration.migrationComplete') : $t('migration.executing') }}
-      </h2>
-
-      <!-- Progress Section (Spinner shown only during processing, progress bar always shown) -->
-      <div class="exec-processing">
-        <div v-if="!migrationResult" class="exec-spinner" />
-        <p v-if="!migrationResult" class="text-sm text-secondary">{{ $t('migration.movingFiles') }}</p>
-
-        <div v-if="migrationProgress || migrationResult" class="exec-progress">
-          <div class="exec-progress-meta">
+        <p v-if="preview" class="text-sm text-secondary">
+          {{ t('migration.diskSummary', { count: preview.total_files, skipped: preview.skipped }) }}
+        </p>
+        <p v-if="preview?.cleanup_empty_dirs" class="text-sm text-secondary">
+          {{ t('migration.emptyDirHint') }}
+        </p>
+        <details v-if="preview?.warnings.length" class="preview-warnings">
+          <summary>{{ t('migration.scanWarnings', { count: preview.warnings.length }) }}</summary>
+          <p v-for="warning in preview.warnings" :key="warning" class="text-xs">{{ warning }}</p>
+        </details>
+        <!-- Conflicts -->
+        <div v-if="preview && preview.conflicts.length > 0" class="preview-warnings">
+          <div class="warning-header">
+            <Icon :size="14" name="outline-32" />
             <span>
-              {{ migrationResult ? (migrationResult.completed + migrationResult.failed) : (migrationProgress ? (migrationProgress.completed + migrationProgress.failed) : 0) }} 
-              / 
-              {{ migrationResult ? migrationResult.total : (migrationProgress ? migrationProgress.total : 0) }}
+              {{ $t('migration.conflictsDetected', { count: preview.conflicts.length }) }}
             </span>
-            <span v-if="!migrationResult">{{ $t('migration.remainingFiles', { count: remainingFiles }) }}</span>
-            <span v-else class="text-success">{{ $t('migration.completed') }}</span>
           </div>
-          <div class="exec-progress-track">
-            <div class="exec-progress-fill" :style="{ width: `${migrationResult ? 100 : migrationProgressPercent}%` }" />
+          <div
+            v-for="(conflict, i) in preview.conflicts.slice(0, 5)"
+            :key="i"
+            class="warning-item text-xs"
+          >
+            {{ conflict }}
           </div>
-          <div v-if="migrationProgress?.current_package_id && !migrationResult" class="exec-progress-file">
-            {{ migrationProgress.current_package_id }}
+          <div v-if="preview.conflicts.length > 5" class="warning-more text-xs text-tertiary">
+            {{ $t('migration.andMore', { count: preview.conflicts.length - 5 }) }}
+          </div>
+        </div>
+
+        <!-- Operations List -->
+        <div v-if="preview && preview.operations.length > 0" class="preview-list glass-panel">
+          <div class="preview-list-header text-xs text-tertiary">
+            <span>{{ $t('migration.package_header') }}</span>
+            <span>{{ $t('migration.type_header') }}</span>
+            <span>{{ $t('migration.size_header') }}</span>
+            <span>{{ $t('migration.destination') }}</span>
+          </div>
+          <div
+            v-for="op in preview.operations.slice(0, 50)"
+            :key="op.source"
+            :class="['preview-row', { 'preview-conflict': op.conflict !== 'none' }]"
+          >
+            <span class="preview-cell name" :title="op.source">{{ fileName(op.source) }}</span>
+            <span class="preview-cell type">{{ op.resource_type }}</span>
+            <span class="preview-cell size">{{ formatSize(op.size_bytes) }}</span>
+            <span class="preview-cell dest text-xs text-tertiary">{{ op.destination }}</span>
+          </div>
+          <div v-if="preview.operations.length > 50" class="preview-more text-xs text-tertiary">
+            {{ $t('migration.andMoreFiles', { count: preview.operations.length - 50 }) }}
+          </div>
+        </div>
+
+        <!-- Empty State -->
+        <div v-else-if="preview && preview.operations.length === 0" class="preview-empty">
+          <EmptyState
+            icon="M4 7V4a2 2 0 0 1 2-2h8.5L20 7.5V20a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-3M2 12h16M6 9v6"
+            :title="$t('migration.noOperations')"
+            :description="$t('migration.noOperationsDesc')"
+          />
+        </div>
+
+        <div v-if="!preview" class="preview-loading">
+          <div class="dep-spinner" />
+          <p class="text-sm text-secondary">{{ $t('migration.computingPlan') }}</p>
+        </div>
+      </div>
+
+      <!-- Step 3: Execute -->
+      <div v-else-if="currentStep === 3" class="step-content">
+        <h2 class="step-title">
+          {{ migrationResult ? $t('migration.migrationComplete') : $t('migration.executing') }}
+        </h2>
+
+        <!-- Progress Section (Spinner shown only during processing, progress bar always shown) -->
+        <div class="exec-processing">
+          <div v-if="!migrationResult" class="exec-spinner" />
+          <p v-if="!migrationResult" class="text-sm text-secondary">
+            {{ $t('migration.movingFiles') }}
+          </p>
+
+          <div v-if="migrationProgress || migrationResult" class="exec-progress">
+            <div class="exec-progress-meta">
+              <span>
+                {{ migrationResult ? (migrationResult.completed + migrationResult.failed) : (migrationProgress ? (migrationProgress.completed + migrationProgress.failed) : 0) }}
+                /
+                {{ migrationResult ? migrationResult.total : (migrationProgress ? migrationProgress.total : 0) }}
+              </span>
+              <span v-if="!migrationResult">
+                {{ $t('migration.remainingFiles', { count: remainingFiles }) }}
+              </span>
+              <span v-else class="text-success">{{ $t('migration.completed') }}</span>
+            </div>
+            <div class="exec-progress-track">
+              <div
+                class="exec-progress-fill"
+                :style="{ width: `${migrationResult ? 100 : migrationProgressPercent}%` }"
+              />
+            </div>
+            <div
+              v-if="migrationProgress?.current_package_id && !migrationResult"
+              class="exec-progress-file"
+            >
+              {{ migrationProgress.current_package_id }}
+            </div>
+          </div>
+        </div>
+
+        <!-- Result Summary (shown only after completion) -->
+        <div v-if="migrationResult" class="exec-result">
+          <div class="exec-summary glass-panel">
+            <div class="exec-stat">
+              <span class="exec-stat-value exec-ok">{{ migrationResult.completed }}</span>
+              <span class="exec-stat-label text-xs text-tertiary">
+                {{ $t('migration.completed') }}
+              </span>
+            </div>
+            <div class="exec-stat">
+              <span
+                :class="['exec-stat-value', migrationResult.failed > 0 ? 'exec-err' : 'exec-ok']"
+              >
+                {{ migrationResult.failed }}
+              </span>
+              <span class="exec-stat-label text-xs text-tertiary">
+                {{ $t('migration.failed') }}
+              </span>
+            </div>
+            <div class="exec-stat">
+              <span class="exec-stat-value">{{ migrationResult.total }}</span>
+              <span class="exec-stat-label text-xs text-tertiary">{{ $t('migration.total') }}</span>
+            </div>
+          </div>
+
+          <p class="text-sm text-secondary">
+            {{ t('migration.removedDirectories', { count: migrationResult.removed_directories }) }}
+          </p>
+          <!-- Errors -->
+          <div v-if="migrationResult.errors.length > 0" class="exec-errors glass-panel">
+            <h4 class="exec-errors-title text-sm">{{ $t('migration.errors') }}</h4>
+            <div
+              v-for="(err, i) in migrationResult.errors"
+              :key="i"
+              class="exec-error-item text-xs"
+            >
+              {{ err }}
+            </div>
           </div>
         </div>
       </div>
 
-      <!-- Result Summary (shown only after completion) -->
-      <div v-if="migrationResult" class="exec-result">
-        <div class="exec-summary glass-panel">
-          <div class="exec-stat">
-            <span class="exec-stat-value exec-ok">{{ migrationResult.completed }}</span>
-            <span class="exec-stat-label text-xs text-tertiary">{{ $t('migration.completed') }}</span>
-          </div>
-          <div class="exec-stat">
-            <span :class="['exec-stat-value', migrationResult.failed > 0 ? 'exec-err' : 'exec-ok']">
-              {{ migrationResult.failed }}
-            </span>
-            <span class="exec-stat-label text-xs text-tertiary">{{ $t('migration.failed') }}</span>
-          </div>
-          <div class="exec-stat">
-            <span class="exec-stat-value">{{ migrationResult.total }}</span>
-            <span class="exec-stat-label text-xs text-tertiary">{{ $t('migration.total') }}</span>
-          </div>
-        </div>
-
-        <p class="text-sm text-secondary">{{ t('migration.removedDirectories', { count: migrationResult.removed_directories }) }}</p>
-        <!-- Errors -->
-        <div v-if="migrationResult.errors.length > 0" class="exec-errors glass-panel">
-          <h4 class="exec-errors-title text-sm">{{ $t('migration.errors') }}</h4>
-          <div v-for="(err, i) in migrationResult.errors" :key="i" class="exec-error-item text-xs">
-            {{ err }}
-          </div>
-        </div>
+      <div
+        v-if="restoreAllMessage"
+        :class="['restore-all-message', restoreAllFailed ? 'error' : 'ok']"
+      >
+        {{ restoreAllMessage }}
       </div>
-
-
     </div>
-
-    <div v-if="restoreAllMessage" :class="['restore-all-message', restoreAllFailed ? 'error' : 'ok']">
-      {{ restoreAllMessage }}
-    </div>
-  </div></div>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -603,17 +677,25 @@ function fileName(path: string) { return path.split(/[\\/]/).pop() || path }
   justify-content: center;
   width: 28px;
   height: 28px;
-  border-radius: var(--radius-xl)%;
+  border-radius: var(--radius-xl) %;
   background: var(--bg-hover);
   color: var(--text-tertiary);
   font-size: var(--text-sm);
   font-weight: var(--font-semibold);
   flex-shrink: 0;
-  transition: background var(--duration-base) var(--ease), color var(--duration-base) var(--ease);
+  transition:
+    background var(--duration-base) var(--ease),
+    color var(--duration-base) var(--ease);
 }
 
-.step.active .step-number { background: var(--accent-primary); color: var(--accent-ink); }
-.step.completed .step-number { background: var(--color-success); color: var(--text-primary); }
+.step.active .step-number {
+  background: var(--accent-primary);
+  color: var(--accent-ink);
+}
+.step.completed .step-number {
+  background: var(--color-success);
+  color: var(--text-primary);
+}
 
 .step-label {
   font-size: var(--text-sm);
@@ -623,10 +705,16 @@ function fileName(path: string) { return path.split(/[\\/]/).pop() || path }
   transition: color var(--duration-base) var(--ease);
 }
 
-.step.active .step-label { color: var(--text-primary); }
-.step.completed .step-label { color: var(--text-secondary); }
+.step.active .step-label {
+  color: var(--text-primary);
+}
+.step.completed .step-label {
+  color: var(--text-secondary);
+}
 
-.step-content { padding: var(--space-2) 0; }
+.step-content {
+  padding: var(--space-2) 0;
+}
 
 .step-title {
   font-size: var(--text-xl);
@@ -646,7 +734,11 @@ function fileName(path: string) { return path.split(/[\\/]/).pop() || path }
   gap: var(--space-4);
 }
 
-@media (max-width: 900px) { .mode-grid { grid-template-columns: 1fr; } }
+@media (max-width: 900px) {
+  .mode-grid {
+    grid-template-columns: 1fr;
+  }
+}
 
 .mode-card {
   position: relative;
@@ -660,11 +752,21 @@ function fileName(path: string) { return path.split(/[\\/]/).pop() || path }
   border-radius: var(--radius-lg);
   text-align: left;
   cursor: pointer;
-  transition: transform var(--duration-base) var(--ease), box-shadow var(--duration-base) var(--ease), border-color var(--duration-base) var(--ease);
+  transition:
+    transform var(--duration-base) var(--ease),
+    box-shadow var(--duration-base) var(--ease),
+    border-color var(--duration-base) var(--ease);
 }
 
-.mode-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); border-color: var(--border-strong); }
-.mode-card.selected { border-color: var(--accent-primary); box-shadow: none; }
+.mode-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+  border-color: var(--border-strong);
+}
+.mode-card.selected {
+  border-color: var(--accent-primary);
+  box-shadow: none;
+}
 
 .mode-icon-wrapper {
   display: flex;
@@ -677,10 +779,23 @@ function fileName(path: string) { return path.split(/[\\/]/).pop() || path }
   color: var(--mode-color);
 }
 
-.mode-title { font-size: var(--text-md); font-weight: var(--font-semibold); color: var(--text-primary); }
-.mode-description { font-size: var(--text-sm); color: var(--text-secondary); line-height: var(--leading-relaxed); }
+.mode-title {
+  font-size: var(--text-md);
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
+}
+.mode-description {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  line-height: var(--leading-relaxed);
+}
 
-.selected-indicator { position: absolute; top: var(--space-4); right: var(--space-4); color: var(--accent-primary); }
+.selected-indicator {
+  position: absolute;
+  top: var(--space-4);
+  right: var(--space-4);
+  color: var(--accent-primary);
+}
 
 /* ── Step Footer ──────────────────────────────────────────── */
 .step-footer {
@@ -690,19 +805,37 @@ function fileName(path: string) { return path.split(/[\\/]/).pop() || path }
 }
 
 /* ── Config Form ──────────────────────────────────────────── */
-.config-form { display: flex; flex-direction: column; gap: var(--space-5); max-width: 560px; }
+.config-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  max-width: 560px;
+}
 
-.config-field { display: flex; flex-direction: column; gap: var(--space-2); }
+.config-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
 
-.config-label { font-weight: var(--font-semibold); color: var(--text-primary); }
+.config-label {
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
+}
 
-.config-input-row { display: flex; flex-direction: column; gap: var(--space-1); }
+.config-input-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
 
 .config-input {
   transition: border-color var(--duration-fast) var(--ease);
 }
 
-.config-input:focus { outline: none; }
+.config-input:focus {
+  outline: none;
+}
 
 .target-option-row {
   display: flex;
@@ -727,7 +860,10 @@ function fileName(path: string) { return path.split(/[\\/]/).pop() || path }
   font-size: var(--text-sm);
 }
 
-.config-toggle-row { display: flex; gap: var(--space-2); }
+.config-toggle-row {
+  display: flex;
+  gap: var(--space-2);
+}
 
 .config-toggle {
   padding: var(--space-2) var(--space-4);
@@ -737,10 +873,17 @@ function fileName(path: string) { return path.split(/[\\/]/).pop() || path }
   background: var(--bg-elevated);
   color: var(--text-secondary);
   border: none;
-  transition: background var(--duration-fast) var(--ease), color var(--duration-fast) var(--ease), border-color var(--duration-fast) var(--ease);
+  transition:
+    background var(--duration-fast) var(--ease),
+    color var(--duration-fast) var(--ease),
+    border-color var(--duration-fast) var(--ease);
 }
 
-.config-toggle.active { background: var(--accent-muted); color: var(--accent-primary); border-color: var(--accent-primary); }
+.config-toggle.active {
+  background: var(--accent-muted);
+  color: var(--accent-primary);
+  border-color: var(--accent-primary);
+}
 
 /* ── Preview ──────────────────────────────────────────────── */
 .preview-warnings {
@@ -751,12 +894,28 @@ function fileName(path: string) { return path.split(/[\\/]/).pop() || path }
   margin-bottom: var(--space-4);
 }
 
-.warning-header { display: flex; align-items: center; gap: var(--space-2); color: var(--color-warning); font-size: var(--text-sm); font-weight: var(--font-semibold); margin-bottom: var(--space-2); }
+.warning-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-warning);
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  margin-bottom: var(--space-2);
+}
 
-.warning-item { color: var(--color-warning); padding: 2px 0; }
-.warning-more { padding-top: var(--space-1); }
+.warning-item {
+  color: var(--color-warning);
+  padding: 2px 0;
+}
+.warning-more {
+  padding-top: var(--space-1);
+}
 
-.preview-list { overflow: hidden; margin-bottom: var(--space-4); }
+.preview-list {
+  overflow: hidden;
+  margin-bottom: var(--space-4);
+}
 
 .preview-list-header {
   display: grid;
@@ -780,14 +939,28 @@ function fileName(path: string) { return path.split(/[\\/]/).pop() || path }
   align-items: center;
 }
 
-.preview-row.preview-conflict { background: var(--color-warning-bg); }
+.preview-row.preview-conflict {
+  background: var(--color-warning-bg);
+}
 
-.preview-cell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.preview-cell.name { font-weight: var(--font-medium); }
-.preview-cell.size { font-variant-numeric: tabular-nums; }
+.preview-cell {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.preview-cell.name {
+  font-weight: var(--font-medium);
+}
+.preview-cell.size {
+  font-variant-numeric: tabular-nums;
+}
 
-.preview-more { padding: var(--space-2) var(--space-4); }
-.preview-empty { margin: var(--space-10) 0; }
+.preview-more {
+  padding: var(--space-2) var(--space-4);
+}
+.preview-empty {
+  margin: var(--space-10) 0;
+}
 
 .preview-loading {
   display: flex;
@@ -806,16 +979,21 @@ function fileName(path: string) { return path.split(/[\\/]/).pop() || path }
   padding: var(--space-10);
 }
 
-.exec-spinner, .dep-spinner {
+.exec-spinner,
+.dep-spinner {
   width: 32px;
   height: 32px;
   border: none;
   border-top-color: transparent;
-  border-radius: var(--radius-xl)%;
+  border-radius: var(--radius-xl) %;
   animation: spin 0.8s linear infinite;
 }
 
-@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
 
 .exec-progress {
   width: min(520px, 100%);
@@ -860,16 +1038,37 @@ function fileName(path: string) { return path.split(/[\\/]/).pop() || path }
   padding: var(--space-6);
 }
 
-.exec-stat { display: flex; flex-direction: column; align-items: center; gap: var(--space-1); }
+.exec-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+}
 
-.exec-stat-value { font-size: var(--font-size-2xl); font-weight: var(--font-bold); font-variant-numeric: tabular-nums; color: var(--text-primary); }
+.exec-stat-value {
+  font-size: var(--text-2xl);
+  font-weight: var(--font-bold);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
 
-.exec-stat-value.exec-ok { color: var(--color-success); }
-.exec-stat-value.exec-err { color: var(--color-error); }
+.exec-stat-value.exec-ok {
+  color: var(--color-success);
+}
+.exec-stat-value.exec-err {
+  color: var(--color-error);
+}
 
-.exec-errors { margin-top: var(--space-4); padding: var(--space-4); }
+.exec-errors {
+  margin-top: var(--space-4);
+  padding: var(--space-4);
+}
 
-.exec-errors-title { font-weight: var(--font-semibold); color: var(--color-error); margin-bottom: var(--space-3); }
+.exec-errors-title {
+  font-weight: var(--font-semibold);
+  color: var(--color-error);
+  margin-bottom: var(--space-3);
+}
 
 .exec-error-item {
   padding: var(--space-2) 0;
@@ -877,7 +1076,9 @@ function fileName(path: string) { return path.split(/[\\/]/).pop() || path }
   opacity: 0.8;
 }
 
-.exec-error-item + .exec-error-item { border-top: 1px solid var(--border-subtle); }
+.exec-error-item + .exec-error-item {
+  border-top: 1px solid var(--border-subtle);
+}
 
 .restore-all-message {
   padding: var(--space-3);
@@ -895,8 +1096,33 @@ function fileName(path: string) { return path.split(/[\\/]/).pop() || path }
   background: var(--color-error-bg);
 }
 
-.b2-page { display: flex; flex-direction: column; height: 100%; min-height: 0; max-width: none; margin: 0; padding: 0; gap: 0; overflow: hidden; }
-.b2-page-body { flex: 1; min-height: 0; min-width: 0; overflow: auto; padding: 20px 24px; display: flex; flex-direction: column; gap: 20px; }
-.b2-page :deep(.page-header) { width: 100%; }
-@media(max-width: 800px) { .b2-page-body { padding: 12px; } }
+.b2-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+}
+.b2-page-body {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: auto;
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.b2-page :deep(.page-header) {
+  width: 100%;
+}
+@media (max-width: 800px) {
+  .b2-page-body {
+    padding: 12px;
+  }
+}
 </style>

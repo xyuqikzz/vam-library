@@ -1,201 +1,247 @@
 <template>
-<div class="dependency-completion-view animate-fadeIn b2-page"><PageHeader :title="$t('sidebar.dependencyCompletion')" ><template #actions>
+  <div class="dependency-completion-view animate-fadeIn b2-page">
+    <PageHeader :title="$t('sidebar.dependencyCompletion')">
+      <template #actions>
         <span v-if="lastRefreshedText" class="toolbar-hint">{{ lastRefreshedText }}</span>
-        <UiButton :disabled="busy || !appStore.vamRootPath" @click="refreshLibrary" variant="secondary">
-          <Icon  :size="14" name="outline-7" />
+        <UiButton
+          :disabled="busy || !appStore.vamRootPath"
+          @click="refreshLibrary"
+          variant="secondary"
+        >
+          <Icon :size="14" name="outline-7" />
           <span>{{ localLibraryStore.loading ? '加载中...' : '重新读取' }}</span>
         </UiButton>
-        <UiButton class="primary" :disabled="!dependencyGroups.length || busy" @click="openPreview" variant="primary" size="lg">
-          <Icon  :size="14" name="outline-19" />
+        <UiButton
+          class="primary"
+          :disabled="!dependencyGroups.length || busy"
+          @click="openPreview"
+          variant="primary"
+          size="lg"
+        >
+          <Icon :size="14" name="outline-19" />
           <span>生成补全方案</span>
         </UiButton>
-      </template></PageHeader><div class="b2-page-body">
-    <section v-if="!localLibraryStore.loading" class="stats-row">
-      <StatCard
-        title="缺失依赖条目"
-        :value="missingEntryCount"
-        subtitle="未满足的依赖记录总数"
-        icon="M12 8v4m0 4h.01M10.29 3.86l-7.43 12.88A2 2 0 0 0 4.58 19h14.84a2 2 0 0 0 1.72-3.02L13.71 3.86a2 2 0 0 0-3.42 0z"
-        trend="neutral"
-        color="var(--color-warning)"
-      />
-      <StatCard
-        title="去重后包数"
-        :value="dependencyGroups.length"
-        subtitle="按 creator + package 去重"
-        icon="M4 7h16M4 12h10M4 17h7"
-        trend="neutral"
-        color="var(--accent-primary)"
-      />
-      <StatCard
-        title="受影响资源包"
-        :value="affectedPackageCount"
-        subtitle="这些包引用了缺失依赖"
-        icon="M12 3l8 4v10l-8 4-8-4V7l8-4z"
-        trend="neutral"
-        color="var(--color-info)"
-      />
-      <StatCard
-        title="版本过低"
-        :value="lowerVersionCount"
-        subtitle="本地已装但版本不够"
-        icon="M12 19V5m0 0 4 4m-4-4-4 4"
-        trend="neutral"
-        color="var(--color-success)"
-      />
-    </section>
+      </template>
+    </PageHeader>
+    <div class="b2-page-body">
+      <section v-if="!localLibraryStore.loading" class="stats-row">
+        <StatCard
+          title="缺失依赖条目"
+          :value="missingEntryCount"
+          subtitle="未满足的依赖记录总数"
+          icon="M12 8v4m0 4h.01M10.29 3.86l-7.43 12.88A2 2 0 0 0 4.58 19h14.84a2 2 0 0 0 1.72-3.02L13.71 3.86a2 2 0 0 0-3.42 0z"
+          trend="neutral"
+          color="var(--color-warning)"
+        />
+        <StatCard
+          title="去重后包数"
+          :value="dependencyGroups.length"
+          subtitle="按 creator + package 去重"
+          icon="M4 7h16M4 12h10M4 17h7"
+          trend="neutral"
+          color="var(--accent-primary)"
+        />
+        <StatCard
+          title="受影响资源包"
+          :value="affectedPackageCount"
+          subtitle="这些包引用了缺失依赖"
+          icon="M12 3l8 4v10l-8 4-8-4V7l8-4z"
+          trend="neutral"
+          color="var(--color-info)"
+        />
+        <StatCard
+          title="版本过低"
+          :value="lowerVersionCount"
+          subtitle="本地已装但版本不够"
+          icon="M12 19V5m0 0 4 4m-4-4-4 4"
+          trend="neutral"
+          color="var(--color-success)"
+        />
+      </section>
 
-    <section v-else class="stats-row">
-      <div v-for="idx in 4" :key="idx" class="stat-skeleton glass-panel">
-        <div class="skeleton-line short"></div>
-        <div class="skeleton-line big"></div>
-        <div class="skeleton-line tiny"></div>
-      </div>
-    </section>
-
-
-
-    <div class="content-panel glass-panel">
-      <div class="panel-header">
-        <div>
-          <h2 class="panel-title">去重后的缺失依赖</h2>
-          <p class="panel-desc">每条记录代表一个包名，右侧显示它被多少个资源包引用。</p>
+      <section v-else class="stats-row">
+        <div v-for="idx in 4" :key="idx" class="stat-skeleton glass-panel">
+          <div class="skeleton-line short"></div>
+          <div class="skeleton-line big"></div>
+          <div class="skeleton-line tiny"></div>
         </div>
-        <span class="panel-count">{{ dependencyGroups.length }}</span>
-      </div>
+      </section>
 
-      <div v-if="dependencyGroups.length > 0" class="group-list">
-        <div v-for="group in dependencyGroups" :key="group.key" class="group-row">
-          <div class="group-main">
-            <div class="group-title-row">
-              <h3 class="group-title" :title="group.fullId">{{ group.fullId }}</h3>
-              <span class="group-tag" :class="group.statusClass">{{ group.statusLabel }}</span>
-            </div>
-            <div class="group-meta">
-              <span>要求版本：{{ group.requiredVersionLabel }}</span>
-              <span>缺失记录：{{ group.occurrenceCount }} 条</span>
-              <span>受影响包：{{ group.dependentPackageCount }} 个</span>
-              <span v-if="group.installedVersion !== null">本地版本：v{{ group.installedVersion }}</span>
-            </div>
-            <div class="group-sources" v-if="group.dependentPackages.length > 0">
-              <span v-for="pkg in group.dependentPackages.slice(0, 4)" :key="pkg" class="source-pill" :title="pkg">
-                {{ pkg }}
-              </span>
-              <span v-if="group.dependentPackages.length > 4" class="source-more">
-                还有 {{ group.dependentPackages.length - 4 }} 个
-              </span>
-            </div>
+      <div class="content-panel glass-panel">
+        <div class="panel-header">
+          <div>
+            <h2 class="panel-title">去重后的缺失依赖</h2>
+            <p class="panel-desc">每条记录代表一个包名，右侧显示它被多少个资源包引用。</p>
           </div>
-
-          <div class="group-actions">
-            <UiButton @click="copyIdentifier(group)" variant="ghost">
-              <Icon  :size="14" name="outline-20" />
-              <span>复制标识</span>
-            </UiButton>
-          </div>
+          <span class="panel-count">{{ dependencyGroups.length }}</span>
         </div>
-      </div>
 
-      <EmptyState
-        v-else
-        icon="M4 7h16M4 12h16M4 17h10"
-        title="暂无缺失依赖"
-        :description="emptyDescription"
-      >
-        <template v-if="!appStore.vamRootPath" #action>
-          <UiButton class="primary" @click="goSettings" variant="primary" size="lg">
-            去设置目录
-          </UiButton>
-        </template>
-      </EmptyState>
-    </div>
-
-    <Teleport to="body">
-      <UiModal v-if="previewOpen" :show-close="false" wide  @close="closePreview">
-            <div class="preview-header">
-              <div>
-                <h3 class="preview-title">补全依赖弹窗</h3>
-                <p class="preview-desc">
-                  已按包名去重，并按当前策略从 VaM Hub 查询可下载版本。没有来源的包会保留在列表里，但不会进入下载队列。
-                </p>
+        <div v-if="dependencyGroups.length > 0" class="group-list">
+          <div v-for="group in dependencyGroups" :key="group.key" class="group-row">
+            <div class="group-main">
+              <div class="group-title-row">
+                <h3 class="group-title" :title="group.fullId">{{ group.fullId }}</h3>
+                <span class="group-tag" :class="group.statusClass">{{ group.statusLabel }}</span>
               </div>
-              <UiButton class="preview-close" @click="closePreview" variant="ghost" icon-only :aria-label="$t('common.close')">
-                <Icon  :size="16" name="outline-9" />
-              </UiButton>
-            </div>
-
-            <div class="preview-body">
-              <div class="mode-bar">
-                <UiButton :class="['', { active: resolutionMode === 'required' }]" @click="resolutionMode = 'required'" variant="secondary">
-                  按要求版本
-                </UiButton>
-                <UiButton :class="['', { active: resolutionMode === 'latest' }]" @click="resolutionMode = 'latest'" variant="secondary">
-                  直接下载最新
-                </UiButton>
-                <span class="mode-hint">
-                  当前会排除 Hub 找不到的包。
+              <div class="group-meta">
+                <span>要求版本：{{ group.requiredVersionLabel }}</span>
+                <span>缺失记录：{{ group.occurrenceCount }} 条</span>
+                <span>受影响包：{{ group.dependentPackageCount }} 个</span>
+                <span v-if="group.installedVersion !== null">
+                  本地版本：v{{ group.installedVersion }}
                 </span>
               </div>
-
-              <div class="preview-summary">
-                <div class="summary-chip">可下载 {{ downloadCandidates.length }} 组</div>
-                <div class="summary-chip warn">无来源 {{ missingSourceCount }} 组</div>
-                <div class="summary-chip warn">版本不符 {{ versionMismatchCount }} 组</div>
-                <div class="summary-chip">总计 {{ previewGroups.length }} 组</div>
+              <div class="group-sources" v-if="group.dependentPackages.length > 0">
+                <span
+                  v-for="pkg in group.dependentPackages.slice(0, 4)"
+                  :key="pkg"
+                  class="source-pill"
+                  :title="pkg"
+                >
+                  {{ pkg }}
+                </span>
+                <span v-if="group.dependentPackages.length > 4" class="source-more">
+                  还有 {{ group.dependentPackages.length - 4 }} 个
+                </span>
               </div>
+            </div>
 
-              <div v-if="previewLoading" class="preview-loading">
-                <div class="loader"></div>
-                <p>正在查询 Hub 资源... {{ resolvingProgress.current }} / {{ resolvingProgress.total }}</p>
-              </div>
+            <div class="group-actions">
+              <UiButton @click="copyIdentifier(group)" variant="ghost">
+                <Icon :size="14" name="outline-20" />
+                <span>复制标识</span>
+              </UiButton>
+            </div>
+          </div>
+        </div>
 
-              <div v-else class="preview-list">
-                <div v-for="group in previewGroupsView" :key="group.key" class="preview-row">
-                  <div class="preview-main">
-                    <div class="preview-row-title">
-                      <h4 class="preview-name">{{ group.fullId }}</h4>
-                      <span class="preview-badge" :class="group.previewStatusClass">{{ group.previewStatusLabel }}</span>
-                    </div>
-                    <div class="preview-meta">
-                      <span>要求版本：{{ group.requiredVersionLabel }}</span>
-                      <span>可用版本：{{ group.selectedFile ? `v${group.selectedFile.version}` : '无' }}</span>
-                      <span>缺失记录：{{ group.occurrenceCount }} 条</span>
-                    </div>
-                    <div class="preview-file" v-if="group.selectedFile">
-                      {{ group.selectedFile.filename }} · {{ formatSize(group.selectedFile.sizeBytes) }}
-                    </div>
-                    <div class="preview-file muted" v-else>
-                      {{ group.previewReason }}
-                    </div>
+        <EmptyState
+          v-else
+          icon="M4 7h16M4 12h16M4 17h10"
+          title="暂无缺失依赖"
+          :description="emptyDescription"
+        >
+          <template v-if="!appStore.vamRootPath" #action>
+            <UiButton class="primary" @click="goSettings" variant="primary" size="lg">
+              去设置目录
+            </UiButton>
+          </template>
+        </EmptyState>
+      </div>
+
+      <Teleport to="body">
+        <UiModal v-if="previewOpen" :show-close="false" wide @close="closePreview">
+          <div class="preview-header">
+            <div>
+              <h3 class="preview-title">补全依赖弹窗</h3>
+              <p class="preview-desc">
+                已按包名去重，并按当前策略从 VaM Hub
+                查询可下载版本。没有来源的包会保留在列表里，但不会进入下载队列。
+              </p>
+            </div>
+            <UiButton
+              class="preview-close"
+              @click="closePreview"
+              variant="ghost"
+              icon-only
+              :aria-label="$t('common.close')"
+            >
+              <Icon :size="16" name="outline-9" />
+            </UiButton>
+          </div>
+
+          <div class="preview-body">
+            <div class="mode-bar">
+              <UiButton
+                :class="['', { active: resolutionMode === 'required' }]"
+                @click="resolutionMode = 'required'"
+                variant="secondary"
+              >
+                按要求版本
+              </UiButton>
+              <UiButton
+                :class="['', { active: resolutionMode === 'latest' }]"
+                @click="resolutionMode = 'latest'"
+                variant="secondary"
+              >
+                直接下载最新
+              </UiButton>
+              <span class="mode-hint">当前会排除 Hub 找不到的包。</span>
+            </div>
+
+            <div class="preview-summary">
+              <div class="summary-chip">可下载 {{ downloadCandidates.length }} 组</div>
+              <div class="summary-chip warn">无来源 {{ missingSourceCount }} 组</div>
+              <div class="summary-chip warn">版本不符 {{ versionMismatchCount }} 组</div>
+              <div class="summary-chip">总计 {{ previewGroups.length }} 组</div>
+            </div>
+
+            <div v-if="previewLoading" class="preview-loading">
+              <div class="loader"></div>
+              <p>
+                正在查询 Hub 资源... {{ resolvingProgress.current }} / {{ resolvingProgress.total }}
+              </p>
+            </div>
+
+            <div v-else class="preview-list">
+              <div v-for="group in previewGroupsView" :key="group.key" class="preview-row">
+                <div class="preview-main">
+                  <div class="preview-row-title">
+                    <h4 class="preview-name">{{ group.fullId }}</h4>
+                    <span class="preview-badge" :class="group.previewStatusClass">
+                      {{ group.previewStatusLabel }}
+                    </span>
                   </div>
-
-                  <div class="preview-side">
-                    <UiButton @click="copyIdentifier(group)" variant="ghost">
-                      <Icon  :size="14" name="outline-20" />
-                      <span>复制标识</span>
-                    </UiButton>
-                    <span v-if="group.selectedFile" class="download-ready">可加入队列</span>
-                    <span v-else class="download-empty">不会下载</span>
+                  <div class="preview-meta">
+                    <span>要求版本：{{ group.requiredVersionLabel }}</span>
+                    <span>
+                      可用版本：{{ group.selectedFile ? `v${group.selectedFile.version}` : '无' }}
+                    </span>
+                    <span>缺失记录：{{ group.occurrenceCount }} 条</span>
                   </div>
+                  <div class="preview-file" v-if="group.selectedFile">
+                    {{ group.selectedFile.filename }} ·
+                    {{ formatSize(group.selectedFile.sizeBytes) }}
+                  </div>
+                  <div class="preview-file muted" v-else>
+                    {{ group.previewReason }}
+                  </div>
+                </div>
+
+                <div class="preview-side">
+                  <UiButton @click="copyIdentifier(group)" variant="ghost">
+                    <Icon :size="14" name="outline-20" />
+                    <span>复制标识</span>
+                  </UiButton>
+                  <span v-if="group.selectedFile" class="download-ready">可加入队列</span>
+                  <span v-else class="download-empty">不会下载</span>
                 </div>
               </div>
             </div>
+          </div>
 
-            <div class="preview-footer">
-              <div class="footer-stats">
-                <span>将加入：{{ downloadCandidates.length }} 组</span>
-                <span v-if="missingSourceCount > 0">已排除：{{ missingSourceCount }} 组无来源包</span>
-              </div>
-              <div class="footer-actions">
-                <UiButton @click="closePreview" variant="secondary">取消</UiButton>
-                <UiButton class="primary" :disabled="!downloadCandidates.length || previewLoading" @click="downloadCandidatesToQueue" variant="primary" size="lg">
-                  {{ resolutionMode === 'latest' ? '下载最新版本' : '下载要求版本' }}
-                </UiButton>
-              </div>
+          <div class="preview-footer">
+            <div class="footer-stats">
+              <span>将加入：{{ downloadCandidates.length }} 组</span>
+              <span v-if="missingSourceCount > 0">已排除：{{ missingSourceCount }} 组无来源包</span>
             </div>
-          </UiModal>
-    </Teleport>
-  </div></div>
+            <div class="footer-actions">
+              <UiButton @click="closePreview" variant="secondary">取消</UiButton>
+              <UiButton
+                class="primary"
+                :disabled="!downloadCandidates.length || previewLoading"
+                @click="downloadCandidatesToQueue"
+                variant="primary"
+                size="lg"
+              >
+                {{ resolutionMode === 'latest' ? '下载最新版本' : '下载要求版本' }}
+              </UiButton>
+            </div>
+          </div>
+        </UiModal>
+      </Teleport>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -607,7 +653,6 @@ function chunkArray<T>(list: T[], size: number) {
   min-height: 100%;
 }
 
-
 .content-panel {
   border-radius: var(--radius-lg);
 }
@@ -919,7 +964,7 @@ function chunkArray<T>(list: T[], size: number) {
 .loader {
   width: 28px;
   height: 28px;
-  border-radius: var(--radius-xl)%;
+  border-radius: var(--radius-xl) %;
   border: none;
   border-top-color: transparent;
   animation: spin 0.9s linear infinite;
@@ -1015,7 +1060,6 @@ function chunkArray<T>(list: T[], size: number) {
 }
 
 @media (max-width: 720px) {
-
   .preview-header,
   .preview-footer {
     flex-direction: column;
@@ -1032,8 +1076,33 @@ function chunkArray<T>(list: T[], size: number) {
   }
 }
 
-.b2-page { display: flex; flex-direction: column; height: 100%; min-height: 0; max-width: none; margin: 0; padding: 0; gap: 0; overflow: hidden; }
-.b2-page-body { flex: 1; min-height: 0; min-width: 0; overflow: auto; padding: 20px 24px; display: flex; flex-direction: column; gap: 20px; }
-.b2-page :deep(.page-header) { width: 100%; }
-@media(max-width: 800px) { .b2-page-body { padding: 12px; } }
+.b2-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+}
+.b2-page-body {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: auto;
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.b2-page :deep(.page-header) {
+  width: 100%;
+}
+@media (max-width: 800px) {
+  .b2-page-body {
+    padding: 12px;
+  }
+}
 </style>

@@ -83,7 +83,199 @@ function isActive(path: string): boolean {
   return route.path === path
 }
 </script>
-<template><aside class="app-sidebar"><div class="sidebar-header" data-tauri-drag-region><div class="brand-logo" :title="t('app.name')" data-tauri-drag-region><Icon name="package" :size="24" /></div></div><nav class="sidebar-nav" :aria-label="t('app.name')"><div v-for="(group, index) in [browseItems, resourcesItems]" :key="index" class="nav-group"><button v-for="item in group" :key="item.route" type="button" class="nav-item" :class="{ active: isActive(item.route) }" :aria-label="item.label" :aria-current="isActive(item.route) ? 'page' : undefined" :title="item.label" @click="navigate(item.route)"><span class="nav-icon"><Icon :name="item.icon" /><span v-if="item.route === '/download' && activeAndPendingCount > 0" class="nav-badge">{{ activeAndPendingCount }}</span></span><span class="nav-label">{{ item.short }}</span></button></div><div class="nav-group"><button type="button" class="nav-item" :class="{ active: toolsActive || toolsOpen }" aria-haspopup="menu" :aria-expanded="toolsOpen" :aria-label="t('ui.tools')" @click="toggleTools"><span class="nav-icon"><Icon name="tools" /></span><span class="nav-label">{{ t('sidebar.short.tools') }}</span></button></div></nav><div class="sidebar-bottom"><button type="button" class="nav-item start-game-btn" :disabled="isLaunching" :aria-label="t('sidebar.startGame')" :title="t('sidebar.startGame')" @click="startVamGame"><span class="nav-icon"><Icon name="play" :size="22" /></span><span class="nav-label">{{ isLaunching ? t('onDemand.running') : t('sidebar.short.startGame') }}</span></button><button type="button" class="nav-item" :class="{ active: isActive('/settings') }" :aria-current="isActive('/settings') ? 'page' : undefined" :title="t('sidebar.settings')" @click="navigate('/settings')"><span class="nav-icon"><Icon name="settings" /></span><span class="nav-label">{{ t('sidebar.short.settings') }}</span></button></div><UiMenu v-model:open="toolsOpen" :anchor="toolsAnchor" :items="toolMenuItems" :label="t('ui.tools')" @select="navigate($event.value)" /></aside></template>
+<template>
+  <aside class="app-sidebar">
+    <div class="sidebar-header" data-tauri-drag-region>
+      <div class="brand-logo" :title="t('app.name')" data-tauri-drag-region>
+        <Icon name="package" :size="24" />
+      </div>
+    </div>
+    <nav class="sidebar-nav" :aria-label="t('app.name')">
+      <div v-for="(group, index) in [browseItems, resourcesItems]" :key="index" class="nav-group">
+        <button
+          v-for="item in group"
+          :key="item.route"
+          type="button"
+          class="nav-item"
+          :class="{ active: isActive(item.route) }"
+          :aria-label="item.label"
+          :aria-current="isActive(item.route) ? 'page' : undefined"
+          :title="item.label"
+          @click="navigate(item.route)"
+        >
+          <span class="nav-icon">
+            <Icon :name="item.icon" />
+            <span v-if="item.route === '/download' && activeAndPendingCount > 0" class="nav-badge">
+              {{ activeAndPendingCount }}
+            </span>
+          </span>
+          <span class="nav-label">{{ item.short }}</span>
+        </button>
+      </div>
+      <div class="nav-group">
+        <button
+          type="button"
+          class="nav-item"
+          :class="{ active: toolsActive || toolsOpen }"
+          aria-haspopup="menu"
+          :aria-expanded="toolsOpen"
+          :aria-label="t('ui.tools')"
+          @click="toggleTools"
+        >
+          <span class="nav-icon"><Icon name="tools" /></span>
+          <span class="nav-label">{{ t('sidebar.short.tools') }}</span>
+        </button>
+      </div>
+    </nav>
+    <div class="sidebar-bottom">
+      <button
+        type="button"
+        class="nav-item start-game-btn"
+        :disabled="isLaunching"
+        :aria-label="t('sidebar.startGame')"
+        :title="t('sidebar.startGame')"
+        @click="startVamGame"
+      >
+        <span class="nav-icon"><Icon name="play" :size="22" /></span>
+        <span class="nav-label">
+          {{ isLaunching ? t('onDemand.running') : t('sidebar.short.startGame') }}
+        </span>
+      </button>
+      <button
+        type="button"
+        class="nav-item"
+        :class="{ active: isActive('/settings') }"
+        :aria-current="isActive('/settings') ? 'page' : undefined"
+        :title="t('sidebar.settings')"
+        @click="navigate('/settings')"
+      >
+        <span class="nav-icon"><Icon name="settings" /></span>
+        <span class="nav-label">{{ t('sidebar.short.settings') }}</span>
+      </button>
+    </div>
+    <UiMenu
+      v-model:open="toolsOpen"
+      :anchor="toolsAnchor"
+      :items="toolMenuItems"
+      :label="t('ui.tools')"
+      @select="navigate($event.value)"
+    />
+  </aside>
+</template>
 <style scoped>
-.app-sidebar { display: flex; flex-direction: column; width: var(--sidebar-width); height: 100%; min-height: 0; padding: 14px 6px; border-radius: var(--radius-shell); background: var(--glass-sidebar-bg); flex-shrink: 0; z-index: var(--z-sidebar); }.sidebar-header { display: flex; justify-content: center; padding-bottom: 14px; flex-shrink: 0; }.brand-logo { display: grid; place-items: center; width: 36px; height: 36px; border-radius: var(--radius-icon); background: var(--accent-primary); color: var(--accent-ink); }.sidebar-nav { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; scrollbar-width: none; }.nav-group + .nav-group::before { content: ''; display: block; height: 1px; margin: 8px 14px; background: var(--divider); }.nav-item { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 100%; padding: 5px 0; color: var(--text-tertiary); border-radius: var(--radius-icon); }.nav-icon { position: relative; display: grid; place-items: center; width: 44px; height: 32px; border-radius: var(--radius-icon); }.nav-item:hover .nav-icon { background: var(--bg-hover); }.nav-item.active { color: var(--text-primary); }.nav-item.active .nav-icon { background: var(--bg-active); color: var(--accent-primary); }.nav-label { width: 100%; font-size: var(--text-xs); font-weight: var(--font-bold); line-height: 1.2; text-align: center; overflow-wrap: anywhere; }.nav-badge { position: absolute; top: -3px; right: -2px; display: grid; place-items: center; min-width: 16px; height: 16px; padding: 0 3px; border: 2px solid var(--glass-sidebar-bg); border-radius: var(--radius-full); background: var(--accent-primary); color: var(--accent-ink); font-size: var(--text-xs); font-weight: var(--font-bold); line-height: 1; }.sidebar-bottom { display: flex; flex-direction: column; gap: var(--space-2); padding-top: var(--space-2); flex-shrink: 0; }.start-game-btn .nav-icon { width: 48px; height: 48px; border-radius: var(--radius-card); background: var(--accent-primary); color: var(--accent-ink); }.start-game-btn:hover .nav-icon { background: var(--accent-primary-hover); }.start-game-btn:disabled { opacity: .6; cursor: not-allowed; }
+.app-sidebar {
+  display: flex;
+  flex-direction: column;
+  width: var(--sidebar-width);
+  height: 100%;
+  min-height: 0;
+  padding: 14px 6px;
+  border-radius: var(--radius-shell);
+  background: var(--glass-sidebar-bg);
+  flex-shrink: 0;
+  z-index: var(--z-sidebar);
+}
+.sidebar-header {
+  display: flex;
+  justify-content: center;
+  padding-bottom: 14px;
+  flex-shrink: 0;
+}
+.brand-logo {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-icon);
+  background: var(--accent-primary);
+  color: var(--accent-ink);
+}
+.sidebar-nav {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: none;
+}
+.nav-group + .nav-group::before {
+  content: '';
+  display: block;
+  height: 1px;
+  margin: 8px 14px;
+  background: var(--divider);
+}
+.nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 5px 0;
+  color: var(--text-tertiary);
+  border-radius: var(--radius-icon);
+}
+.nav-icon {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 32px;
+  border-radius: var(--radius-icon);
+}
+.nav-item:hover .nav-icon {
+  background: var(--bg-hover);
+}
+.nav-item.active {
+  color: var(--text-primary);
+}
+.nav-item.active .nav-icon {
+  background: var(--bg-active);
+  color: var(--accent-primary);
+}
+.nav-label {
+  width: 100%;
+  font-size: var(--text-xs);
+  font-weight: var(--font-bold);
+  line-height: 1.2;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+.nav-badge {
+  position: absolute;
+  top: -3px;
+  right: -2px;
+  display: grid;
+  place-items: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 3px;
+  border: 2px solid var(--glass-sidebar-bg);
+  border-radius: var(--radius-full);
+  background: var(--accent-primary);
+  color: var(--accent-ink);
+  font-size: var(--text-xs);
+  font-weight: var(--font-bold);
+  line-height: 1;
+}
+.sidebar-bottom {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-top: var(--space-2);
+  flex-shrink: 0;
+}
+.start-game-btn .nav-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-card);
+  background: var(--accent-primary);
+  color: var(--accent-ink);
+}
+.start-game-btn:hover .nav-icon {
+  background: var(--accent-primary-hover);
+}
+.start-game-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
 </style>
