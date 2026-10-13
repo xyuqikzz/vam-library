@@ -227,7 +227,7 @@ fn platform_stamp(file: &fs::File) -> Result<Option<String>, String> {
 
 #[cfg(windows)]
 fn platform_stamp(file: &fs::File) -> Result<Option<String>, String> {
-    use std::{ffi::c_void, mem::size_of, os::windows::io::AsRawHandle};
+    use std::{ffi::c_void, mem::{size_of, size_of_val}, os::windows::io::AsRawHandle};
     #[repr(C)]
     #[derive(Default)]
     struct BasicInfo {
@@ -251,39 +251,123 @@ fn platform_stamp(file: &fs::File) -> Result<Option<String>, String> {
             info: *mut c_void,
             size: u32,
         ) -> i32;
+        fn DeviceIoControl(
+            handle: *mut c_void,
+            control: u32,
+            input: *const c_void,
+            input_size: u32,
+            output: *mut c_void,
+            output_size: u32,
+            returned: *mut u32,
+            overlapped: *mut c_void,
+        ) -> i32;
     }
     let mut basic = BasicInfo::default();
     let mut identity = FileIdInfo::default();
-    // SAFETY: the handle stays open, both buffers match the documented Win32
-    // FILE_BASIC_INFO / FILE_ID_INFO ABI and their exact sizes are passed.
+    let versions = [2_u16, 3_u16]; // READ_FILE_USN_DATA: accepted record versions.
+    let mut record = [0_u8; 1024];
+    let mut returned = 0_u32;
+    // SAFETY: the handle stays open; buffers have the documented Win32 sizes
+    // and layouts. The synchronous call receives no OVERLAPPED pointer.
     let valid = unsafe {
         GetFileInformationByHandleEx(
-            file.as_raw_handle(),
-            0,
-            &mut basic as *mut _ as *mut c_void,
+            file.as_raw_handle(), 0, &mut basic as *mut _ as *mut c_void,
             size_of::<BasicInfo>() as u32,
         ) != 0
             && GetFileInformationByHandleEx(
-                file.as_raw_handle(),
-                18,
-                &mut identity as *mut _ as *mut c_void,
+                file.as_raw_handle(), 18, &mut identity as *mut _ as *mut c_void,
                 size_of::<FileIdInfo>() as u32,
+            ) != 0
+            && DeviceIoControl(
+                file.as_raw_handle(), 0x0009_00eb, // FSCTL_READ_FILE_USN_DATA
+                versions.as_ptr() as *const c_void, size_of_val(&versions) as u32,
+                record.as_mut_ptr() as *mut c_void, record.len() as u32,
+                &mut returned, std::ptr::null_mut(),
             ) != 0
     };
     if !valid || basic.changed <= 0 || identity.id == [0; 16] {
         return Ok(None);
     }
+    let Some(usn) = record.get(..returned as usize).and_then(parse_file_usn) else {
+        return Ok(None);
+    };
+    // Time alone can repeat for rapid writes, even after restoring the mtime.
+    // Include the file's journal sequence as well as identity and metadata.
+    // Unsupported/disabled journals fall back to content verification.
+    // https://learn.microsoft.com/windows/win32/api/winioctl/ni-winioctl-fsctl_read_file_usn_data
     Ok(Some(format!(
-        "windows:{}:{}:{}:{}:{}",
-        identity.volume,
-        hex::encode(identity.id),
-        basic.created,
-        basic.written,
-        basic.changed
+        "windows-usn:{}:{}:{}:{}:{}:{}",
+        identity.volume, hex::encode(identity.id), basic.created,
+        basic.written, basic.changed, usn,
     )))
+}
+
+#[cfg(any(windows, test))]
+fn parse_file_usn(record: &[u8]) -> Option<i64> {
+    let length = u32::from_le_bytes(record.get(..4)?.try_into().ok()?) as usize;
+    let record = record.get(..length)?;
+    let version = u16::from_le_bytes(record.get(4..6)?.try_into().ok()?);
+    let (offset, minimum) = match version {
+        2 => (24, 60), // two 64-bit file identifiers before the USN.
+        3 => (40, 76), // two 128-bit file identifiers before the USN.
+        _ => return None,
+    };
+    if record.len() < minimum { return None; }
+    let usn = i64::from_le_bytes(record.get(offset..offset + 8)?.try_into().ok()?);
+    (usn > 0).then_some(usn)
 }
 
 #[cfg(not(any(unix, windows)))]
 fn platform_stamp(_: &fs::File) -> Result<Option<String>, String> {
     Ok(None)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn record(version: u16, length: usize, offset: usize, usn: i64) -> Vec<u8> {
+        let mut bytes = vec![0; length];
+        bytes[..4].copy_from_slice(&(length as u32).to_le_bytes());
+        bytes[4..6].copy_from_slice(&version.to_le_bytes());
+        bytes[offset..offset + 8].copy_from_slice(&usn.to_le_bytes());
+        bytes
+    }
+
+    #[test]
+    fn usn_records_support_both_file_identifier_sizes() {
+        assert_eq!(parse_file_usn(&record(2, 64, 24, 123)), Some(123));
+        assert_eq!(parse_file_usn(&record(3, 80, 40, 456)), Some(456));
+    }
+
+    #[test]
+    fn unavailable_or_malformed_usn_records_require_content_verification() {
+        assert_eq!(parse_file_usn(&record(2, 64, 24, 0)), None);
+        assert_eq!(parse_file_usn(&record(2, 64, 24, -1)), None);
+        assert_eq!(parse_file_usn(&record(4, 80, 40, 123)), None);
+        assert_eq!(parse_file_usn(&record(2, 32, 24, 123)), None);
+        assert_eq!(parse_file_usn(&record(3, 48, 40, 123)), None);
+        assert_eq!(parse_file_usn(&record(2, 64, 24, 123)[..63]), None);
+        for length in 0..8 { assert_eq!(parse_file_usn(&vec![0; length]), None); }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn rapid_writes_with_restored_mtime_never_reuse_an_unchanged_stamp() {
+        let dir = super::super::resource_files::tests::TestDir::new();
+        let path = dir.write("rapid.var", b"aaaa");
+        for _ in 0..200 {
+            let before = change_stamp(&path).unwrap();
+            let mtime = fs::metadata(&path).unwrap().modified().unwrap();
+            fs::write(&path, b"bbbb").unwrap();
+            fs::File::options().write(true).open(&path).unwrap()
+                .set_times(fs::FileTimes::new().set_modified(mtime)).unwrap();
+            let after = change_stamp(&path).unwrap();
+            // No journal means no reusable proof; content checks remain mandatory.
+            if let (Some(before), Some(after)) = (before, after) {
+                assert_ne!(before, after, "a changed file must invalidate the cached proof");
+            }
+            fs::write(&path, b"aaaa").unwrap();
+        }
+    }
 }

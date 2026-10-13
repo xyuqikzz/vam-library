@@ -2879,10 +2879,10 @@ mod tests {
                 NEXT.fetch_add(1, Ordering::Relaxed)
             ));
             fs::create_dir_all(dir.join("AddonPackages")).unwrap();
-            let root = files::canonical_dir(&dir)
-                .unwrap()
-                .to_string_lossy()
-                .into_owned();
+            // Seed paths and database records with the same canonical root;
+            // Windows CI can expose TEMP through a short (8.3) alias.
+            let dir = files::canonical_dir(&dir).unwrap();
+            let root = dir.to_string_lossy().into_owned();
             let db = Database::new(&dir.join("data/index.db")).unwrap();
             let ctx = Context {
                 library_key: files::path_key(&root),
