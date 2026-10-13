@@ -48,7 +48,7 @@ const { t } = useI18n()
   flex-shrink: 0;
   background: var(--bg-input);
   color: var(--text-muted-strong);
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-control-sm);
 }
 .ui-chip-group:hover {
   background: var(--bg-control);
@@ -63,7 +63,7 @@ const { t } = useI18n()
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-control-sm);
   font-size: var(--text-base);
   font-weight: var(--font-bold);
   white-space: nowrap;
@@ -86,7 +86,7 @@ const { t } = useI18n()
   margin-right: 6px;
   width: 20px;
   height: 20px;
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-xs);
 }
 .ui-chip:disabled {
   opacity: 0.5;

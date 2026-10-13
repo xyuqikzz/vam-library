@@ -11,7 +11,7 @@
           <span class="field-name">{{ fieldLabel(key) }}</span>
           <span class="field-meta">
             <span v-if="fieldLabel(key) !== key" class="field-key">{{ key }}</span>
-            <span class="field-type">{{ valueType(value) }}</span>
+            <span class="field-type">{{ typeLabel(value) }}</span>
           </span>
         </div>
 
@@ -34,6 +34,7 @@
         <UiInput
           v-else-if="typeof value === 'number'"
           class="field-input number-input"
+          size="md"
           type="number"
           :model-value="value"
           @input="updateObjectField(key, parseNumber(($event.target as HTMLInputElement).value, value))"
@@ -51,6 +52,7 @@
         <UiInput
           v-else
           class="field-input"
+          size="md"
           type="text"
           :model-value="stringValue(value)"
           @input="updateObjectField(key, ($event.target as HTMLInputElement).value)"
@@ -99,7 +101,7 @@ const emit = defineEmits<{
   invalid: [message: string]
 }>()
 
-const { locale } = useI18n()
+const { t, te } = useI18n()
 
 const isObjectNode = computed(() => isPlainObject(props.modelValue))
 const objectEntries = computed(() => {
@@ -119,12 +121,12 @@ function updateArrayField(key: string, value: string) {
   try {
     const parsed = JSON.parse(value)
     if (!Array.isArray(parsed)) {
-      emit('invalid', '数组字段必须填写 JSON 数组。')
+      emit('invalid', t('prefsEditor.listRequired'))
       return
     }
     updateObjectField(key, parsed)
-  } catch (e) {
-    emit('invalid', String(e))
+  } catch {
+    emit('invalid', t('prefsEditor.listUnreadable'))
   }
 }
 
@@ -132,12 +134,12 @@ function updateRootArray(value: string) {
   try {
     const parsed = JSON.parse(value)
     if (!Array.isArray(parsed)) {
-      emit('invalid', '根节点必须填写 JSON 数组。')
+      emit('invalid', t('prefsEditor.rootListRequired'))
       return
     }
     emit('update:modelValue', parsed)
-  } catch (e) {
-    emit('invalid', String(e))
+  } catch {
+    emit('invalid', t('prefsEditor.listUnreadable'))
   }
 }
 
@@ -155,11 +157,20 @@ function valueType(value: JsonValue) {
   return typeof value
 }
 
+function typeLabel(value: JsonValue) {
+  const type = valueType(value)
+  const path = `prefsEditor.types.${type}`
+  return te(path) ? t(path) : type
+}
+
 function fieldLabel(key: string) {
-  if (locale.value !== 'zh-CN') {
-    return key
+  // Inherited names such as "constructor" would resolve to Object.prototype members.
+  const path = `prefsEditor.fields.${key}`
+  if (!(key in Object.prototype) && te(path)) {
+    return t(path)
   }
-  return zhFieldLabels[key] || humanizeFieldKey(key)
+  // Unknown prefs keys still render, as readable words.
+  return humanizeFieldKey(key)
 }
 
 function stringValue(value: JsonValue) {
@@ -177,119 +188,30 @@ function formatArray(value: JsonValue[]) {
   return JSON.stringify(value, null, 2)
 }
 
-const zhFieldLabels: Record<string, string> = {
-  alwaysAllowPluginsDownloadedFromHub: '始终允许从 Hub 下载的插件',
-  alwaysAllowPluginsFromTrustedCreators: '始终允许受信任作者的插件',
-  alwaysCheckForMissingPackages: '始终检查缺失包',
-  alwaysRebuildUidCacheOnStart: '启动时始终重建 UID 缓存',
-  alwaysUseMonitorCamera: '始终使用显示器相机',
-  allowPluginsNetworkAccess: '允许插件访问网络',
-  allowPluginsReadAccess: '允许插件读取文件',
-  allowPluginsWriteAccess: '允许插件写入文件',
-  allowPossessGrab: '允许附身抓取',
-  allowPossessSelect: '允许附身选择',
-  allowScenePlugins: '允许场景插件',
-  allowScriptPluginLoading: '允许加载脚本插件',
-  allowScriptsToAccessOtherPeople: '允许脚本访问其他人物',
-  audioInputDevice: '音频输入设备',
-  audioInputLevel: '音频输入音量',
-  audioOutputDevice: '音频输出设备',
-  autoLoadDefaultScene: '自动加载默认场景',
-  autoLoadLastScene: '自动加载上次场景',
-  autoSaveScene: '自动保存场景',
-  browserCameraEnabled: '启用浏览器相机',
-  cacheFolder: '缓存文件夹',
-  cachePath: '缓存路径',
-  creatorName: '作者名称',
-  custom: '自定义',
-  debug: '调试',
-  disableAllPlugins: '禁用所有插件',
-  disablePhysics: '禁用物理',
-  displayIndex: '显示器编号',
-  enableCaching: '启用缓存',
-  enabled: '启用',
-  enableDepthTexture: '生成深度纹理',
-  enableMirrorReflections: '启用镜面反射',
-  enablePlugins: '启用插件',
-  enableSoftPhysics: '软体物理',
-  enableSound: '启用声音',
-  enableWebBrowser: '启用内置浏览器',
-  forceDesktopMode: '强制桌面模式',
-  freeMoveMultiplier: '自由移动倍率',
-  fullscreen: '全屏',
-  gamepadEnabled: '启用手柄',
-  graphicsQuality: '图形质量',
-  hairPhysicsQuality: '头发物理质量',
-  highQualityPhysics: '高质量物理',
-  language: '语言',
-  lastBrowseDir: '上次浏览目录',
-  lastLoadDir: '上次加载目录',
-  lastSaveDir: '上次保存目录',
-  launchInVR: '以 VR 模式启动',
-  logLevel: '日志级别',
-  maxFileBrowserCacheSize: '文件浏览器最大缓存',
-  maxTextureSize: '最大贴图尺寸',
-  mirrorReflection: '镜面反射',
-  monitorHeight: '显示器高度',
-  monitorWidth: '显示器宽度',
-  msaa: 'MSAA 抗锯齿',
-  msaaLevel: 'MSAA 等级',
-  physicsRate: '物理更新补偿',
-  physicsUpdateCap: '物理更新上限',
-  pixelLightCount: '像素灯光数',
-  pluginsAlwaysEnabled: '插件始终启用',
-  preloadMorphs: '预加载变形',
-  processPriority: '进程优先级',
-  qualityLevel: '质量等级',
-  realtimeReflectionProbes: '实时反射探测点',
-  refreshRate: '刷新率',
-  renderScale: '渲染比例',
-  renderScaleDesktop: '桌面渲染比例',
-  renderScaleVR: 'VR 渲染比例',
-  resetCachePath: '重置缓存路径',
-  safeMode: '安全模式',
-  screenshotDirectory: '截图目录',
-  shadowQuality: '阴影质量',
-  softPhysics: '软体物理',
-  softPhysicsUpdateCap: '软体物理更新上限',
-  targetFrameRate: '目标帧率',
-  textureQuality: '贴图质量',
-  uiScale: '界面缩放',
-  useCache: '使用缓存',
-  useMonitorView: '使用显示器视图',
-  usePhysics: '使用物理',
-  useRealtimeReflectionProbes: '实时反射探测点',
-  useSoftPhysics: '使用软体物理',
-  userName: '用户名',
-  verticalSync: '垂直同步',
-  vr: 'VR',
-  vrHandChoice: 'VR 手柄选择',
-  vrRenderScale: 'VR 渲染比例',
-  windowHeight: '窗口高度',
-  windowWidth: '窗口宽度',
-}
-
 function humanizeFieldKey(key: string) {
-  return key
+  const text = key
     .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
     .replace(/[_-]+/g, ' ')
     .trim()
+    .split(/\s+/)
+    // Sentence case: lower-case capitalised words, keep acronyms such as VR or UID.
+    .map((word, index) => (index > 0 && /^[A-Z][a-z]/.test(word) ? word.toLowerCase() : word))
+    .join(' ')
+  return text.charAt(0).toUpperCase() + text.slice(1)
 }
 </script>
 
 <style scoped>
+/* 和设置页一样：一行一个设置项，用分隔线区分，不再一层套一层底色。
+   左边是名称，右边是控件；控件统一最宽 320px，数字和文字一样宽。 */
 .json-node {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
 }
 
 .json-node.nested {
   width: 100%;
-  padding: var(--space-3);
-  border: none;
-  border-radius: var(--radius-sm);
-  background: var(--bg-subtle);
+  min-width: 0;
 }
 
 .field-row {
@@ -297,20 +219,36 @@ function humanizeFieldKey(key: string) {
   grid-template-columns: minmax(180px, 260px) minmax(0, 1fr);
   align-items: center;
   gap: var(--space-4);
-  padding: var(--space-3);
-  border: none;
-  border-radius: var(--radius-sm);
-  background: var(--bg-subtle);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.field-row:last-child {
+  border-bottom: none;
+}
+
+.json-node:not(.nested) > .field-row.group {
+  align-items: flex-start;
+  padding: var(--space-4) 0;
+}
+
+.json-node:not(.nested) > .field-row.group > .field-label .field-name {
+  font-size: var(--text-base);
+  font-weight: var(--font-bold);
 }
 
 .field-row.group {
   align-items: flex-start;
 }
 
+.field-row.group > .json-node.nested {
+  margin-top: calc(-1 * var(--space-3));
+}
+
 .field-label {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
   min-width: 0;
 }
 
@@ -318,7 +256,7 @@ function humanizeFieldKey(key: string) {
   overflow: hidden;
   color: var(--text-primary);
   font-size: var(--text-sm);
-  font-weight: var(--font-medium);
+  font-weight: var(--font-semibold);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -337,24 +275,24 @@ function humanizeFieldKey(key: string) {
   font-size: var(--text-xs);
 }
 
-.field-input,
+.field-input {
+  width: 100%;
+  max-width: 320px;
+}
+
 .field-textarea {
   width: 100%;
-  outline: none;
 }
 
-.number-input {
-  max-width: 180px;
-}
-
-.field-textarea {
+/* 尺寸要落到 UiInput 内部的 textarea 上 */
+.field-textarea :deep(textarea) {
   min-height: 92px;
-  resize: vertical;
   font-family: var(--font-mono);
+  font-size: var(--text-sm);
   line-height: 1.5;
 }
 
-.root-array {
+.root-array :deep(textarea) {
   min-height: 280px;
 }
 

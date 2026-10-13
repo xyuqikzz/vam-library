@@ -1,9 +1,7 @@
 <template>
   <div class="settings-view animate-fadeIn b2-page">
     <PageHeader :title="$t('sidebar.settings')"></PageHeader>
-    <div class="b2-page-body">
-      <SceneBrowserModPanel />
-      <!-- General -->
+    <div class="b2-page-body is-form">
       <GlassPanel :title="$t('settings.general')">
         <div class="setting-row">
           <div class="setting-info">
@@ -50,21 +48,25 @@
             :key="instance.id"
             :class="['instance-row', { active: activeInstanceId === instance.id }]"
           >
-            <UiButton
+            <button
               class="instance-main"
               type="button"
+              :aria-pressed="activeInstanceId === instance.id"
               @click="switchInstance(instance.id)"
-              variant="secondary"
             >
-              <span class="instance-name">{{ instance.name }}</span>
-              <span class="instance-path truncate">{{ instance.rootPath }}</span>
-            </UiButton>
+              <span class="instance-indicator" aria-hidden="true" />
+              <span class="instance-text">
+                <span class="instance-name">{{ instance.name }}</span>
+                <span class="instance-path truncate">{{ instance.rootPath }}</span>
+              </span>
+            </button>
             <UiButton
               class="instance-delete"
               type="button"
+              size="sm"
               :title="$t('settings.deleteInstance')"
               @click="deleteInstance(instance.id)"
-              variant="danger"
+              variant="ghost"
               icon-only
               :aria-label="$t('settings.deleteInstance')"
             >
@@ -79,6 +81,7 @@
           <UiInput
             v-model="newInstanceName"
             class="setting-input instance-name-input"
+            size="md"
             :placeholder="$t('settings.instanceNamePlaceholder')"
           />
           <UiButton
@@ -94,89 +97,8 @@
         </p>
       </GlassPanel>
 
-      <!-- Resource Management -->
-      <GlassPanel :title="$t('settings.resourceManagement')">
-        <div class="setting-row">
-          <div class="setting-info">
-            <h4 class="setting-label">{{ $t('settings.managedMode') }}</h4>
-            <p class="setting-description">{{ $t('settings.managedModeDesc') }}</p>
-          </div>
-          <div class="setting-control">
-            <UiSwitch
-              :model-value="managedEnabled"
-              :label="$t('settings.managedMode')"
-              @update:model-value="toggleManagedMode"
-            />
-          </div>
-        </div>
+      <SceneBrowserModPanel />
 
-        <div class="setting-divider" />
-
-        <div class="setting-row">
-          <div class="setting-info">
-            <h4 class="setting-label">{{ $t('settings.managedLibraryPath') }}</h4>
-            <p class="setting-description">
-              {{ installContext?.managedLibraryDir || $t('settings.notConfigured') }}
-            </p>
-          </div>
-        </div>
-      </GlassPanel>
-
-      <GlassPanel :title="$t('settings.previewSettings')">
-        <div class="setting-row">
-          <div class="setting-info">
-            <h4 id="blur-previews-label" class="setting-label">
-              {{ $t('settings.blurPreviews') }}
-            </h4>
-            <p id="blur-previews-description" class="setting-description">
-              {{ $t('settings.blurPreviewsDesc') }}
-            </p>
-          </div>
-          <div class="setting-control">
-            <UiSwitch
-              type="button"
-              role="switch"
-              aria-labelledby="blur-previews-label"
-              aria-describedby="blur-previews-description"
-              :aria-checked="appStore.blurPreviews"
-              :disabled="isSavingPreviewSettings"
-              :model-value="appStore.blurPreviews"
-              :label="$t('settings.blurPreviews')"
-              @update:model-value="togglePreviewBlur"
-            />
-          </div>
-        </div>
-      </GlassPanel>
-
-      <!-- Language Settings -->
-      <GlassPanel :title="$t('settings.language')">
-        <div class="setting-row">
-          <div class="setting-info">
-            <h4 class="setting-label">{{ $t('settings.language') }}</h4>
-            <p class="setting-description">{{ $t('settings.languageDesc') }}</p>
-          </div>
-          <div class="setting-control">
-            <div class="theme-selector">
-              <UiChip
-                :class="['', { active: locale === 'zh-CN' }]"
-                @click="setLocale('zh-CN')"
-                :selected="locale === 'zh-CN'"
-              >
-                中文
-              </UiChip>
-              <UiChip
-                :class="['', { active: locale === 'en-US' }]"
-                @click="setLocale('en-US')"
-                :selected="locale === 'en-US'"
-              >
-                English
-              </UiChip>
-            </div>
-          </div>
-        </div>
-      </GlassPanel>
-
-      <!-- Download Settings -->
       <GlassPanel :title="$t('settings.downloadSettings')">
         <div class="setting-row">
           <div class="setting-info">
@@ -311,8 +233,151 @@
         </div>
       </GlassPanel>
 
-      <!-- Cache Management -->
-      <GlassPanel :title="$t('settings.cacheCleanup')">
+      <GlassPanel :title="$t('settings.trashSection')">
+        <div class="setting-row">
+          <div class="setting-info">
+            <h4 class="setting-label">{{ $t('settings.trashRetention') }}</h4>
+            <p class="setting-description">{{ $t('settings.trashRetentionDesc') }}</p>
+          </div>
+          <div class="setting-control retention-control">
+            <UiInput
+              v-model.number="cleanupPolicy.retention_days"
+              type="number"
+              size="md"
+              class="setting-input retention-input"
+              min="1"
+              max="365"
+              :aria-label="$t('settings.trashRetention')"
+              :disabled="isSavingPolicy"
+              @change="saveCleanupPolicy"
+            />
+            <span class="unit-label">{{ $t('settings.daysUnit') }}</span>
+          </div>
+        </div>
+
+        <div class="setting-divider" />
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <h4 class="setting-label">{{ $t('settings.trashAutoPurge') }}</h4>
+            <p class="setting-description">{{ $t('settings.trashAutoPurgeDesc') }}</p>
+          </div>
+          <div class="setting-control">
+            <UiSwitch
+              :model-value="cleanupPolicy.auto_purge"
+              :label="$t('settings.trashAutoPurge')"
+              :disabled="isSavingPolicy"
+              @update:model-value="cleanupPolicy.auto_purge = $event; saveCleanupPolicy()"
+            />
+          </div>
+        </div>
+
+        <div class="setting-divider" />
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <h4 class="setting-label">{{ $t('settings.cleanupBackgroundCheck') }}</h4>
+            <p class="setting-description">{{ $t('settings.cleanupBackgroundCheckDesc') }}</p>
+          </div>
+          <div class="setting-control">
+            <UiSwitch
+              :model-value="cleanupPolicy.background_index"
+              :label="$t('settings.cleanupBackgroundCheck')"
+              :disabled="isSavingPolicy"
+              @update:model-value="cleanupPolicy.background_index = $event; saveCleanupPolicy()"
+            />
+          </div>
+        </div>
+      </GlassPanel>
+
+      <GlassPanel :title="$t('settings.resourceManagement')">
+        <div class="setting-row">
+          <div class="setting-info">
+            <h4 class="setting-label">{{ $t('settings.managedMode') }}</h4>
+            <p class="setting-description">{{ $t('settings.managedModeDesc') }}</p>
+          </div>
+          <div class="setting-control">
+            <UiSwitch
+              :model-value="managedEnabled"
+              :label="$t('settings.managedMode')"
+              @update:model-value="toggleManagedMode"
+            />
+          </div>
+        </div>
+
+        <div class="setting-divider" />
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <h4 class="setting-label">{{ $t('settings.managedLibraryPath') }}</h4>
+            <p class="setting-description">
+              {{ installContext?.managedLibraryDir || $t('settings.notConfigured') }}
+            </p>
+          </div>
+        </div>
+      </GlassPanel>
+
+      <GlassPanel :title="$t('settings.display')">
+        <div class="setting-row">
+          <div class="setting-info">
+            <h4 id="blur-previews-label" class="setting-label">
+              {{ $t('settings.blurPreviews') }}
+            </h4>
+            <p id="blur-previews-description" class="setting-description">
+              {{ $t('settings.blurPreviewsDesc') }}
+            </p>
+          </div>
+          <div class="setting-control">
+            <UiSwitch
+              type="button"
+              role="switch"
+              aria-labelledby="blur-previews-label"
+              aria-describedby="blur-previews-description"
+              :aria-checked="appStore.blurPreviews"
+              :disabled="isSavingPreviewSettings"
+              :model-value="appStore.blurPreviews"
+              :label="$t('settings.blurPreviews')"
+              @update:model-value="togglePreviewBlur"
+            />
+          </div>
+        </div>
+
+        <div class="setting-divider" />
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <h4 class="setting-label">{{ $t('settings.language') }}</h4>
+            <p class="setting-description">{{ $t('settings.languageDesc') }}</p>
+          </div>
+          <div class="setting-control">
+            <UiSegmented
+              :model-value="locale"
+              :label="$t('settings.language')"
+              :options="[
+                { value: 'zh-CN', label: '中文' },
+                { value: 'en-US', label: 'English' },
+              ]"
+              @update:model-value="setLocale"
+            />
+          </div>
+        </div>
+      </GlassPanel>
+
+      <GlassPanel :title="$t('settings.dataAndCache')">
+        <div class="setting-row">
+          <div class="setting-info">
+            <h4 class="setting-label">{{ $t('settings.exportPackageList') }}</h4>
+            <p class="setting-description">{{ $t('settings.exportPackageListDesc') }}</p>
+          </div>
+          <div class="setting-control">
+            <UiButton @click="handleExportPackages" variant="secondary">
+              {{ $t('settings.exportPackageList') }}
+            </UiButton>
+          </div>
+        </div>
+
+        <div class="setting-divider" />
+
         <div class="setting-row">
           <div class="setting-info">
             <h4 class="setting-label">{{ $t('settings.clearThumbnails') }}</h4>
@@ -348,35 +413,15 @@
         </div>
       </GlassPanel>
 
-      <!-- Backup & Export -->
-      <GlassPanel :title="$t('settings.exportPackageList')">
-        <div class="setting-row">
-          <div class="setting-info">
-            <h4 class="setting-label">{{ $t('settings.exportPackageList') }}</h4>
-            <p class="setting-description">{{ $t('settings.exportPackageListDesc') }}</p>
-          </div>
-          <div class="setting-control">
-            <UiButton @click="handleExportPackages" variant="secondary">
-              {{ $t('settings.exportPackageList') }}
-            </UiButton>
-          </div>
-        </div>
-      </GlassPanel>
-
-      <!-- About -->
       <GlassPanel :title="$t('settings.about')">
         <div class="about-content">
           <div class="about-row">
             <span class="about-label">{{ $t('settings.version') }}</span>
-            <span class="about-value">0.1.1</span>
-          </div>
-          <div class="about-row">
-            <span class="about-label">{{ $t('settings.framework') }}</span>
-            <span class="about-value">Tauri 2 + Vue 3</span>
+            <span class="about-value">{{ appVersion }}</span>
           </div>
           <div class="about-row">
             <span class="about-label">{{ $t('settings.repository') }}</span>
-            <UiButton class="about-link" type="button" @click="openRepository" variant="secondary">
+            <UiButton class="about-link" type="button" size="sm" @click="openRepository" variant="ghost">
               github.com/xyuqikzz/vam-library
             </UiButton>
           </div>
@@ -385,17 +430,13 @@
 
       <UiModal
         v-if="confirmClearLocalData"
+        :title="$t('settings.clearLocalDataConfirmTitle')"
+        :description="$t('settings.clearLocalDataConfirmDesc')"
         :show-close="false"
         :close-disabled="isClearingLocalData"
         @close="closeClearLocalDataDialog"
       >
-        <div class="confirm-dialog-header">
-          <h3>{{ $t('settings.clearLocalDataConfirmTitle') }}</h3>
-        </div>
-        <div class="confirm-dialog-body">
-          <p>{{ $t('settings.clearLocalDataConfirmDesc') }}</p>
-        </div>
-        <div class="confirm-dialog-actions">
+        <template #footer>
           <UiButton
             :disabled="isClearingLocalData"
             @click="closeClearLocalDataDialog"
@@ -404,16 +445,16 @@
             {{ $t('common.cancel') }}
           </UiButton>
           <UiButton :disabled="isClearingLocalData" @click="handleClearLocalData" variant="danger">
-            {{ isClearingLocalData ? $t('common.loading') : $t('common.confirm') }}
+            {{ isClearingLocalData ? $t('common.loading') : $t('settings.clearLocalData') }}
           </UiButton>
-        </div>
+        </template>
       </UiModal>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import UiChip from '@/components/ui/UiChip.vue'
+import UiSegmented from '@/components/ui/UiSegmented.vue'
 import UiModal from '@/components/ui/UiModal.vue'
 import PageHeader from '@/components/layout/PageHeader.vue'
 import UiInput from '@/components/ui/UiInput.vue'
@@ -421,7 +462,7 @@ import UiSwitch from '@/components/ui/UiSwitch.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import Icon from '@/components/ui/Icon.vue'
 import { useI18n } from 'vue-i18n'
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useAppStore } from '@/stores/app'
 import { useLocalLibraryStore } from '@/stores/localLibrary'
@@ -429,6 +470,8 @@ import { useNotification } from '@/composables/useNotification'
 import { invoke } from '@tauri-apps/api/core'
 import GlassPanel from '@/components/common/GlassPanel.vue'
 import SceneBrowserModPanel from '@/components/SceneBrowserModPanel.vue'
+import type { CleanupPolicy } from '@/types/cleanup'
+import packageInfo from '../../package.json'
 
 const { t } = useI18n()
 const appStore = useAppStore()
@@ -449,6 +492,34 @@ const {
 } = storeToRefs(appStore)
 
 const notify = useNotification()
+const appVersion = packageInfo.version
+
+// 回收站策略：原本放在回收站页顶部，属于偏好设置，统一放到设置页。
+const cleanupPolicy = ref<CleanupPolicy>({ retention_days: 30, auto_purge: false, background_index: true })
+const isSavingPolicy = ref(false)
+onMounted(async () => {
+  try {
+    cleanupPolicy.value = await invoke<CleanupPolicy>('get_cleanup_policy')
+  } catch {
+    /* keep defaults; saving will report errors */
+  }
+})
+async function saveCleanupPolicy() {
+  if (isSavingPolicy.value) return
+  const days = Math.min(365, Math.max(1, Math.round(Number(cleanupPolicy.value.retention_days) || 30)))
+  isSavingPolicy.value = true
+  try {
+    cleanupPolicy.value = await invoke<CleanupPolicy>('save_cleanup_policy', {
+      retentionDays: days,
+      autoPurge: cleanupPolicy.value.auto_purge,
+      backgroundIndex: cleanupPolicy.value.background_index,
+    })
+  } catch (error) {
+    notify.error(t('settings.policySaveFailed', { error: String(error) }))
+  } finally {
+    isSavingPolicy.value = false
+  }
+}
 const isSavingPreviewSettings = ref(false)
 async function togglePreviewBlur() {
   if (isSavingPreviewSettings.value) return
@@ -570,7 +641,7 @@ function toggleAutoScan() {
 async function addCurrentInstance() {
   const rootPath = vamRootPath.value
   if (!canAddCurrentInstance.value || !rootPath) return
-  const name = newInstanceName.value.trim() || `VAM 实例 ${vamInstances.value.length + 1}`
+  const name = newInstanceName.value.trim() || t('settings.defaultInstanceName', { index: vamInstances.value.length + 1 })
   const id = `instance_${Date.now()}`
   const saved = await saveWithFeedback(() => appStore.saveInstances(
     [...vamInstances.value, {
@@ -656,18 +727,12 @@ async function handleExportPackages() {
 </script>
 
 <style scoped>
-.settings-view {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-5);
-  max-width: 720px;
-}
-
 .setting-row {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: var(--space-6);
+  min-height: var(--control-h-md);
 }
 
 .setting-info {
@@ -679,12 +744,14 @@ async function handleExportPackages() {
   font-size: var(--text-md);
   font-weight: var(--font-medium);
   color: var(--text-primary);
-  margin-bottom: var(--space-1);
+  margin: 0 0 2px;
 }
 
 .setting-description {
+  margin: 0;
   font-size: var(--text-sm);
-  color: var(--text-secondary);
+  color: var(--text-tertiary);
+  line-height: var(--leading-normal);
 }
 
 .setting-control {
@@ -707,37 +774,35 @@ async function handleExportPackages() {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
+  height: var(--control-h-md);
+  box-sizing: border-box;
+  padding: 0 var(--space-4);
   background: var(--bg-input);
   border: none;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-control);
   color: var(--text-secondary);
   font-size: var(--text-sm);
-  max-width: 220px;
+  max-width: 280px;
 }
 
 .path-text {
-  max-width: 160px;
-}
-
-.theme-selector {
-  display: flex;
-  background: var(--bg-base);
-  border-radius: var(--radius-sm);
-  padding: 2px;
-  gap: 2px;
+  max-width: 220px;
 }
 
 .about-content {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
 }
 
 .about-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  min-height: var(--control-h-md);
+}
+
+.about-row + .about-row {
+  border-top: 1px solid var(--border-subtle);
 }
 
 .about-label {
@@ -751,40 +816,52 @@ async function handleExportPackages() {
   font-weight: var(--font-medium);
 }
 
-.about-link {
-  font-size: var(--text-sm);
-  color: var(--accent-secondary);
-  font-weight: var(--font-medium);
-  cursor: pointer;
+/* 双类选择器保证覆盖 UiButton 幽灵按钮的文字色 */
+.about-link.about-link {
+  margin-right: calc(-1 * var(--space-3));
+  color: var(--accent-primary);
 }
 
-.about-link:hover {
-  color: var(--accent-secondary-hover);
+.about-link.about-link:hover {
+  color: var(--accent-primary-hover);
 }
 
 .setting-input {
-  width: 100px;
-  text-align: right;
-  transition: border-color var(--transition-fast) var(--ease);
+  width: 120px;
+}
+
+/* 设置页右侧控件统一 40 高 */
+.setting-control :deep(.ui-input-shell) {
+  height: var(--control-h-md);
 }
 
 .stepper-control {
   display: grid;
-  grid-template-columns: 40px 72px 40px;
+  grid-template-columns: var(--control-h-md) 56px var(--control-h-md);
   align-items: center;
   overflow: hidden;
-  height: var(--control-h-lg);
+  height: var(--control-h-md);
   background: var(--bg-input);
   border: none;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-control);
 }
 
 .stepper-control :deep(.ui-button) {
+  width: var(--control-h-md);
   padding: 0;
+  background: transparent;
+}
+
+.stepper-control :deep(.ui-button:hover:not(:disabled)) {
+  background: var(--bg-control);
+}
+
+.stepper-control :deep(.ui-input-shell) {
+  background: transparent;
 }
 
 .stepper-input {
-  width: 72px;
+  width: 56px;
   text-align: center;
   appearance: textfield;
   -moz-appearance: textfield;
@@ -805,27 +882,57 @@ async function handleExportPackages() {
 
 .instance-row {
   display: flex;
-  align-items: stretch;
+  align-items: center;
   gap: var(--space-2);
-  padding: var(--space-2);
-  border: none;
-  border-radius: var(--radius-sm);
-  background: var(--bg-subtle);
+  padding-right: var(--space-2);
+  border-radius: var(--radius-md);
+  background: var(--bg-hover);
+}
+
+.instance-row.active {
+  box-shadow: inset 0 0 0 2px var(--accent-primary);
 }
 
 .instance-main {
   display: flex;
   flex: 1;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+  min-height: 56px;
+  padding: var(--space-2) var(--space-4);
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.instance-main:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.instance-indicator {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  border-radius: var(--radius-full);
+  border: 2px solid var(--text-disabled);
+}
+
+.instance-row.active .instance-indicator {
+  border: 5px solid var(--accent-primary);
+}
+
+.instance-text {
+  display: flex;
   flex-direction: column;
   gap: 2px;
   min-width: 0;
-  padding: var(--space-1) var(--space-2);
-  text-align: left;
-}
-
-.instance-row.active {
-  border-color: var(--accent-primary);
-  background: var(--accent-muted);
 }
 
 .instance-name {
@@ -840,14 +947,7 @@ async function handleExportPackages() {
 }
 
 .instance-delete {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
   flex-shrink: 0;
-  border: none;
-  border-radius: var(--radius-sm);
   color: var(--text-tertiary);
   transition:
     color var(--duration-fast) var(--ease),
@@ -858,45 +958,46 @@ async function handleExportPackages() {
 .instance-delete:hover {
   color: var(--color-error);
   background: var(--color-error-bg);
-  border-color: var(--color-error-bg);
 }
 
 .instance-add-row {
   display: flex;
+  gap: var(--space-item);
+}
+
+.retention-control {
+  display: flex;
+  align-items: center;
   gap: var(--space-2);
 }
 
+.retention-input {
+  width: 96px;
+}
+
 .instance-name-input {
-  width: 180px;
-  text-align: left;
+  flex: 0 1 280px;
 }
 
 .cookie-input {
   width: 100%;
-  min-height: 82px;
-  resize: vertical;
+  margin-top: var(--space-3);
+}
+
+/* 尺寸要落到 UiInput 内部的 textarea 上 */
+.cookie-input :deep(textarea) {
+  min-height: 88px;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
 }
 
 .hub-actions {
   display: flex;
-  gap: var(--space-2);
+  gap: var(--space-item);
   margin-top: var(--space-3);
 }
 
-.setting-select {
-  min-width: 180px;
-  height: 30px;
-  padding: 0 var(--space-2);
-  background: var(--bg-input);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
-  color: var(--text-primary);
-  font-size: var(--text-sm);
-}
 
-.setting-input:focus {
-  outline: none;
-}
 
 .speed-limit-control {
   display: flex;
@@ -911,67 +1012,9 @@ async function handleExportPackages() {
 
 .instance-empty,
 .instance-tip {
-  margin-top: var(--space-2);
+  margin: var(--space-2) 0 0;
   font-size: var(--text-xs);
   color: var(--text-tertiary);
 }
 
-.confirm-dialog-header,
-.confirm-dialog-body,
-.confirm-dialog-actions {
-  padding: var(--space-5);
-}
-
-.confirm-dialog-header {
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.confirm-dialog-header h3 {
-  color: var(--text-primary);
-  font-size: var(--text-lg);
-  font-weight: var(--font-semibold);
-}
-
-.confirm-dialog-body {
-  color: var(--text-secondary);
-  font-size: var(--text-sm);
-  line-height: 1.7;
-}
-
-.confirm-dialog-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--space-3);
-  border-top: 1px solid var(--border-subtle);
-}
-
-.b2-page {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-height: 0;
-  max-width: none;
-  margin: 0;
-  padding: 0;
-  gap: 0;
-  overflow: hidden;
-}
-.b2-page-body {
-  flex: 1;
-  min-height: 0;
-  min-width: 0;
-  overflow: auto;
-  padding: 20px 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-.b2-page :deep(.page-header) {
-  width: 100%;
-}
-@media (max-width: 800px) {
-  .b2-page-body {
-    padding: 12px;
-  }
-}
 </style>

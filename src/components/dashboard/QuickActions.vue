@@ -56,18 +56,19 @@ useI18n()
 .quick-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--space-2);
 }
 .quick-actions :deep(button) {
   justify-content: flex-start;
-  padding: 0 14px 0 6px;
+  /* 图标块上下各留 6px，左侧同样留 6px，四周等距 */
+  padding: 0 var(--space-4) 0 6px;
 }
 .quick-icon {
   display: grid;
   place-items: center;
   width: 32px;
   height: 32px;
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-xs); /* 外 10 - 内距 6 ≈ 4~6，保持同心 */
   background: var(--bg-active);
   color: var(--text-secondary);
 }

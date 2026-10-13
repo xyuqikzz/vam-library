@@ -1,5 +1,4 @@
 //! Local, one-shot scene requests consumed by the bundled BepInEx plugin.
-use serde::Deserialize;
 use std::{
     fs,
     io::Write,
@@ -8,49 +7,91 @@ use std::{
     time::{Duration, Instant},
 };
 
-pub const HEADER: &str = "# VAM Library scene launch v1";
-pub const TIMEOUT_MS: i64 = 180_000;
+use super::game_process::game_running;
+use serde::Serialize;
+pub const HEADER: &str = "# VAM Library scene launch v2";
+const HEARTBEAT: Duration = Duration::from_secs(5);
+
+#[derive(Debug, Serialize)]
+pub struct LaunchError {
+    pub code: String,
+    pub detail: Option<String>,
+}
+impl LaunchError {
+    pub fn new(code: &str, detail: Option<String>) -> Self {
+        Self {
+            code: code.into(),
+            detail,
+        }
+    }
+}
+impl From<String> for LaunchError {
+    fn from(detail: String) -> Self {
+        if detail == "launch_unavailable" {
+            Self::new(&detail, None)
+        } else {
+            Self::new("internal", Some(detail))
+        }
+    }
+}
+#[derive(Debug, Serialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum LaunchOutcome {
+    Loaded,
+    StillLoading,
+}
+
+#[derive(Clone, Copy)]
+struct WaitLimits {
+    acceptance: Duration,
+    loading: Duration,
+}
+impl WaitLimits {
+    fn for_game(running: bool) -> Self {
+        Self {
+            acceptance: Duration::from_secs(if running { 120 } else { 900 }),
+            loading: Duration::from_secs(600),
+        }
+    }
+}
+
+struct RequestFiles(PathBuf);
+impl Drop for RequestFiles {
+    fn drop(&mut self) {
+        for extension in [
+            "request",
+            "result",
+            "accepted",
+            "tmp",
+            "result.tmp",
+            "accepted.tmp",
+        ] {
+            let _ = fs::remove_file(self.0.with_extension(extension));
+        }
+    }
+}
 static NEXT_ID: AtomicU64 = AtomicU64::new(0);
 static LAUNCH_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
-#[cfg(windows)]
-fn game_running(root: &Path) -> Result<bool, String> {
-    use std::os::windows::process::CommandExt;
-    // No user-provided text is interpolated into PowerShell source.
-    let output = std::process::Command::new("powershell.exe")
-        .args(["-NoProfile", "-NonInteractive", "-Command", "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; $ErrorActionPreference='Stop'; @(Get-Process -Name VaM -ErrorAction SilentlyContinue | ForEach-Object { if (-not $_.Path) { throw 'Cannot read VaM process path' }; $_.Path }) | ConvertTo-Json -Compress"])
-        .creation_flags(0x08000000).output().map_err(|e| format!("无法检查游戏进程: {e}"))?;
-    if !output.status.success() {
-        return Err("无法确认 VaM 进程所属实例，请退出游戏后重试".into());
+pub fn ensure_game_stopped(root: &Path) -> Result<(), String> {
+    if game_running(root)? {
+        return Err("请先关闭当前实例的 VaM，再移动或恢复资源".into());
     }
-    let text = String::from_utf8_lossy(&output.stdout);
-    if text.trim().is_empty() {
-        return Ok(false);
-    }
-    #[derive(Deserialize)]
-    #[serde(untagged)]
-    enum Paths {
-        One(String),
-        Many(Vec<String>),
-    }
-    let paths = match serde_json::from_str::<Paths>(text.trim()).map_err(|e| e.to_string())? {
-        Paths::One(path) => vec![path],
-        Paths::Many(paths) => paths,
-    };
-    let executable = fs::canonicalize(root.join("VaM.exe")).map_err(|e| e.to_string())?;
-    let count = paths
-        .iter()
-        .filter(|p| fs::canonicalize(p).ok().as_ref() == Some(&executable))
-        .count();
-    if count > 1 {
-        return Err("当前实例有多个 VaM 进程，请保留一个后重试".into());
-    }
-    Ok(count == 1)
+    Ok(())
 }
 
-#[cfg(not(windows))]
-fn game_running(_: &Path) -> Result<bool, String> {
-    Err("场景联动目前仅支持 Windows".into())
+/// For background work: true when VaM of this instance runs or that cannot be
+/// ruled out. Windows uses a fresh native process snapshot.
+pub fn game_may_be_running(root: &Path) -> bool {
+    #[cfg(windows)]
+    {
+        !matches!(game_running(root), Ok(false))
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = root;
+        false
+    }
 }
 
 fn write_request(directory: &Path, scene: &str) -> Result<(PathBuf, PathBuf), String> {
@@ -83,41 +124,84 @@ fn write_request(directory: &Path, scene: &str) -> Result<(PathBuf, PathBuf), St
     Ok((request, response))
 }
 
-fn response_status(text: &str, id: &str) -> Result<bool, String> {
+fn response_status(text: &str, id: &str) -> Result<LaunchOutcome, LaunchError> {
     let lines: Vec<_> = text.lines().collect();
-    if lines.len() < 3 || lines[0] != HEADER || lines[1] != id {
-        return Err("游戏返回了无效的场景联动结果".into());
+    if lines.len() < 3 || lines.len() > 5 || lines[0] != HEADER || lines[1] != id {
+        return Err(LaunchError::new("invalid_response", None));
     }
     match lines[2] {
-        "loaded" => Ok(true),
-        "error" => Err(lines.get(3).unwrap_or(&"游戏无法加载此场景").to_string()),
-        _ => Err("未知的场景联动状态".into()),
+        "loaded" => Ok(LaunchOutcome::Loaded),
+        "error" => {
+            let code = lines.get(3).copied().unwrap_or("internal");
+            if ![
+                "invalid_request",
+                "scene_unavailable",
+                "package_disabled",
+                "load_not_started",
+                "load_failed",
+                "internal",
+            ]
+            .contains(&code)
+            {
+                return Err(LaunchError::new("invalid_response", None));
+            }
+            Err(LaunchError::new(
+                code,
+                lines
+                    .get(4)
+                    .filter(|s| !s.is_empty())
+                    .map(|s| s.to_string()),
+            ))
+        }
+        _ => Err(LaunchError::new("invalid_response", None)),
     }
 }
 
 async fn wait_for_result(
-    response: &Path,
+    request: &Path,
     id: &str,
-    timeout: Duration,
+    limits: WaitLimits,
     mut child: Option<std::process::Child>,
-) -> Result<(), String> {
+    mut progress: impl FnMut(&str),
+) -> Result<LaunchOutcome, LaunchError> {
     let started = Instant::now();
+    let mut accepted_at = None;
+    let mut heartbeat_at = Instant::now();
+    let response = request.with_extension("result");
+    let accepted = request.with_extension("accepted");
     loop {
-        match fs::read_to_string(response) {
-            Ok(text) => {
-                response_status(&text, id)?;
-                return Ok(());
-            }
+        match fs::read_to_string(&response) {
+            Ok(text) => return response_status(&text, id),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-            Err(e) => return Err(format!("读取场景加载结果失败: {e}")),
+            Err(e) => return Err(e.to_string().into()),
         }
         if let Some(child) = &mut child {
             if child.try_wait().map_err(|e| e.to_string())?.is_some() {
-                return Err("VaM 已退出，场景未完成加载，请检查游戏启动日志".into());
+                return Err(LaunchError::new("game_exited", None));
             }
         }
-        if started.elapsed() >= timeout {
-            return Err("等待游戏加载场景超时。请检查游戏是否正常启动、模组是否已更新；若游戏仍在加载，请查看游戏窗口。".into());
+        if accepted_at.is_none() && accepted.is_file() {
+            accepted_at = Some(Instant::now());
+            progress("loading");
+        }
+        if let Some(accepted_at) = accepted_at {
+            if accepted_at.elapsed() >= limits.loading {
+                return Ok(LaunchOutcome::StillLoading);
+            }
+        } else if started.elapsed() >= limits.acceptance {
+            return Err(LaunchError::new("accept_timeout", None));
+        }
+        if heartbeat_at.elapsed() >= HEARTBEAT {
+            // Never recreate a consumed request. A result may have been published
+            // between our read and this heartbeat; the next iteration will see it.
+            match fs::OpenOptions::new().write(true).open(request) {
+                Ok(file) => file
+                    .set_modified(std::time::SystemTime::now())
+                    .map_err(|e| e.to_string())?,
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                Err(e) => return Err(e.to_string().into()),
+            }
+            heartbeat_at = Instant::now();
         }
         tokio::time::sleep(Duration::from_millis(500)).await;
     }
@@ -128,14 +212,15 @@ pub async fn launch(
     directory: PathBuf,
     scene: String,
     mode: String,
-) -> Result<(), String> {
+    on_progress: Option<tauri::ipc::Channel<String>>,
+) -> Result<LaunchOutcome, LaunchError> {
     let _guard = LAUNCH_LOCK
         .try_lock()
-        .map_err(|_| "已有场景正在启动，请等待完成".to_string())?;
+        .map_err(|_| LaunchError::new("busy", None))?;
     let vr = match mode.as_str() {
         "desktop" => "None",
         "vr" => "OpenVR",
-        _ => return Err("无效的游戏启动模式".into()),
+        _ => return Err(LaunchError::new("invalid_request", None)),
     };
     let running = tauri::async_runtime::spawn_blocking({
         let root = root.clone();
@@ -144,118 +229,168 @@ pub async fn launch(
     .await
     .map_err(|e| e.to_string())??;
     fs::create_dir_all(&directory).map_err(|e| e.to_string())?;
-    let (request, response) = write_request(&directory, &scene)?;
+    let (request, _) = write_request(&directory, &scene)?;
+    let _cleanup = RequestFiles(request.clone());
     let id = request.file_stem().unwrap().to_str().unwrap();
-    let result = async {
-        let child = if !running {
-            Some(
-                std::process::Command::new(root.join("VaM.exe"))
-                    .current_dir(&root)
-                    .args(["-vrmode", vr])
-                    .spawn()
-                    .map_err(|e| format!("启动 VaM 失败: {e}"))?,
-            )
-        } else {
-            None
-        };
-        wait_for_result(
-            &response,
-            id,
-            Duration::from_millis(TIMEOUT_MS as u64),
-            child,
+    let progress = |phase: &str| {
+        if let Some(channel) = &on_progress {
+            let _ = channel.send(phase.to_string());
+        }
+    };
+    progress(if running { "sending" } else { "opening" });
+    let child = if !running {
+        Some(
+            std::process::Command::new(root.join("VaM.exe"))
+                .current_dir(&root)
+                .args(["-vrmode", vr])
+                .spawn()
+                .map_err(|e| e.to_string())?,
         )
-        .await
-    }
-    .await;
-    // These two files belong exclusively to this invocation. Expired requests
-    // must never replay on a later, unrelated game startup.
-    let _ = fs::remove_file(request);
-    let _ = fs::remove_file(response);
-    result
+    } else {
+        None
+    };
+    wait_for_result(&request, id, WaitLimits::for_game(running), child, progress).await
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::services::resource_files::tests::TestDir;
+
+    #[test]
+    fn responses_are_correlated_and_error_codes_keep_details_separate() {
+        assert_eq!(
+            response_status(&format!("{HEADER}\na\nloaded\n"), "a").unwrap(),
+            LaunchOutcome::Loaded
+        );
+        assert_eq!(
+            response_status(&format!("{HEADER}\nb\nloaded\n"), "a")
+                .unwrap_err()
+                .code,
+            "invalid_response"
+        );
+        let error = response_status(
+            &format!("{HEADER}\na\nerror\npackage_disabled\nraw error\n"),
+            "a",
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "package_disabled");
+        assert_eq!(error.detail.as_deref(), Some("raw error"));
+        assert_eq!(
+            response_status(&format!("{HEADER}\na\nerror\nunknown\n"), "a")
+                .unwrap_err()
+                .code,
+            "invalid_response"
+        );
+        assert!(response_status("broken", "a").is_err());
+    }
+
+    #[test]
+    fn unicode_requests_and_cancellation_cleanup() {
+        let directory = TestDir::new();
+        let (request, response) =
+            write_request(&directory.0, "作者.Scene.1:/Saves/scene/中文 场景.json").unwrap();
+        let text = fs::read_to_string(&request).unwrap();
+        assert!(text.starts_with(HEADER));
+        assert!(text.ends_with("作者.Scene.1:/Saves/scene/中文 场景.json\n"));
+        assert_eq!(text.lines().count(), 4);
+        assert!(!response.exists());
+        fs::write(request.with_extension("accepted"), "").unwrap();
+        fs::write(&response, "result").unwrap();
+        drop(RequestFiles(request.clone()));
+        assert_eq!(fs::read_dir(&directory.0).unwrap().count(), 0);
+    }
+
     #[tokio::test]
-    async fn delayed_game_acknowledgement_and_timeout_are_observed() {
-        let directory = std::env::temp_dir().join(format!(
-            "scene-ack-{}-{}",
-            std::process::id(),
-            chrono::Utc::now().timestamp_nanos_opt().unwrap()
-        ));
-        fs::create_dir(&directory).unwrap();
-        let (request, response) = write_request(&directory, "Saves/scene/Test.json").unwrap();
-        let id = request.file_stem().unwrap().to_str().unwrap().to_string();
-        assert!(wait_for_result(&response, &id, Duration::ZERO, None)
+    async fn acceptance_changes_phase_and_loading_timeout_is_not_failure() {
+        let directory = TestDir::new();
+        let (request, _) = write_request(&directory.0, "Saves/scene/Test.json").unwrap();
+        let id = request.file_stem().unwrap().to_str().unwrap();
+        let limits = WaitLimits {
+            acceptance: Duration::ZERO,
+            loading: Duration::ZERO,
+        };
+        assert_eq!(
+            wait_for_result(&request, id, limits, None, |_| {})
+                .await
+                .unwrap_err()
+                .code,
+            "accept_timeout"
+        );
+        fs::write(request.with_extension("accepted"), "").unwrap();
+        let mut phases = Vec::new();
+        assert_eq!(
+            wait_for_result(&request, id, limits, None, |phase| phases
+                .push(phase.to_string()))
             .await
-            .unwrap_err()
-            .contains("超时"));
+            .unwrap(),
+            LaunchOutcome::StillLoading
+        );
+        assert_eq!(phases, ["loading"]);
+        assert_eq!(WaitLimits::for_game(false).acceptance.as_secs(), 900);
+        assert_eq!(WaitLimits::for_game(true).acceptance.as_secs(), 120);
+        assert_eq!(WaitLimits::for_game(true).loading.as_secs(), 600);
+    }
+
+    #[tokio::test]
+    async fn waiting_refreshes_heartbeat_and_observes_delayed_completion() {
+        let directory = TestDir::new();
+        let (request, response) = write_request(&directory.0, "Saves/scene/Test.json").unwrap();
+        let id = request.file_stem().unwrap().to_str().unwrap().to_string();
+        let old = std::time::SystemTime::now() - Duration::from_secs(200);
+        fs::OpenOptions::new()
+            .write(true)
+            .open(&request)
+            .unwrap()
+            .set_modified(old)
+            .unwrap();
         let writer = tokio::spawn({
-            let response = response.clone();
+            let request = request.clone();
             let id = id.clone();
             async move {
-                tokio::time::sleep(Duration::from_millis(20)).await;
-                let temp = response.with_extension("tmp");
+                tokio::time::sleep(Duration::from_millis(5500)).await;
+                assert!(fs::metadata(&request).unwrap().modified().unwrap() > old);
+                let temp = response.with_extension("result.tmp");
                 fs::write(&temp, format!("{HEADER}\n{id}\nloaded\n")).unwrap();
                 fs::rename(temp, response).unwrap();
             }
         });
-        wait_for_result(&response, &id, Duration::from_secs(5), None)
-            .await
-            .unwrap();
+        let limits = WaitLimits {
+            acceptance: Duration::from_secs(10),
+            loading: Duration::from_secs(10),
+        };
+        assert_eq!(
+            wait_for_result(&request, &id, limits, None, |_| {})
+                .await
+                .unwrap(),
+            LaunchOutcome::Loaded
+        );
         writer.await.unwrap();
-        fs::remove_file(request).unwrap();
-        fs::remove_file(response).unwrap();
-        fs::remove_dir(directory).unwrap();
     }
 
     #[cfg(windows)]
     #[tokio::test]
-    async fn game_exit_is_reported_without_waiting_for_timeout() {
+    async fn game_exit_is_reported_promptly() {
         use std::os::windows::process::CommandExt;
+        let directory = TestDir::new();
+        let (request, _) = write_request(&directory.0, "Saves/scene/Test.json").unwrap();
         let child = std::process::Command::new("cmd.exe")
             .args(["/C", "exit", "1"])
             .creation_flags(0x08000000)
             .spawn()
             .unwrap();
-        let response = std::env::temp_dir().join(format!(
-            "missing-response-{}",
-            chrono::Utc::now().timestamp_nanos_opt().unwrap()
-        ));
-        assert!(
-            wait_for_result(&response, "abc", Duration::from_secs(5), Some(child))
-                .await
-                .unwrap_err()
-                .contains("已退出")
-        );
-    }
-    #[test]
-    fn acknowledgements_are_correlated_and_errors_preserved() {
-        assert!(response_status(&format!("{HEADER}\na\nloaded\n"), "a").unwrap());
-        assert!(response_status(&format!("{HEADER}\nother\nloaded\n"), "a").is_err());
         assert_eq!(
-            response_status(&format!("{HEADER}\na\nerror\n资源包已禁用\n"), "a").unwrap_err(),
-            "资源包已禁用"
+            wait_for_result(
+                &request,
+                "abc",
+                WaitLimits::for_game(false),
+                Some(child),
+                |_| {}
+            )
+            .await
+            .unwrap_err()
+            .code,
+            "game_exited"
         );
-        assert!(response_status("broken", "a").is_err());
-    }
-    #[test]
-    fn requests_preserve_unicode_and_publish_only_complete_files() {
-        let directory = std::env::temp_dir().join(format!(
-            "scene-launch-{}-{}",
-            std::process::id(),
-            chrono::Utc::now().timestamp_nanos_opt().unwrap()
-        ));
-        fs::create_dir(&directory).unwrap();
-        let (request, response) =
-            write_request(&directory, "作者.Scene.1:/Saves/scene/中文 场景.json").unwrap();
-        let text = fs::read_to_string(&request).unwrap();
-        assert!(text.ends_with("作者.Scene.1:/Saves/scene/中文 场景.json\n"));
-        assert_eq!(text.lines().count(), 4);
-        assert!(!response.exists());
-        assert_eq!(fs::read_dir(&directory).unwrap().count(), 1);
-        fs::remove_file(request).unwrap();
-        fs::remove_dir(directory).unwrap();
     }
 }

@@ -85,7 +85,7 @@ defineExpose({
   width: 100%;
 }
 .search-input-wrapper:has(.search-clear) :deep(input) {
-  padding-right: 30px;
+  padding-right: var(--space-8);
 }
 .search-clear {
   position: absolute;

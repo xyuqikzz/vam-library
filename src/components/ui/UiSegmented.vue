@@ -7,6 +7,8 @@ export interface SegmentOption {
   label: string
   icon?: IconName
   disabled?: boolean
+  /** 计数单独渲染成弱化数字，不要拼进 label */
+  count?: number
 }
 const props = defineProps<{
   modelValue: string
@@ -41,7 +43,7 @@ function navigate(event: KeyboardEvent) {
       type="button"
       role="radio"
       :aria-checked="modelValue === option.value"
-      :aria-label="option.label"
+      :aria-label="option.count === undefined ? option.label : `${option.label} ${option.count}`"
       :icon="option.icon"
       :icon-only="iconOnly"
       variant="ghost"
@@ -51,6 +53,7 @@ function navigate(event: KeyboardEvent) {
       @click="emit('update:modelValue', option.value)"
     >
       <span v-if="!iconOnly">{{ option.label }}</span>
+      <span v-if="!iconOnly && option.count !== undefined" class="ui-segmented-count">{{ option.count }}</span>
     </UiButton>
   </div>
 </template>
@@ -59,7 +62,7 @@ function navigate(event: KeyboardEvent) {
   display: inline-flex;
   align-items: center;
   padding: 3px;
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-control);
   background: var(--bg-input);
   flex-shrink: 0;
 }
@@ -70,18 +73,31 @@ function navigate(event: KeyboardEvent) {
   gap: var(--space-2);
   height: 34px;
   padding: 0 12px;
-  border-radius: var(--radius-full);
+  border-radius: 7px; /* 外框 10 - 内边距 3，内外圆角同心 */
   color: var(--text-muted-strong);
   font-size: var(--text-base);
   font-weight: var(--font-bold);
 }
-.ui-segmented :deep(button.selected) {
+/* 加上 .ui-button 提高优先级：否则 UiButton 自己的 .ghost:hover 会把选中项的白底盖掉，悬停时深色字落在深底上看不见 */
+.ui-segmented :deep(.ui-button:not(.selected):hover) {
+  background: var(--bg-control);
+  color: var(--text-primary);
+}
+.ui-segmented :deep(.ui-button.selected),
+.ui-segmented :deep(.ui-button.selected:hover) {
   background: var(--text-primary);
   color: var(--text-inverse);
 }
 .ui-segmented :deep(button.icon-only) {
   width: 40px;
   padding: 0;
+}
+.ui-segmented-count {
+  color: var(--text-tertiary);
+  font-weight: var(--font-medium);
+}
+.selected .ui-segmented-count {
+  color: inherit;
 }
 .ui-segmented :deep(button:disabled) {
   color: var(--text-disabled);

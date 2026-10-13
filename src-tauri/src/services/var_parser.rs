@@ -8,35 +8,14 @@ use crate::models::meta::PackageMeta;
 use crate::models::resource::{normalize_resource_types, ResourceType};
 use crate::models::var_package::VarPackage;
 
-/// Parse a .var filename into (creator, package_name, version)
-/// Expected format: Creator.PackageName.Version.var
+/// Read the author's and package's names even when the version is nonstandard.
+/// Zero is the existing database placeholder for an unknown numeric version;
+/// the full filename stem remains the identity, never a reconstructed alias.
 fn parse_var_filename(filename: &str) -> Result<(String, String, i32), AppError> {
-    let stem = filename
-        .rsplit_once('.')
-        .filter(|(_, extension)| extension.eq_ignore_ascii_case("var"))
-        .map(|(stem, _)| stem)
-        .unwrap_or(filename);
-    let parts: Vec<&str> = stem.split('.').collect();
-
-    if parts.len() < 3 {
-        return Err(AppError::Parse(format!(
-            "Invalid .var filename format '{}': expected Creator.Package.Version.var",
-            filename
-        )));
-    }
-
-    let creator = parts[0].to_string();
-    let version = parts.last().unwrap().parse::<i32>().map_err(|_| {
-        AppError::Parse(format!(
-            "Invalid version '{}' in filename '{}'",
-            parts.last().unwrap(),
-            filename
-        ))
+    let identity = super::package_identity::from_path(Path::new(filename)).ok_or_else(|| {
+        AppError::Parse(format!("Invalid .var filename format '{}': expected Creator.Package[.Version].var", filename))
     })?;
-
-    let name = parts[1..parts.len() - 1].join(".");
-
-    Ok((creator, name, version))
+    Ok((identity.creator.into(), identity.name.into(), identity.version.unwrap_or(0)))
 }
 
 /// Parse a .var file and extract its metadata and resource information.
@@ -77,7 +56,8 @@ fn parse_var_file_internal(
 
     // Parse creator, name, version from filename
     let (creator, name, version) = parse_var_filename(filename)?;
-    let id = format!("{}.{}.{}", creator, name, version);
+    // Preserve suffixes and leading zeroes: .1, .01 and .1_2 are distinct files.
+    let id = path.file_stem().and_then(|stem| stem.to_str()).unwrap().to_string();
 
     // Open as ZIP archive
     let file = std::fs::File::open(path).map_err(|e| {
@@ -288,8 +268,8 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_var_filename_invalid_version() {
-        let result = parse_var_filename("Author.Package.abc.var");
-        assert!(result.is_err());
+    fn test_parse_var_filename_text_version() {
+        assert_eq!(parse_var_filename("Author.Package.abc.var").unwrap(),
+            ("Author".into(), "Package".into(), 0));
     }
 }

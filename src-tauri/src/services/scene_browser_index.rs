@@ -91,7 +91,17 @@ fn write_snapshot(
     directory: &Path,
     times: &BTreeMap<String, i64>,
 ) -> Result<ImportTimeSync, String> {
-    let target = directory.join(FILE_NAME);
+    let mut text = format!("{HEADER}\n");
+    for (id, time) in times { text.push_str(&format!("{id}\t{time}\n")); }
+    write_text_snapshot(directory, FILE_NAME, &text)?;
+    Ok(ImportTimeSync {
+        package_count: times.len(),
+        path: directory.join(FILE_NAME).to_string_lossy().into_owned(),
+    })
+}
+
+fn write_text_snapshot(directory: &Path, name: &str, text: &str) -> Result<(), String> {
+    let target = directory.join(name);
     match fs::symlink_metadata(&target) {
         Ok(meta) => {
             #[cfg(windows)]
@@ -108,14 +118,10 @@ fn write_snapshot(
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
         Err(error) => return Err(format!("检查入库时间映射失败: {error}")),
     }
-    let mut text = format!("{HEADER}\n");
-    for (id, time) in times {
-        text.push_str(&format!("{id}\t{time}\n"));
-    }
     // Avoid resetting the game's pagination when the library has not changed.
-    if fs::read_to_string(&target).ok().as_deref() != Some(&text) {
+    if fs::read_to_string(&target).ok().as_deref() != Some(text) {
         let temp = directory.join(format!(
-            ".import-times-{}-{}.tmp",
+            ".{name}-{}-{}.tmp",
             std::process::id(),
             TEMP_ID.fetch_add(1, Ordering::Relaxed)
         ));
@@ -137,10 +143,7 @@ fn write_snapshot(
             return Err(format!("同步入库时间失败: {error}"));
         }
     }
-    Ok(ImportTimeSync {
-        package_count: times.len(),
-        path: target.to_string_lossy().into_owned(),
-    })
+    Ok(())
 }
 
 pub fn sync_current(app: &tauri::AppHandle) -> Result<Option<ImportTimeSync>, String> {
@@ -151,6 +154,9 @@ pub fn sync_current(app: &tauri::AppHandle) -> Result<Option<ImportTimeSync>, St
     else {
         return Ok(None);
     };
+    let settings = crate::commands::settings::read_settings_file(&crate::services::install_context::settings_file_path(app)?)?;
+    let language = if settings.language == "en-US" { "en-US" } else { "zh-CN" };
+    write_text_snapshot(&directory, "app-settings.tsv", &format!("# VAM Library app settings v1\nlanguage\t{language}\n"))?;
     let times = app
         .state::<Database>()
         .with_conn(|conn| {

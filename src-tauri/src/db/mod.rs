@@ -1,15 +1,17 @@
 pub mod schema;
 
 use std::path::Path;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use rusqlite::Connection;
 
 use crate::errors::AppError;
 
 /// Application database wrapper with thread-safe connection access
+#[derive(Clone)]
 pub struct Database {
-    conn: Mutex<Connection>,
+    conn: Arc<Mutex<Connection>>,
+    pub(crate) dependency_analysis: Arc<crate::services::dependency_analysis::AnalysisCache>,
 }
 
 #[allow(dead_code)]
@@ -55,8 +57,18 @@ impl Database {
         schema::create_tables(&conn)?;
 
         Ok(Self {
-            conn: Mutex::new(conn),
+            conn: Arc::new(Mutex::new(conn)),
+            dependency_analysis: Arc::default(),
         })
+    }
+
+    /// Like with_conn, but isolate mutex wait time from work done in the closure.
+    pub(crate) fn with_conn_timed<F, T>(&self, label: &'static str, f: F) -> Result<T, AppError>
+    where F: FnOnce(&Connection) -> Result<T, AppError> {
+        let timer = crate::services::perf::CommandTimer::new(label);
+        let conn = self.conn.lock().map_err(|e| AppError::Database(e.to_string()))?;
+        drop(timer);
+        f(&conn)
     }
 
     /// Execute a closure with a reference to the database connection.

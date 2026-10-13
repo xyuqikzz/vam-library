@@ -10,7 +10,7 @@ use std::{
 const PAYLOAD: &[u8] = include_bytes!("../../resources/mods/VamLibrary.SceneBrowser.dll");
 const MANIFEST: &str = include_str!("../../resources/mods/scene-browser.json");
 const TARGET: &str = "BepInEx/plugins/VamLibrary.SceneBrowser/VamLibrary.SceneBrowser.dll";
-// Only the exact released payloads may be upgraded in place.
+// Frozen legacy releases. New releases establish ownership with an exact-hash marker.
 const PREVIOUS_SHA256: &[&str] = &[
     "ee1a3178f538047be8f1a2e7b9e6134ad32820eaf9983e9550a33f8469040e40",
     "51e6ef72ee53f657347706990a515c0d88ea260e7b772a6cc1679fd2bcf4aea8",
@@ -20,6 +20,8 @@ const PREVIOUS_SHA256: &[&str] = &[
     "8916ec27265e27563a1012c9bb7504b039c6a0a0f4a475d996054c71ad5fa44e",
     "b4043bd7d4da33c89f5d1f64d1c7ea57d763439b28c5ba6e7e52be66d94c4fad",
     "ebc0e87863aee1a539e8ad773d3d9c2a8fa8159c94326474b4844ef3b8e879d4",
+    // 1.0.9, the last release with native VAR decompression.
+    "1ae5fc781757779c043b432774eefdd64e9f0a3ed7a077e6eedea767b4af1da3",
 ];
 // These 1.0.8 builds differ only in the legacy compiler's timestamp, MVID and
 // MVID-derived private type name. Keep exact hashes; never trust a version label.
@@ -48,8 +50,62 @@ pub struct ModStatus {
     update_available: bool,
     conflict: bool,
     compatible: bool,
+    verified: bool,
+    runtime: Option<RuntimeStatus>,
     reason: Option<String>,
     target_path: String,
+}
+
+#[derive(Serialize)]
+pub struct RuntimeStatus { browser: String, launch: String }
+const OWNER: &str = "VamLibrary.SceneBrowser.owner";
+
+fn data_path(target: &Path, name: &str) -> Result<PathBuf, String> {
+    let path = target.parent().ok_or("无效的插件目录")?.join(name);
+    match fs::symlink_metadata(&path) {
+        Ok(meta) => {
+            #[cfg(windows)]
+            let linked = { use std::os::windows::fs::MetadataExt; meta.file_attributes() & 0x400 != 0 };
+            #[cfg(not(windows))]
+            let linked = meta.file_type().is_symlink();
+            if linked || !meta.is_file() { return Err("插件记录路径不是普通文件".into()); }
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {},
+        Err(e) => return Err(e.to_string()),
+    }
+    Ok(path)
+}
+
+fn marked_owner(target: &Path, bytes: &[u8]) -> bool {
+    let Ok(path) = data_path(target, OWNER) else { return false; };
+    if fs::metadata(&path).map_or(true, |m| m.len() > 128) { return false; }
+    fs::read_to_string(path).ok().is_some_and(|text| text.trim_end() == format!("sha256\t{}", hash(bytes)))
+}
+fn owned(target: &Path, bytes: &[u8]) -> bool {
+    matches_payload(bytes, PAYLOAD) || is_known_release(bytes) || marked_owner(target, bytes)
+}
+fn write_owner(target: &Path) -> Result<(), String> {
+    let owner = data_path(target, OWNER)?;
+    let temp = data_path(target, &format!("VamLibrary.SceneBrowser.owner-{}-{}.tmp", std::process::id(), chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()))?;
+    let mut file = fs::OpenOptions::new().write(true).create_new(true).open(&temp).map_err(|e| e.to_string())?;
+    let result = (|| {
+        writeln!(file, "sha256\t{}", hash(PAYLOAD))?;
+        file.sync_all()?; drop(file);
+        fs::rename(&temp, owner)
+    })();
+    if result.is_err() { let _ = fs::remove_file(temp); }
+    result.map_err(|e| e.to_string())
+}
+fn runtime_status(target: &Path, version: &str) -> Option<RuntimeStatus> {
+    let path = data_path(target, "plugin-status.tsv").ok()?;
+    if fs::metadata(&path).ok()?.len() > 4096 { return None; }
+    let text = fs::read_to_string(path).ok()?;
+    let lines: Vec<_> = text.lines().collect();
+    if lines.len() != 4 || lines[0] != "# VAM Library plugin status v1" || lines[1] != format!("version\t{version}") { return None; }
+    let browser = lines[2].strip_prefix("browser\t")?;
+    let launch = lines[3].strip_prefix("launch\t")?;
+    if !["ok", "unavailable"].contains(&browser) || !["ok", "unavailable"].contains(&launch) { return None; }
+    Some(RuntimeStatus { browser: browser.into(), launch: launch.into() })
 }
 
 fn hash(bytes: &[u8]) -> String {
@@ -111,7 +167,7 @@ pub(crate) fn owned_mod_directory(root: &Path) -> Result<Option<PathBuf>, String
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(error) => return Err(error.to_string()),
     };
-    if !matches_payload(&bytes, PAYLOAD) && !is_known_release(&bytes) {
+    if !owned(&target, &bytes) {
         return Ok(None);
     }
     Ok(target.parent().map(Path::to_path_buf))
@@ -120,10 +176,13 @@ pub(crate) fn owned_mod_directory(root: &Path) -> Result<Option<PathBuf>, String
 pub(crate) fn scene_launch_directory(root: &Path) -> Result<PathBuf, String> {
     let status = inspect(root)?;
     if !status.installed {
-        return Err("请先退出 VaM，在设置中安装或更新 vam管理增强插件，再启动场景".into());
+        return Err("请先退出 VaM，在设置中安装或更新 VaM 管理增强插件，再启动场景".into());
     }
     if !status.compatible {
         return Err(status.reason.unwrap_or_default());
+    }
+    if status.runtime.as_ref().is_some_and(|s| s.launch == "unavailable") {
+        return Err("launch_unavailable".into());
     }
     Ok(safe_target(root)?
         .parent()
@@ -142,19 +201,14 @@ fn inspect(root: &Path) -> Result<ModStatus, String> {
     let installed = existing
         .as_deref()
         .is_some_and(|bytes| matches_payload(bytes, PAYLOAD));
-    let update_available = !installed && existing.as_deref().is_some_and(is_known_release);
+    let update_available = !installed && existing.as_deref().is_some_and(|bytes| owned(&target, bytes));
     let conflict = existing.is_some() && !installed && !update_available;
     let mut reason = None;
+    let mut verified = true;
     for dependency in manifest.files {
         match fs::read(root.join(&dependency.path)) {
             Ok(bytes) if hash(&bytes) == dependency.sha256 => {}
-            Ok(_) => {
-                reason = Some(format!(
-                    "当前 {} 与模组编译目标不同，需要针对该游戏版本重新构建模组",
-                    dependency.path
-                ));
-                break;
-            }
+            Ok(_) => { verified = false; }
             Err(_) => {
                 reason = Some(format!(
                     "缺少 {}；请先安装兼容的 BepInEx 5",
@@ -165,43 +219,24 @@ fn inspect(root: &Path) -> Result<ModStatus, String> {
         }
     }
     Ok(ModStatus {
+        runtime: if installed { runtime_status(&target, &manifest.version) } else { None },
         version: manifest.version,
         installed,
         update_available,
         conflict,
+        verified: verified && reason.is_none(),
         compatible: reason.is_none(),
         reason,
         target_path: target.to_string_lossy().into_owned(),
     })
 }
 
-fn ensure_game_stopped() -> Result<(), String> {
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        let output = std::process::Command::new("tasklist.exe")
-            .args(["/FI", "IMAGENAME eq VaM.exe", "/FO", "CSV", "/NH"])
-            .creation_flags(0x08000000)
-            .output()
-            .map_err(|e| format!("无法检查游戏进程: {e}"))?;
-        if !output.status.success() {
-            return Err("无法检查游戏进程，请稍后重试".into());
-        }
-        if String::from_utf8_lossy(&output.stdout)
-            .to_ascii_lowercase()
-            .contains("\"vam.exe\"")
-        {
-            return Err("请先退出 VaM，再安装或卸载模组".into());
-        }
-        Ok(())
-    }
-    #[cfg(not(windows))]
-    {
-        Err("此游戏模组目前仅支持 Windows".into())
-    }
+fn ensure_game_stopped(root: &Path) -> Result<(), String> {
+    if crate::services::game_process::game_running(root)? { return Err("请先退出当前游戏目录的 VaM，再安装或卸载插件".into()); }
+    Ok(())
 }
 
-fn install(root: &Path) -> Result<ModStatus, String> {
+fn install(root: &Path, allow_unverified: bool) -> Result<ModStatus, String> {
     let status = inspect(root)?;
     if status.conflict {
         return Err("同名 DLL 已存在且内容不同，未覆盖；请先移开该文件".into());
@@ -209,12 +244,16 @@ fn install(root: &Path) -> Result<ModStatus, String> {
     if !status.compatible {
         return Err(status.reason.unwrap_or_default());
     }
+    if !status.verified && !allow_unverified { return Err("unverified_game".into()); }
+    data_path(&safe_target(root)?, OWNER)?;
     if status.installed {
+        write_owner(&safe_target(root)?)?;
         return Ok(status);
     }
     let target = safe_target(root)?;
     if status.update_available {
         upgrade_known_version(&target)?;
+        write_owner(&target)?;
         let result = inspect(root)?;
         if !result.installed {
             return Err("更新后的 DLL 校验失败".into());
@@ -236,6 +275,7 @@ fn install(root: &Path) -> Result<ModStatus, String> {
         let cleanup = fs::remove_file(&target);
         return Err(format!("写入模组失败: {e}; 清理不完整文件: {cleanup:?}"));
     }
+    write_owner(&target)?;
     let result = inspect(root)?;
     if !result.installed {
         return Err("安装后的 DLL 校验失败".into());
@@ -254,7 +294,7 @@ fn upgrade_known_version(target: &Path) -> Result<(), String> {
     let mut file = options.open(target).map_err(|e| e.to_string())?;
     let mut original = Vec::new();
     file.read_to_end(&mut original).map_err(|e| e.to_string())?;
-    if !is_known_release(&original) {
+    if !owned(target, &original) {
         return Err("旧版 DLL 在检查后发生变化，已取消更新".into());
     }
     let write = |file: &mut fs::File, bytes: &[u8]| -> std::io::Result<()> {
@@ -280,7 +320,11 @@ fn uninstall(root: &Path) -> Result<ModStatus, String> {
         return Err("DLL 内容与本软件附带版本不同，未删除".into());
     }
     if status.installed || status.update_available {
-        fs::remove_file(safe_target(root)?).map_err(|e| e.to_string())?;
+        let target = safe_target(root)?;
+        let owner = data_path(&target, OWNER)?;
+        fs::remove_file(target).map_err(|e| e.to_string())?;
+        match fs::remove_file(owner) { Ok(()) => {}, Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}, Err(e) => return Err(e.to_string()) }
+
     }
     inspect(root)
 }
@@ -296,12 +340,13 @@ pub async fn get_scene_browser_mod_status(vam_root: String) -> Result<ModStatus,
 pub async fn install_scene_browser_mod(
     app_handle: tauri::AppHandle,
     vam_root: String,
+    allow_unverified: Option<bool>,
 ) -> Result<ModStatus, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let _guard = MOD_LOCK.lock().map_err(|e| e.to_string())?;
         let root = checked_root(&vam_root)?;
-        ensure_game_stopped()?;
-        let result = install(&root)?;
+        ensure_game_stopped(&root)?;
+        let result = install(&root, allow_unverified.unwrap_or(false))?;
         crate::services::scene_browser_index::schedule_sync(&app_handle);
         Ok(result)
     })
@@ -314,7 +359,7 @@ pub async fn uninstall_scene_browser_mod(vam_root: String) -> Result<ModStatus, 
     tauri::async_runtime::spawn_blocking(move || {
         let _guard = MOD_LOCK.lock().map_err(|e| e.to_string())?;
         let root = checked_root(&vam_root)?;
-        ensure_game_stopped()?;
+        ensure_game_stopped(&root)?;
         uninstall(&root)
     })
     .await
@@ -349,10 +394,57 @@ mod tests {
     }
 
     #[test]
+    fn exact_owner_marker_allows_future_releases_but_modified_dll_is_protected() {
+        let f = Fixture::new();
+        let target = f.0.join(TARGET);
+        fs::create_dir_all(target.parent().unwrap()).unwrap();
+        let previous = b"future deterministic release";
+        fs::write(&target, previous).unwrap();
+        let marker = target.parent().unwrap().join(OWNER);
+        fs::write(&marker, format!("sha256\t{}\n", hash(previous))).unwrap();
+        assert!(inspect(&f.0).unwrap().update_available);
+        assert!(owned_mod_directory(&f.0).unwrap().is_some());
+        fs::write(&target, b"modified DLL").unwrap();
+        assert!(inspect(&f.0).unwrap().conflict);
+        assert!(uninstall(&f.0).is_err());
+        assert!(upgrade_known_version(&target).is_err());
+        fs::write(&target, previous).unwrap();
+        upgrade_known_version(&target).unwrap();
+        write_owner(&target).unwrap();
+        assert_eq!(fs::read_to_string(&marker).unwrap(), format!("sha256\t{}\n", hash(PAYLOAD)));
+        uninstall(&f.0).unwrap();
+        assert!(!marker.exists());
+    }
+
+    #[test]
+    fn untested_fingerprints_require_explicit_consent_and_runtime_is_versioned() {
+        let f = Fixture::new();
+        let manifest: Manifest = serde_json::from_str(MANIFEST).unwrap();
+        for dependency in manifest.files {
+            let path = f.0.join(dependency.path);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(path, b"untested dependency fixture").unwrap();
+        }
+        let status = inspect(&f.0).unwrap();
+        assert!(status.compatible && !status.verified);
+        assert_eq!(install(&f.0, false).err().as_deref(), Some("unverified_game"));
+        assert!(!f.0.join(TARGET).exists());
+        assert!(install(&f.0, true).unwrap().installed);
+        let path = f.0.join(TARGET).parent().unwrap().join("plugin-status.tsv");
+        fs::write(&path, "# VAM Library plugin status v1\nversion\t0.0.0\nbrowser\tok\nlaunch\tunavailable\n").unwrap();
+        assert!(inspect(&f.0).unwrap().runtime.is_none());
+        fs::write(&path, format!("# VAM Library plugin status v1\nversion\t{}\nbrowser\tok\nlaunch\tunavailable\n", status.version)).unwrap();
+        assert_eq!(scene_launch_directory(&f.0).unwrap_err(), "launch_unavailable");
+        assert_eq!(inspect(&f.0).unwrap().runtime.unwrap().browser, "ok");
+        fs::remove_file(path).unwrap();
+        assert!(scene_launch_directory(&f.0).is_ok());
+    }
+
+    #[test]
     fn missing_dependencies_do_not_write_mod() {
         let f = Fixture::new();
         assert!(!inspect(&f.0).unwrap().compatible);
-        assert!(install(&f.0).is_err());
+        assert!(install(&f.0, false).is_err());
         assert!(!f.0.join(TARGET).exists());
     }
     #[test]
@@ -362,7 +454,7 @@ mod tests {
         fs::create_dir_all(target.parent().unwrap()).unwrap();
         fs::write(&target, b"user mod").unwrap();
         assert!(inspect(&f.0).unwrap().conflict);
-        assert!(install(&f.0).is_err());
+        assert!(install(&f.0, false).is_err());
         assert!(uninstall(&f.0).is_err());
         assert_eq!(fs::read(target).unwrap(), b"user mod");
     }
@@ -376,6 +468,18 @@ mod tests {
         assert!(inspect(&f.0).unwrap().installed);
         assert!(!uninstall(&f.0).unwrap().installed);
         assert_eq!(fs::read(f.0.join("scene.var")).unwrap(), b"resource");
+    }
+
+    #[test]
+    fn bundled_payload_is_newer_than_every_previous_release() {
+        // Fails when mod sources changed but mods/SceneBrowser/build.ps1 was not rerun.
+        assert!(
+            !is_known_release(PAYLOAD),
+            "bundled DLL is a previous release; rebuild the mod"
+        );
+        let v1_0_9 =
+            include_bytes!("../../../mods/SceneBrowser/tests/fixtures/SceneBrowser-1.0.9.dll");
+        assert_eq!(hash(v1_0_9), PREVIOUS_SHA256[8]);
     }
 
     #[test]
@@ -416,7 +520,7 @@ mod tests {
         let status = inspect(&f.0).unwrap();
         assert!(!status.installed && !status.update_available && status.conflict);
         assert!(owned_mod_directory(&f.0).unwrap().is_none());
-        assert!(install(&f.0).is_err());
+        assert!(install(&f.0, false).is_err());
         assert!(uninstall(&f.0).is_err());
         assert!(upgrade_known_version(&target).is_err());
         assert_eq!(fs::read(target).unwrap(), rebuild);
@@ -439,9 +543,9 @@ mod tests {
         fs::write(f.0.join("AddonPackages/Keep.Scene.1.var"), b"keep").unwrap();
         let root = checked_root(f.0.to_str().unwrap()).unwrap();
         assert!(inspect(&root).unwrap().compatible);
-        assert!(install(&root).unwrap().installed);
+        assert!(install(&root, false).unwrap().installed);
         assert_eq!(hash(&fs::read(root.join(TARGET)).unwrap()), hash(PAYLOAD));
-        assert!(install(&root).unwrap().installed);
+        assert!(install(&root, false).unwrap().installed);
         assert!(!uninstall(&root).unwrap().installed);
         let previous =
             include_bytes!("../../../mods/SceneBrowser/tests/fixtures/SceneBrowser-1.0.0.dll");
@@ -449,7 +553,7 @@ mod tests {
         fs::write(root.join(TARGET), previous).unwrap();
         let old_status = inspect(&root).unwrap();
         assert!(old_status.update_available && !old_status.conflict);
-        assert!(install(&root).unwrap().installed);
+        assert!(install(&root, false).unwrap().installed);
         assert_eq!(fs::read(root.join(TARGET)).unwrap(), PAYLOAD);
         assert!(!uninstall(&root).unwrap().installed);
         let previous =
@@ -457,7 +561,7 @@ mod tests {
         assert!(PREVIOUS_SHA256.contains(&hash(previous).as_str()));
         fs::write(root.join(TARGET), previous).unwrap();
         assert!(inspect(&root).unwrap().update_available);
-        assert!(install(&root).unwrap().installed);
+        assert!(install(&root, false).unwrap().installed);
         assert_eq!(fs::read(root.join(TARGET)).unwrap(), PAYLOAD);
         assert!(!uninstall(&root).unwrap().installed);
         let previous =
@@ -466,7 +570,7 @@ mod tests {
         fs::write(root.join(TARGET), previous).unwrap();
         assert!(owned_mod_directory(&root).unwrap().is_some());
         assert!(inspect(&root).unwrap().update_available);
-        assert!(install(&root).unwrap().installed);
+        assert!(install(&root, false).unwrap().installed);
         assert_eq!(fs::read(root.join(TARGET)).unwrap(), PAYLOAD);
         assert!(!uninstall(&root).unwrap().installed);
         let previous =
@@ -474,7 +578,7 @@ mod tests {
         assert!(PREVIOUS_SHA256.contains(&hash(previous).as_str()));
         fs::write(root.join(TARGET), previous).unwrap();
         assert!(inspect(&root).unwrap().update_available);
-        assert!(install(&root).unwrap().installed);
+        assert!(install(&root, false).unwrap().installed);
         assert_eq!(fs::read(root.join(TARGET)).unwrap(), PAYLOAD);
         assert!(!uninstall(&root).unwrap().installed);
         let previous =
@@ -482,7 +586,7 @@ mod tests {
         assert!(PREVIOUS_SHA256.contains(&hash(previous).as_str()));
         fs::write(root.join(TARGET), previous).unwrap();
         assert!(inspect(&root).unwrap().update_available);
-        assert!(install(&root).unwrap().installed);
+        assert!(install(&root, false).unwrap().installed);
         assert_eq!(fs::read(root.join(TARGET)).unwrap(), PAYLOAD);
         assert!(!uninstall(&root).unwrap().installed);
         let previous =
@@ -490,7 +594,7 @@ mod tests {
         assert!(PREVIOUS_SHA256.contains(&hash(previous).as_str()));
         fs::write(root.join(TARGET), previous).unwrap();
         assert!(inspect(&root).unwrap().update_available);
-        assert!(install(&root).unwrap().installed);
+        assert!(install(&root, false).unwrap().installed);
         assert_eq!(fs::read(root.join(TARGET)).unwrap(), PAYLOAD);
         assert!(!uninstall(&root).unwrap().installed);
         let previous =
@@ -498,7 +602,7 @@ mod tests {
         assert!(PREVIOUS_SHA256.contains(&hash(previous).as_str()));
         fs::write(root.join(TARGET), previous).unwrap();
         assert!(inspect(&root).unwrap().update_available);
-        assert!(install(&root).unwrap().installed);
+        assert!(install(&root, false).unwrap().installed);
         assert_eq!(fs::read(root.join(TARGET)).unwrap(), PAYLOAD);
         assert!(!uninstall(&root).unwrap().installed);
         let rebuild = include_bytes!(
@@ -506,10 +610,17 @@ mod tests {
         );
         fs::write(root.join(TARGET), rebuild).unwrap();
         assert!(inspect(&root).unwrap().update_available);
-        assert!(install(&root).unwrap().installed);
+        assert!(install(&root, false).unwrap().installed);
+        assert_eq!(fs::read(root.join(TARGET)).unwrap(), PAYLOAD);
+        assert!(!uninstall(&root).unwrap().installed);
+        let previous =
+            include_bytes!("../../../mods/SceneBrowser/tests/fixtures/SceneBrowser-1.0.9.dll");
+        fs::write(root.join(TARGET), previous).unwrap();
+        assert!(inspect(&root).unwrap().update_available);
+        assert!(install(&root, false).unwrap().installed);
         assert_eq!(fs::read(root.join(TARGET)).unwrap(), PAYLOAD);
         // Once upgraded, reinstalling keeps the exact current payload.
-        assert!(install(&root).unwrap().installed);
+        assert!(install(&root, false).unwrap().installed);
         assert_eq!(fs::read(root.join(TARGET)).unwrap(), PAYLOAD);
         assert_eq!(
             scene_launch_directory(&root).unwrap(),

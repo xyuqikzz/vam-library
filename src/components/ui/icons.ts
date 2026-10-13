@@ -33,6 +33,9 @@ export const icons = {
   landscape: 'M3 3h18v7H3zM3 14h18v7H3z',
   list: 'M3 5h.01M7 5h14M3 12h.01M7 12h14M3 19h.01M7 19h14',
   expand: 'M8 3H3v5m13-5h5v5M3 16v5h5m8 0h5v-5',
+  shrink: 'M3 8h5V3m8 0v5h5M3 16h5v5m8 0v-5h5',
+  'zoom-in': 'M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0Zm-2 5 6 6M10 7v6M7 10h6',
+  'zoom-out': 'M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0Zm-2 5 6 6M7 10h6',
   clock: 'M22 12A10 10 0 1 1 2 12a10 10 0 0 1 20 0ZM12 6v6l4 2',
   plus: 'M12 4v16M4 12h16',
 } as const

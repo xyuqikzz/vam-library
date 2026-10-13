@@ -38,3 +38,24 @@ export function focusable(root: HTMLElement): HTMLElement[] {
     return true
   })
 }
+
+// 最近一次交互是否来自键盘。弹窗/浮层打开时用它决定"初始焦点"要不要画焦点环：
+// 鼠标点开或由外部事件弹出时不画（否则一打开就有一圈白框和 tooltip），键盘打开时照常显示。
+let keyboardModality = false
+if (typeof document !== 'undefined') {
+  document.addEventListener(
+    'keydown',
+    (event) => {
+      if (!event.metaKey && !event.ctrlKey && !event.altKey) keyboardModality = true
+    },
+    true,
+  )
+  document.addEventListener('pointerdown', () => (keyboardModality = false), true)
+}
+export function focusInitial(el: HTMLElement) {
+  if (!keyboardModality) {
+    el.setAttribute('data-initial-focus', '')
+    el.addEventListener('blur', () => el.removeAttribute('data-initial-focus'), { once: true })
+  }
+  el.focus()
+}

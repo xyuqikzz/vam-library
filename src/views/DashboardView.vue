@@ -3,9 +3,10 @@ import { useRouter } from 'vue-router'
 import PageHeader from '@/components/layout/PageHeader.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import UiProgress from '@/components/ui/UiProgress.vue'
+import { loadPackageThumbnails, resourceCacheRevision } from '@/utils/resourceCache'
 import PackageCard from '@/components/packages/PackageCard.vue'
 
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
@@ -32,7 +33,7 @@ const {
   loading,
 } = storeToRefs(localLibraryStore)
 
-const thumbnails = ref<Record<string, string>>({})
+const thumbnails = ref<Record<string, string | null>>({})
 
 const recentPreviewPackages = computed(() => recentPackages.value.slice(0, 12))
 
@@ -56,22 +57,15 @@ onMounted(() => {
   })
 })
 
-watch(recentPackages, () => {
+watch([recentPackages, resourceCacheRevision], () => {
   void loadRecentThumbnails()
 })
 
+let thumbnailEpoch = 0
+onBeforeUnmount(() => { ++thumbnailEpoch })
 async function loadRecentThumbnails() {
-  await Promise.all(recentPreviewPackages.value.map(async (pkg) => {
-    if (thumbnails.value[pkg.id]) return
-    try {
-      const thumb = await invoke<string | null>('get_package_thumbnail', { packageId: pkg.id })
-      if (thumb) {
-        thumbnails.value[pkg.id] = thumb
-      }
-    } catch {
-      // thumbnail missing is fine
-    }
-  }))
+  const epoch = ++thumbnailEpoch
+  await loadPackageThumbnails(recentPreviewPackages.value, (id, url) => { thumbnails.value[id] = url }, () => epoch === thumbnailEpoch)
 }
 
 async function openPath(path: string) {
@@ -105,7 +99,6 @@ const totalIssues = computed(() => stats.value.missing_dependencies + stats.valu
         </UiButton>
         <UiButton
           variant="primary"
-          size="lg"
           icon="refresh"
           :loading="isScanning"
           :loading-text="t('toolbar.scanning')"
@@ -126,7 +119,7 @@ const totalIssues = computed(() => stats.value.missing_dependencies + stats.valu
         show-quick-delete
         @package-deleted="localLibraryStore.refreshAll('refreshing')"
       >
-        <template #browser="{ selectPackage, openDetails, launchPackage }">
+        <template #browser="{ openDetails, launchPackage }">
           <div class="dashboard resource-content-scrollable">
             <div v-if="isScanning" class="scan-banner">
               <UiProgress
@@ -149,12 +142,22 @@ const totalIssues = computed(() => stats.value.missing_dependencies + stats.valu
                 {{ scanProgress?.processed_files || 0 }} / {{ scanProgress?.total_files || 0 }}
               </span>
             </div>
+            <section class="dashboard-section quick-open-section" :aria-label="t('dashboard.quickOpen')">
+              <QuickActions
+                :vam-root="vamRootPath"
+                :screenshot-path="screenshotPath"
+                :appearance-preset-path="appearancePresetPath"
+                :clothing-preset-path="clothingPresetPath"
+                @open="openPath"
+                @game-config="openGameConfig"
+              />
+            </section>
             <StatsBar :stats="stats" :loading="loading" />
             <div class="content-grid">
               <div class="dashboard-left">
                 <section class="dashboard-section">
                   <h2>{{ t('dashboard.recentPackages') }}</h2>
-                  <div v-if="loading" class="recent-grid">
+                  <div v-if="loading" class="recent-grid resource-grid">
                     <PackageCard
                       v-for="i in 4"
                       :key="i"
@@ -162,7 +165,7 @@ const totalIssues = computed(() => stats.value.missing_dependencies + stats.valu
                       loading
                     />
                   </div>
-                  <div v-else-if="recentPreviewPackages.length" class="recent-grid">
+                  <div v-else-if="recentPreviewPackages.length" class="recent-grid resource-grid">
                     <PackageCard
                       v-for="pkg in recentPreviewPackages"
                       :key="pkg.id"
@@ -170,7 +173,7 @@ const totalIssues = computed(() => stats.value.missing_dependencies + stats.valu
                       :image="thumbnails[pkg.id]"
                       :fresh="Date.now() - new Date(pkg.scan_time).getTime() < 86400000"
                       :can-launch="pkg.resource_types.includes('scene')"
-                      @select="selectPackage(pkg)"
+                      @select="openDetails(pkg)"
                       @details="openDetails(pkg)"
                       @launch="launchPackage(pkg)"
                       @more="openDetails(pkg)"
@@ -187,23 +190,13 @@ const totalIssues = computed(() => stats.value.missing_dependencies + stats.valu
                     </UiButton>
                   </div>
                 </section>
-                <section class="dashboard-section">
-                  <h2>{{ t('dashboard.quickOpen') }}</h2>
-                  <QuickActions
-                    :vam-root="vamRootPath"
-                    :screenshot-path="screenshotPath"
-                    :appearance-preset-path="appearancePresetPath"
-                    :clothing-preset-path="clothingPresetPath"
-                    @open="openPath"
-                    @game-config="openGameConfig"
-                  />
-                </section>
               </div>
-              <section class="health-panel">
-                <header>
+              <section class="dashboard-section">
+                <header class="health-head">
                   <h2>{{ t('dashboard.healthReport') }}</h2>
-                  <span>{{ t('ui.issueCount', { count: totalIssues }) }}</span>
+                  <span :class="{ 'is-ok': !totalIssues }">{{ totalIssues ? t('ui.issueCount', { count: totalIssues }) : t('ui.noIssues') }}</span>
                 </header>
+                <div class="health-panel">
                 <HealthStatus
                   :missing="stats.missing_dependencies"
                   :corrupted="stats.corrupted_packages"
@@ -211,6 +204,7 @@ const totalIssues = computed(() => stats.value.missing_dependencies + stats.valu
                   :missing-list="missingDependenciesList"
                   :corrupted-list="corruptedPackagesList"
                 />
+                </div>
               </section>
             </div>
           </div>
@@ -228,7 +222,7 @@ const totalIssues = computed(() => stats.value.missing_dependencies + stats.valu
 .dashboard-content {
   flex: 1;
   min-height: 0;
-  padding: 18px 24px;
+  padding: var(--space-page-y) var(--space-page-x);
 }
 .dashboard {
   display: flex;
@@ -237,21 +231,23 @@ const totalIssues = computed(() => stats.value.missing_dependencies + stats.valu
   min-height: 0;
   min-width: 0;
   overflow-y: auto;
-  gap: 20px;
-  padding: 4px;
+  gap: var(--space-section);
+  /* 给选中外环和键盘焦点留空间，用负 margin 抵消，保证内容左缘与页头对齐 */
+  padding: var(--focus-room);
+  margin: calc(-1 * var(--focus-room));
 }
 .scan-banner {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 16px;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-panel);
   border-radius: var(--radius-lg);
   background: var(--bg-elevated);
 }
 .scan-text {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-2);
   flex: 1;
   min-width: 0;
 }
@@ -272,58 +268,58 @@ const totalIssues = computed(() => stats.value.missing_dependencies + stats.valu
 }
 .content-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.65fr);
-  gap: 20px;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 0.6fr);
+  gap: var(--space-section);
   align-items: start;
 }
 .dashboard-left {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: var(--space-section);
   min-width: 0;
 }
 .dashboard-section {
   min-width: 0;
 }
-.dashboard-section h2,
-.health-panel h2 {
+.dashboard-section h2 {
   font-size: var(--text-lg);
   font-weight: var(--font-heavy);
-  margin-bottom: 14px;
+  line-height: var(--leading-tight);
+  margin: 0 0 var(--space-stack);
 }
-.recent-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(124px, 1fr));
-  gap: 14px;
-}
+
 .health-panel {
-  padding: 18px;
+  padding: var(--space-panel);
   border-radius: var(--radius-lg);
   background: var(--bg-elevated);
 }
-.health-panel header {
+.health-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 16px;
+  gap: var(--space-item);
+  margin-bottom: var(--space-stack);
 }
-.health-panel h2 {
+.health-head h2 {
   margin: 0;
 }
-.health-panel header > span {
+.health-head > span {
   font-size: var(--text-xs);
   color: var(--color-warning);
   background: var(--color-warning-bg);
   border-radius: var(--radius-full);
-  padding: 4px 8px;
+  padding: var(--space-1) var(--space-2);
+}
+.health-head > span.is-ok {
+  color: var(--color-success);
+  background: var(--color-success-bg);
 }
 .dashboard-empty {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 16px;
-  padding: 28px;
+  gap: var(--space-4);
+  padding: var(--space-8) var(--space-6);
   background: var(--bg-elevated);
   border-radius: var(--radius-xl);
   color: var(--text-secondary);
@@ -336,7 +332,7 @@ const totalIssues = computed(() => stats.value.missing_dependencies + stats.valu
 }
 @media (max-width: 800px) {
   .dashboard-content {
-    padding: 12px;
+    padding: var(--space-3);
   }
 }
 </style>

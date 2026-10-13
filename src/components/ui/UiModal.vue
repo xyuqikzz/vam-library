@@ -2,7 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, ref, useAttrs, useId, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import UiButton from './UiButton.vue'
-import { enterModal, leaveModal, modalStack, focusable } from './overlay'
+import { enterModal, leaveModal, modalStack, focusable, focusInitial } from './overlay'
 defineOptions({ inheritAttrs: false })
 const props = withDefaults(
   defineProps<{
@@ -12,6 +12,8 @@ const props = withDefaults(
     description?: string
     ariaLabel?: string
     wide?: boolean
+    /** 介于默认 560 与 wide 1200 之间的 800 宽，用于详情类弹窗 */
+    large?: boolean
     closeDisabled?: boolean
     dismissible?: boolean
     showClose?: boolean
@@ -52,11 +54,11 @@ function requestClose() {
 }
 function focusFirst() {
   if (dialog.value)
-    (
+    focusInitial(
       dialog.value.querySelector<HTMLElement>('[autofocus]') ||
-      focusable(dialog.value)[0] ||
-      dialog.value
-    ).focus()
+        focusable(dialog.value)[0] ||
+        dialog.value,
+    )
 }
 function keydown(event: KeyboardEvent) {
   if (
@@ -147,7 +149,7 @@ defineExpose({
           ref="dialog"
           v-bind="$attrs"
           class="ui-modal"
-          :class="{ wide }"
+          :class="{ wide, large }"
           role="dialog"
           aria-modal="true"
           :aria-labelledby="title ? titleId : (attrs['aria-labelledby'] as string | undefined)"
@@ -212,6 +214,9 @@ defineExpose({
 }
 .ui-modal.wide {
   width: min(1200px, 100%);
+}
+.ui-modal.large {
+  width: min(800px, 100%);
 }
 .ui-modal-header {
   display: flex;

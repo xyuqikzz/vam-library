@@ -480,6 +480,7 @@ async fn download_file_task(
     if target_path.exists() {
         // A retry after an indexing failure should reuse the saved file, never overwrite it.
         if item.final_path.as_deref() == Some(target_path.to_string_lossy().as_ref()) {
+            let _maintenance = crate::services::resource_files::maintenance_lock()?;
             validate_var_file(&target_path)?;
             return finish_saved_download(
                 &app_handle,
@@ -781,6 +782,7 @@ async fn run_download_loop(
     {
         return Err("下载已暂停或取消，完整临时文件已保留".into());
     }
+    let _maintenance = crate::services::resource_files::maintenance_lock()?;
     crate::services::resource_files::transfer(&part_path, &target_path, "move")?;
     finish_saved_download(
         &app_handle,

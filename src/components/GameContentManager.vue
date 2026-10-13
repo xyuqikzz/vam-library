@@ -1,6 +1,11 @@
 <script setup lang="ts">
+import { useResourceActions } from '@/composables/useResourceActions'
+import UiMenu from '@/components/ui/UiMenu.vue'
 import PackageCard from '@/components/packages/PackageCard.vue'
+import PackageDetails from '@/components/packages/PackageDetails.vue'
+import type { PackageDisplayItem, ResourceDetailItem } from '@/types/package'
 import UiModal from '@/components/ui/UiModal.vue'
+import UiDetailModal from '@/components/ui/UiDetailModal.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import UiInput from '@/components/ui/UiInput.vue'
 import { computed, onMounted, onActivated, onDeactivated, onBeforeUnmount, ref, watch } from 'vue'
@@ -9,7 +14,8 @@ import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 import { useLocalLibraryStore } from '@/stores/localLibrary'
-import type { GameContentKind } from '@/types/presets'
+import type { GameContentKind, GameContentRef } from '@/types/presets'
+import { previewUrl, resourceInvoke, resourceCacheRevision } from '@/utils/resourceCache'
 import { compareDisplayNames } from '@/utils/nameSort'
 
 interface ContentRef { packageId: string | null; path: string }
@@ -31,14 +37,32 @@ const warnings = ref<string[]>([])
 const directory = ref('')
 const copyDialog = ref<InstanceType<typeof UiModal> | null>(null)
 const gallery = ref<HTMLElement | null>(null)
-const inspectorPane = ref<HTMLElement | null>(null)
 const pendingCopy = ref<{ root: string; source: ContentRef | null; kind: GameContentKind; count: number; directory: string } | null>(null)
 const loading = ref(false)
 const busy = ref(false)
+const sceneBusy = ref(false)
 const error = ref('')
 const message = ref('')
 const report = ref<CopyReport | null>(null)
 const selected = ref<Item | null>(null)
+const selectedResource = ref<ResourceDetailItem | null>(null)
+const sceneExpanded = ref(false)
+const packageDetails = ref<InstanceType<typeof PackageDetails> | null>(null)
+const actionBusy = computed(() => busy.value || sceneBusy.value)
+const { cardMenuOpen, cardMenuAnchor, cardMenuPoint, cardMenuItems, openDetails, openCardMenu, queueSceneAction, handleCardAction, packageShortcut } = useResourceActions({
+  selected, details: packageDetails, busy: actionBusy, expanded: sceneExpanded,
+  key: item => item.key, select, isScene: item => props.kind === 'scene' && item.available,
+  isPackage: item => !!item.source.packageId,
+  canDelete: item => !!item.source.packageId && item.available,
+})
+const packageById = computed(() => new Map((library.packages || []).map(pkg => [pkg.id.toLowerCase(), pkg])))
+function cardItem(item: Item) {
+  const pkg = item.source.packageId ? packageById.value.get(item.source.packageId.toLowerCase()) : undefined
+  return { id: item.key, name: item.alias || item.name,
+    creator: pkg?.creator || item.source.packageId?.split('.')[0] || t('gameContent.local'),
+    version: pkg?.version, size_bytes: pkg?.size_bytes,
+    resource_types: [props.kind === 'scene' ? 'scene' : ['appearance', 'clothing', 'hair'].includes(props.kind) ? props.kind : 'other'] }
+}
 const detail = ref<Detail | null>(null)
 const detailLoading = ref(false)
 const detailError = ref('')
@@ -121,22 +145,43 @@ async function refresh(reloadImages = false) {
   finally { if (epoch === listEpoch) loading.value = false }
 }
 async function select(item: Item) {
-  if (busy.value) return
+  if (busy.value || sceneBusy.value) return
+  packageDetails.value?.resetNavigation()
+  if (isScene.value && selected.value?.key === item.key && selectedResource.value && !detailError.value) return
   const epoch = ++detailEpoch
+  const root = app.vamRootPath
   selected.value = item
   name.value = item.alias || item.name
-  detail.value = null
-  detailError.value = ''
-  detailLoading.value = false
+  detail.value = null; detailError.value = ''; detailLoading.value = false
+  sceneExpanded.value = false; selectedResource.value = null
+  if (isScene.value) {
+    selectedResource.value = { id: item.source.packageId || item.key, name: item.alias || item.name,
+      creator: item.source.packageId?.split('.')[0] || t('gameContent.local'), resource_types: ['scene'] }
+    if (!item.source.packageId || !item.available) return
+    const cached = packageById.value.get(item.source.packageId.toLowerCase())
+    if (cached) { selectedResource.value = cached; return }
+    detailLoading.value = true
+    try {
+      const pkg = await invoke<PackageDisplayItem | null>('get_package_summary', { packageId: item.source.packageId })
+      if (epoch === detailEpoch && root === app.vamRootPath && pkg) selectedResource.value = pkg
+    } catch (e) { if (epoch === detailEpoch && root === app.vamRootPath) detailError.value = t('ui.loadFailed', { error: String(e) }) }
+    finally { if (epoch === detailEpoch) detailLoading.value = false }
+    return
+  }
   if (!item.available) return
   detailLoading.value = true
   try {
-    const result = await invoke<Detail>('get_game_content_detail', { vamRoot: app.vamRootPath, source: item.source })
-    if (epoch === detailEpoch) detail.value = result
-  } catch (e) { if (epoch === detailEpoch) detailError.value = String(e) }
+    const result = await invoke<Detail>('get_game_content_detail', { vamRoot: root, source: item.source })
+    if (epoch === detailEpoch && root === app.vamRootPath) detail.value = result
+  } catch (e) { if (epoch === detailEpoch && root === app.vamRootPath) detailError.value = String(e) }
   finally { if (epoch === detailEpoch) detailLoading.value = false }
 }
-function closeDetail() { ++detailEpoch; selected.value = null; detail.value = null; detailLoading.value = false }
+function closeDetail() { ++detailEpoch; selected.value = null; selectedResource.value = null; detail.value = null; detailLoading.value = false; sceneExpanded.value = false }
+function onFavoriteChange(source: GameContentRef, favorite: boolean) {
+  const item = items.value.find(item => item.source.packageId === source.packageId && item.source.path === source.path)
+  if (item) item.favorite = favorite
+  void refresh()
+}
 async function mutate(work: (root: string) => Promise<void>) {
   if (busy.value || !app.vamRootPath) return
   const root = app.vamRootPath
@@ -165,23 +210,13 @@ async function confirmCopy() {
     if (root === app.vamRootPath) report.value = result
   })
 }
-async function favorite(item: Item) {
-  await mutate(async root => {
-    await invoke('set_game_scene_favorite', { vamRoot: root, source: item.source, favorite: !item.favorite })
-    if (root === app.vamRootPath) message.value = t(item.favorite ? 'gameContent.removed' : 'gameContent.added')
-  })
-}
 async function saveName() {
   const item = selected.value
   if (!item) return
   const value = name.value
   await mutate(async root => {
-    if (isScene.value) {
-      await invoke('set_game_scene_name', { vamRoot: root, source: item.source, name: value })
-    } else {
-      await invoke('rename_game_preset', { vamRoot: root, source: item.source, name: value })
-      if (root === app.vamRootPath) closeDetail()
-    }
+    await invoke('rename_game_preset', { vamRoot: root, source: item.source, name: value })
+    if (root === app.vamRootPath) closeDetail()
     if (root === app.vamRootPath) message.value = t('gameContent.saved')
   })
 }
@@ -197,7 +232,7 @@ async function loadImages() {
         if (!item) break
         imageRequests.add(item.key)
         try {
-          const image = await invoke<string | null>('get_game_content_image', { vamRoot: root, source: item.source })
+          const image = previewUrl(await resourceInvoke<string | null>('get_game_content_image', { vamRoot: root, source: item.source }))
           // Cache null too: returning to the app must not repeatedly load missing thumbnails.
           if (epoch === imageEpoch) images.value[item.key] = image
         } catch (e) { if (epoch === imageEpoch) imageErrors.value[item.key] = String(e) }
@@ -216,23 +251,20 @@ async function rescan() {
   if (!app.vamRootPath || app.isScanning || busy.value) return
   try { await app.startScan(app.vamRootPath); await refresh(true) } catch (e) { error.value = String(e) }
 }
-function onFocus() { if (active && !busy.value && !loading.value && !pendingCopy.value) void refresh() }
+function onFocus() { if (active && !busy.value && !sceneBusy.value && !loading.value && !pendingCopy.value) void refresh() }
 watch([query, filter, favoritesOnly, () => app.searchQuery], () => { page.value = 1 })
 watch([page, query, filter, favoritesOnly, () => app.searchQuery], () => {
   if (gallery.value) gallery.value.scrollTop = 0
 }, { flush: 'post' })
-watch(() => selected.value?.key, () => {
-  if (inspectorPane.value) inspectorPane.value.scrollTop = 0
-}, { flush: 'post' })
 watch(visible, () => { void loadImages() })
-watch(busy, value => emit('busyChange', value), { flush: 'sync' })
+watch(() => busy.value || sceneBusy.value, value => emit('busyChange', value), { flush: 'sync' })
 watch(() => app.vamRootPath, () => {
   cancelCopy()
   ++listEpoch; ++imageEpoch; closeDetail(); items.value = []; images.value = {}; imageErrors.value = {}; report.value = null; message.value = ''; warnings.value = []; error.value = ''
   directory.value = ''; emit('loaded', [])
   if (active) void refresh()
 })
-watch(() => library.revision, () => { if (active && !busy.value) void refresh(true) })
+watch([() => library.revision, resourceCacheRevision], () => { if (active && !busy.value && !sceneBusy.value) void refresh(true) })
 function activate() { if (active) return; active = true; window.addEventListener('focus', onFocus); void refresh() }
 onMounted(activate)
 onActivated(activate)
@@ -266,8 +298,9 @@ onBeforeUnmount(() => { active = false; cancelCopy(); ++listEpoch; ++detailEpoch
         :title="t('gameContent.favoriteFilterHelp')"
         @click="favoritesOnly = !favoritesOnly"
         variant="secondary"
+        icon="star"
       >
-        ★ {{ t('gameContent.favorites', { count: favoriteCount }) }}
+        {{ t('gameContent.favorites', { count: favoriteCount }) }}
       </UiButton>
       <UiButton :disabled="loading || busy" @click="refresh(true)" variant="secondary">
         {{ t('gameContent.refresh') }}
@@ -281,7 +314,6 @@ onBeforeUnmount(() => { active = false; cancelCopy(); ++listEpoch; ++detailEpoch
         :disabled="busy || loading || !packagePresets || app.isScanning"
         @click="requestCopy()"
         variant="primary"
-        size="lg"
       >
         {{ t(busy ? 'gameContent.working' : 'gameContent.copyLocal') }}
       </UiButton>
@@ -304,27 +336,26 @@ onBeforeUnmount(() => { active = false; cancelCopy(); ++listEpoch; ++detailEpoch
         <li v-for="(warning, i) in warnings" :key="i">{{ warning }}</li>
       </ul>
     </details>
-    <div class="content-body" :class="{ inspecting: selected }" :aria-busy="loading || busy">
+    <p class="count" role="status">
+      {{ loading ? t('common.loading') : t(isScene ? (favoritesOnly ? 'gameContent.favoriteCount' : 'gameContent.sceneCount') : 'gameContent.count', { count: filtered.length }) }}
+    </p>
+    <div class="content-body" :aria-busy="loading || busy">
       <div class="content-list">
-        <p class="count" role="status">
-          {{ loading ? t('common.loading') : t(isScene ? (favoritesOnly ? 'gameContent.favoriteCount' : 'gameContent.sceneCount') : 'gameContent.count', { count: filtered.length }) }}
-        </p>
-        <div v-if="visible.length" ref="gallery" class="content-grid">
+        <div v-if="visible.length" ref="gallery" class="content-grid resource-grid">
           <PackageCard
             v-for="item in visible"
             :key="item.key"
-            class="content-card"
-            :item="{ id: item.key, name: item.alias || item.name, creator: item.source.packageId || t('gameContent.local'), resource_types: [isScene ? 'scene' : kind === 'appearance' ? 'appearance' : kind === 'clothing' ? 'clothing' : kind === 'hair' ? 'hair' : 'other'] }"
+            :item="cardItem(item)"
             :image="images[item.key]"
             :selected="selected?.key === item.key"
-            :disabled="busy"
+            :disabled="actionBusy"
+            :can-launch="isScene && item.available"
+            @launch="queueSceneAction(item, 'launch')"
+            @keydown="isScene && packageShortcut($event, item)"
             :favorite="item.favorite"
-            :can-favorite="isScene"
-            :favorite-disabled="!item.available && !item.favorite"
-            @select="select(item)"
-            @details="select(item)"
-            @more="select(item)"
-            @favorite="favorite(item)"
+            @select="isScene ? openDetails(item) : select(item)"
+            @details="isScene ? openDetails(item) : select(item)"
+            @more="isScene ? openCardMenu(item, $event) : select(item)"
           >
             <template #badge>
               <span
@@ -360,60 +391,46 @@ onBeforeUnmount(() => { active = false; cancelCopy(); ++listEpoch; ++detailEpoch
           </UiButton>
         </nav>
       </div>
-      <aside
-        v-if="selected"
-        ref="inspectorPane"
-        class="inspector"
-        :aria-label="t('gameContent.details')"
-      >
-        <div class="inspector-heading">
-          <h3>{{ selected.alias || selected.name }}</h3>
-          <UiButton
-            :disabled="busy"
-            :aria-label="t('gameContent.close')"
-            @click="closeDetail"
-            variant="secondary"
-            icon-only
-          >
-            ×
-          </UiButton>
-        </div>
+      <PackageDetails ref="packageDetails" :show-quick-delete="!!selected?.source.packageId && selected.available" @package-deleted="closeDetail(); refresh(true)" v-if="isScene && selected && selectedResource" :key="selected.key"
+        :item="selectedResource" :scene="selected" :image="images[selected.key]" :load-error="detailError" :loading="detailLoading" :vam-root="app.vamRootPath"
+        v-model:expanded="sceneExpanded" @busy-change="sceneBusy = $event" @close="closeDetail"
+        @favorite-change="onFavoriteChange" />
+      <UiDetailModal v-if="selected && !isScene" class="preset-detail-modal"
+        :label="selected.alias || selected.name" :fallback-image="detail?.image || images[selected.key]"
+        :content-key="selected.key" :close-label="t('gameContent.close')" :busy="busy" @close="closeDetail">
+        <div class="inspector">
+        <span class="preset-type">{{ t(`gameContent.presetTypes.${kind}`) }}</span>
+        <h2 class="preset-title">{{ selected.alias || selected.name }}</h2>
         <p class="path">
           {{ selected.source.packageId ? `${selected.source.packageId}:/` : ''
           }}{{ selected.source.path }}
         </p>
-        <img
-          v-if="detail?.image"
-          data-resource-preview
-          class="detail-image"
-          :src="detail.image"
-          :alt="selected.name"
-        />
         <p v-if="detailLoading" role="status">{{ t('common.loading') }}</p>
         <p v-if="detailError" role="alert" class="error">{{ detailError }}</p>
         <p v-if="!selected.available" class="notice">{{ t('gameContent.missingHelp') }}</p>
-        <template v-if="isScene || !selected.source.packageId">
+        <template v-if="!selected.source.packageId">
           <form @submit.prevent="saveName">
             <label for="content-name">
-              {{ t(isScene ? 'gameContent.displayName' : 'gameContent.filename') }}
+              {{ t('gameContent.filename') }}
             </label>
             <div class="rename-row">
               <UiInput
                 id="content-name"
                 v-model="name"
-                :maxlength="isScene ? 120 : 120"
-                :required="!isScene"
+                maxlength="120"
+                required
               />
               <UiButton
-                :disabled="busy || (!isScene && !selected.available)"
+                :disabled="busy || !selected.available"
                 type="submit"
                 variant="secondary"
+                size="lg"
               >
                 {{ t('gameContent.save') }}
               </UiButton>
             </div>
           </form>
-          <p class="help">{{ t(isScene ? 'gameContent.aliasHelp' : 'gameContent.renameHelp') }}</p>
+          <p class="help">{{ t('gameContent.renameHelp') }}</p>
         </template>
         <template v-else>
           <p class="help">{{ t('gameContent.packageRenameHelp') }}</p>
@@ -427,14 +444,6 @@ onBeforeUnmount(() => { active = false; cancelCopy(); ++listEpoch; ++detailEpoch
             {{ t('gameContent.copyOne') }}
           </UiButton>
         </template>
-        <UiButton
-          v-if="isScene"
-          :disabled="busy || (!selected.available && !selected.favorite)"
-          @click="favorite(selected)"
-          variant="secondary"
-        >
-          {{ t(selected.favorite ? 'gameContent.unfavorite' : 'gameContent.favorite') }}
-        </UiButton>
         <dl class="sections">
           <template v-for="section in sections" :key="section.name">
             <dt>{{ section.name }}</dt>
@@ -445,11 +454,13 @@ onBeforeUnmount(() => { active = false; cancelCopy(); ++listEpoch; ++detailEpoch
           <summary>{{ t('gameContent.raw') }}</summary>
           <pre>{{ JSON.stringify(detail.json, null, 2) }}</pre>
         </details>
-      </aside>
+        </div>
+      </UiDetailModal>
     </div>
+    <UiMenu :label="t('ui.menu')" v-model:open="cardMenuOpen" :items="cardMenuItems" :anchor="cardMenuAnchor" :x="cardMenuPoint.x" :y="cardMenuPoint.y" placement="bottom-end" @select="handleCardAction" />
     <UiModal
       ref="copyDialog"
-      aria-labelledby="copy-title"
+      :title="t('gameContent.copyLocal')"
       aria-describedby="copy-description"
       @close="pendingCopy = null"
       @cancel="cancelCopy"
@@ -457,20 +468,19 @@ onBeforeUnmount(() => { active = false; cancelCopy(); ++listEpoch; ++detailEpoch
       :show-close="false"
     >
       <template v-if="pendingCopy">
-        <h3 id="copy-title">{{ t('gameContent.copyLocal') }}</h3>
         <p id="copy-description">
           {{ t(pendingCopy.source ? 'gameContent.copyOneConfirm' : 'gameContent.copyAllConfirm', { count: pendingCopy.count, type: title }) }}
         </p>
         <p class="copy-target">{{ pendingCopy.directory }}/VAM Library</p>
-        <p>{{ t('gameContent.copySafety') }}</p>
-        <div class="dialog-actions">
-          <UiButton autofocus @click="cancelCopy" variant="secondary">
-            {{ t('gameContent.cancel') }}
-          </UiButton>
-          <UiButton class="primary" @click="confirmCopy" variant="primary" size="lg">
-            {{ t('gameContent.confirmCopy') }}
-          </UiButton>
-        </div>
+        <p class="copy-safety">{{ t('gameContent.copySafety') }}</p>
+      </template>
+      <template #footer>
+        <UiButton autofocus @click="cancelCopy" variant="secondary">
+          {{ t('gameContent.cancel') }}
+        </UiButton>
+        <UiButton @click="confirmCopy" variant="primary">
+          {{ t('gameContent.confirmCopy') }}
+        </UiButton>
       </template>
     </UiModal>
   </section>
@@ -480,7 +490,8 @@ onBeforeUnmount(() => { active = false; cancelCopy(); ++listEpoch; ++detailEpoch
 .game-content {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  flex: 1;
+  gap: var(--space-3);
   min-width: 0;
   min-height: 0;
   overflow: hidden;
@@ -490,11 +501,10 @@ onBeforeUnmount(() => { active = false; cancelCopy(); ++listEpoch; ++detailEpoch
 }
 .content-toolbar,
 .pagination,
-.inspector-heading,
 .rename-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-3);
 }
 p,
 .help {
@@ -502,55 +512,13 @@ p,
   font-size: var(--text-sm);
   line-height: 1.7;
 }
-button,
-input,
-select {
-  border: 1px solid var(--border-default, var(--bg-control));
-  border-radius: var(--radius-xs);
-  padding: 8px 12px;
-  font-size: var(--text-sm);
-  background: var(--bg-surface);
-}
-button:hover:not(:disabled) {
-  background: var(--bg-hover);
-}
-button:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-button:focus-visible,
-input:focus-visible,
-select:focus-visible,
-summary:focus-visible {
-  outline: 2px solid var(--accent-primary);
-  outline-offset: 2px;
-}
-button.primary {
-  background: var(--accent-primary);
-  color: var(--accent-ink);
-  border-color: transparent;
-  white-space: nowrap;
-}
 .content-toolbar {
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--space-item);
 }
-.content-toolbar > input,
-.content-toolbar > select,
-.content-toolbar > button {
-  height: 34px;
-  padding: 0 12px;
-}
-/* The toolbar touches an overflow-hidden edge, so draw focus inside the controls. */
-.content-toolbar > input:focus,
-.content-toolbar > select:focus {
-  outline: none;
-  border-color: var(--accent-primary);
-  box-shadow: inset 0 0 0 1px var(--accent-primary);
-}
-.content-toolbar input {
-  flex: 1 1 180px;
-  min-width: 140px;
+.content-toolbar .ui-input-field {
+  flex: 0 1 280px;
+  min-width: 180px;
 }
 .content-toolbar select {
   flex: 0 0 140px;
@@ -563,45 +531,42 @@ button.primary {
   margin-left: auto;
 }
 .content-toolbar .filter-active {
-  color: var(--text-primary);
-  background: var(--accent-subtle);
-  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  background: var(--accent-muted);
 }
-select option {
-  background: var(--bg-surface);
+.content-toolbar .filter-active:hover {
+  background: color-mix(in srgb, var(--accent-primary) 24%, transparent);
 }
 .notice {
   border: none;
-  background: var(--bg-surface);
+  background: var(--bg-elevated);
   border-radius: var(--radius-thumbnail);
-  padding: 12px;
+  padding: var(--space-3);
   font-size: var(--text-sm);
   overflow-wrap: anywhere;
   max-height: 140px;
   overflow-y: auto;
 }
 .notice li {
-  margin-top: 6px;
+  margin-top: var(--space-2);
 }
 .error {
   color: var(--color-error);
 }
 /* Keep page controls outside the scrolling panes; their height must never be compressed by the gallery. */
 .content-body {
+  position: relative;
   flex: 1;
   min-height: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
-  gap: 16px;
+  gap: var(--space-4);
   overflow: hidden;
-}
-.content-body.inspecting {
-  grid-template-columns: minmax(0, 1fr) 360px;
 }
 .count {
   flex-shrink: 0;
-  margin-bottom: 8px;
+  margin-bottom: calc(-1 * var(--space-1));
 }
 .content-list {
   display: flex;
@@ -609,7 +574,7 @@ select option {
   min-width: 0;
   min-height: 0;
 }
-/* Opening details may change the number of columns, never the card dimensions. */
+/* The floating inspector leaves the grid dimensions unchanged. */
 .content-grid {
   flex: 1;
   min-height: 0;
@@ -617,162 +582,71 @@ select option {
   overflow-x: hidden;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(0, 190px));
   grid-auto-rows: max-content;
-  gap: 12px;
   align-content: start;
   align-items: start;
-  padding: 2px 4px 4px 2px;
-}
-.content-card {
-  border: none;
-  border-radius: var(--radius-sm);
-  overflow: hidden;
-  background: var(--bg-surface);
-  min-width: 0;
-}
-.content-card.selected {
-  border-color: var(--accent-primary);
-}
-.card-main {
-  padding: 0;
-  border: none;
-  border-radius: var(--radius-none);
-  display: block;
-  width: 100%;
-  text-align: left;
-}
-.preview {
-  position: relative;
-  aspect-ratio: 4 / 3;
-  overflow: hidden;
-  display: grid;
-  place-items: center;
-  background: var(--bg-subtle);
-  color: var(--text-tertiary);
-}
-.preview img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-.preview-status {
-  position: absolute;
-  left: 6px;
-  right: 6px;
-  bottom: 6px;
-  padding: 4px 6px;
-  border-radius: var(--radius-progress);
-  background: var(--bg-base);
-  color: var(--color-warning);
-  font-size: var(--text-xs);
-  line-height: 1.4;
-}
-.card-text {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 12px;
-}
-.card-text strong,
-.card-text span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.card-text span {
-  font-size: var(--text-xs);
-  color: var(--text-secondary);
-}
-.card-text strong {
-  line-height: 18px;
-}
-.card-text span {
-  line-height: 16px;
-}
-.favorite {
-  width: 100%;
-  border: none;
-  border-top: 1px solid var(--border-default, var(--bg-control));
-  border-radius: var(--radius-none);
-  text-align: left;
-}
-.favorite[aria-pressed='true'] {
-  color: var(--color-warning);
+  padding: var(--focus-room);
 }
 .pagination {
   flex-shrink: 0;
   justify-content: center;
-  padding-top: 10px;
+  padding-top: var(--space-3);
   font-size: var(--text-sm);
 }
 .empty {
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 40px 10px;
+  padding: var(--space-10) var(--space-3);
   text-align: center;
 }
 .browse-scenes {
-  margin-top: 12px;
+  margin-top: var(--space-3);
 }
 .inspector {
-  height: 100%;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  overscroll-behavior: contain;
-  scrollbar-gutter: stable;
-  border: none;
-  border-radius: var(--radius-sm);
-  padding: 16px;
-  background: var(--bg-surface);
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: var(--space-stack);
   min-width: 0;
 }
 .inspector > * {
   flex-shrink: 0;
 }
-.inspector-heading {
-  justify-content: space-between;
-  position: sticky;
-  top: -16px;
-  z-index: 1;
-  background: var(--bg-surface);
-  padding: 8px 0;
-}
-.inspector-heading button {
-  flex-shrink: 0;
-}
-.inspector h3 {
-  font-size: var(--text-lg);
-  overflow-wrap: anywhere;
-}
 .path {
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.6;
   overflow-wrap: anywhere;
   user-select: text;
 }
-.detail-image {
-  height: 160px;
-  width: 100%;
-  object-fit: contain;
-  border-radius: var(--radius-xs);
-  background: var(--bg-subtle);
+.preset-type {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--bg-input);
+  font-size: var(--text-xs);
+  font-weight: var(--font-bold);
+}
+.preset-title {
+  font-size: var(--text-3xl);
+  font-weight: var(--font-heavy);
+  overflow-wrap: anywhere;
 }
 label {
   display: block;
   font-size: var(--text-sm);
-  margin-bottom: 8px;
+  margin-bottom: var(--space-2);
 }
-.rename-row input {
+.rename-row .ui-input-field {
   min-width: 0;
   flex: 1;
 }
 .sections dt {
-  margin: 12px 0 6px;
+  margin: var(--space-3) 0 var(--space-2);
   font-size: var(--text-sm);
   font-weight: 600;
 }
@@ -790,69 +664,27 @@ summary {
   font-size: var(--text-sm);
 }
 pre {
-  margin-top: 10px;
+  margin-top: var(--space-3);
   max-height: 350px;
   overflow: auto;
   font-size: var(--text-xs);
   user-select: text;
 }
-.copy-dialog {
-  margin: auto;
-  width: min(520px, calc(100vw - 40px));
-  max-height: calc(100vh - 40px);
-  overflow-y: auto;
-  padding: 24px;
-  color: var(--text-primary);
-  background: var(--bg-surface);
-  border: none;
-  border-radius: var(--radius-icon);
-}
-.copy-dialog::backdrop {
-  background: var(--bg-overlay);
-}
-.copy-dialog h3 {
-  margin-bottom: 14px;
-  font-size: var(--text-lg);
-}
-.copy-dialog p + p {
-  margin-top: 12px;
-}
 .copy-target {
+  margin-top: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
   overflow-wrap: anywhere;
   user-select: text;
 }
-.dialog-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  margin-top: 24px;
-}
-@media (max-width: 1100px) {
-  .content-body.inspecting {
-    grid-template-columns: minmax(0, 1fr) 300px;
-  }
-  .content-grid {
-    grid-template-columns: repeat(auto-fill, minmax(0, 160px));
-  }
-}
-@media (max-width: 900px) {
-  .content-body.inspecting {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .content-body.inspecting .content-list {
-    display: none;
-  }
-}
-.content-grid {
-  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
-  gap: 14px;
-}
-.content-card {
-  background: var(--bg-elevated);
-  border-radius: var(--radius-card);
-}
-.content-card.selected {
-  box-shadow: var(--ring-selected);
+.copy-safety {
+  margin-top: var(--space-3);
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
 }
 .preview-status {
   position: absolute;
@@ -863,6 +695,6 @@ pre {
   border-radius: var(--radius-full);
   color: var(--color-warning);
   font-size: var(--text-xs);
-  padding: 3px 8px;
+  padding: var(--space-1) var(--space-2);
 }
 </style>

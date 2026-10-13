@@ -6,7 +6,7 @@
 
 **Languages / 语言:** [English](#english) · [中文](#中文)
 
-> ⚠️ **Status / 项目状态:** Early development (`v0.1.2`). Features and APIs may change. / 早期开发阶段（`v0.1.2`），功能与接口可能变动。
+> ⚠️ **Status / 项目状态:** Early development (`v0.1.3`). Features and APIs may change. / 早期开发阶段（`v0.1.3`），功能与接口可能变动。
 
 ---
 
@@ -37,7 +37,7 @@ The app uses a Vue 3 frontend talking to a Rust backend via Tauri commands. All 
 - **Download center** — A background download queue with pause / resume / cancel / retry, completed-item cleanup, configurable download settings, and automatic Hub dependency resolution.
 - **One-click sharing** — Preview and export selected resources (and their dependencies) as a ZIP, or export the list of installed packages.
 - **VAM preferences** — Read and edit VAM's own preference files from within the app.
-- **Recycle bin** — Cleanup/deleted items go to an in-app trash with restore, delete, and empty actions; expired trash is auto-purged on startup.
+- **Recycle bin** — Cleanup/deleted items go to an in-app trash with restore, delete, and empty actions; batch retention defaults to 30 days with automatic permanent deletion off. Optional startup purging applies only to expired, completed batches in the active instance; legacy single entries remain for manual review.
 - **Multi-instance settings** — Save multiple VAM instance directories along with download and hosting configuration, Hub auth cookie, and the option to clear the local database.
 - **Live file watching** — Optional file-system watcher keeps the index in sync with on-disk changes.
 - **Bilingual UI** — English (`en-US`) and Simplified Chinese (`zh-CN`), with the choice persisted locally (defaults to Chinese).
@@ -134,11 +134,22 @@ npm run tauri:build
 3. Browse and inspect resources in the Packages, Scenes, Appearances and Dependency views.
 4. Use Deduplication, Migration, Quick import, Download or Share as needed.
 
+### Batch resource cleanup
+
+- Open **Resource cleanup** to browse, search, filter, select and preview packages in one place. All indexed resources are shown by default, largest first; marking packages first is optional. Scan directly from this page when the index is empty or out of date. Optional pending/protection marks and select-all-filtered-results are under **More actions**. Select-this-page and select-all-filtered-results are distinct snapshots; future imports never join an existing selection. Marks are scoped to the canonical game instance and survive clearing the index.
+- **Standalone cleanup** finds packages with no dependencies on other packages and no use by packages, local files, favorites or activation plans. It excludes packages containing scenes by default. Toggle multiple resource types to exclude any package containing one of those types; clear all exclusions to check every type. Missing dependencies, unreadable references and manually protected packages are excluded. Review the usual cleanup preview before moving anything to the recycle bin.
+- **Resource cleanup** also includes the existing deduplication tool and cleanup history. Preview whole VAR packages and every physical copy. Include independent dependencies only when requested; keep individual candidates in the preview to recalculate their dependency closure.
+- Checks cover VAR metadata and serialized JSON/VAP/VAJ references, local `Custom`/`Saves` files, game favorite markers, saved activation plans, fixed numeric versions and `latest` targets. Shared dependencies and protected resources remain by default. If a selected package is still used or references cannot be confirmed, choose **Remove my selected packages anyway**, review known uses and confirm the move. This applies only to explicitly selected packages; automatic attached dependencies remain when any check is incomplete or quick mode is used. Manual protection must be removed first, and mapping/shared-directory safety cannot be overridden. Runtime-generated plugin references cannot be inferred; manually protect resources you need. Managed mappings must first be restored to ordinary directories; directories shared by other configured instances must be separated before cleanup.
+- Reference results are saved per game instance in SQLite and reused after restarting the app. The first cleanup builds missing entries; subsequent previews only read new, changed, or uncached files. A quick directory/file-state check still detects new consumers. Filesystem change stamps detect replacements and edits even when size and modification time are preserved; unsupported filesystems fall back to ZIP directory signatures or local-file hashes. Successful partial indexing is retained after cancellation. Renamed VARs (including copy suffixes such as `.1_2`) are inspected as reference sources without changing their filenames. Archives that cannot be opened at all (HTML/XML download error pages, other archive formats renamed to .var, ZIPs whose directory cannot be read) are reported as problem packages: they can neither use nor be used by anything, so they never block other cleanup and can be removed without an override. Unreadable entries inside an archive and unreadable local files remain uncertain. Previews only report what concerns the selected packages; library-wide format notes are logged instead. A package is never reported as a user of itself. Execution requires acknowledgment for packages the user chose to remove despite known or uncertain use, and for quick checks, then rechecks the live inventory and references before moving files. Restoring a malformed package restores its bytes and prior index record without pretending it passed a new scan.
+- Execution requires the corresponding VaM instance to be closed and revalidates the preview. File moves, rollback and restoration use durable per-instance batch journals. Restore keeps newer indexed tags/import times and never overwrites different contents. Interrupted cleanup is reconciled on startup; unresolved batches remain for recovery.
+- The recycle bin offers batch restore, a 30-day extension and explicit permanent deletion. Defaults: 30-day suggested retention, automatic permanent deletion off. Opt-in startup purging touches only expired, completed batches in the active instance. Legacy single entries are never automatically purged. Moving to trash on the same drive does not free disk space.
+
 ### Recursive deduplication and flattening
 
 - Scan all regular files directly from disk, including unindexed packages. Group VAR files by creator and resource name; keep the highest numeric version, then the most recently modified copy.
-- Preserve explicitly referenced versions from `meta.json` and archive older versions under `依赖旧版本/`. `latest` references do not pin old versions. If dependency metadata cannot be read, retain all versions until repaired; only confirmed same-version duplicates are eligible, and malformed-package groups are kept intact.
-- Other files require both matching names and SHA-256 contents. Cleanup uses the recycle bin and its existing **24-hour automatic purge** policy. Archived dependencies are not recycled.
+- Preserve explicitly referenced versions from `meta.json` and archive older versions under `依赖旧版本/`. `latest` references do not pin old versions. A pinned version needs one surviving copy. If dependency metadata cannot be read, retain all versions until repaired; same-version copies in an affected group can still be recycled when SHA-256 confirms identical contents, keeping the most recently modified copy. Different contents remain protected and are reported as conflicts.
+- Removing identical copies checks the file inventory and relevant archive hashes without parsing unrelated scene or preset contents. Removing an entire package version still requires the full reference check.
+- Other files require both matching names and SHA-256 contents. Cleanup uses the recycle bin and **manual review for legacy entries**; automatic deletion is disabled by default for new cleanup batches. Archived dependencies are not recycled.
 - Deduplicate first, then use **Flatten to root → real AddonPackages → Move**. All regular files are included; the dependency archive remains a separate folder. Conflicting VAR names stay in place; other name collisions receive numeric suffixes.
 - Only empty source subfolders are removed after moves. Copies keep source folders. Links, known managed mappings and internal download directories are excluded. Execution revalidates its saved preview; migrations and dependency archives are recorded for rollback.
 
@@ -180,10 +191,10 @@ VAM Library 是一个用于管理本地 Virt-A-Mate 资源库（`.var` 资源包
 
 ### 主要功能
 
-- **vam管理增强插件** — 在设置中安装 / 更新 / 卸载，支持 VAR 原生解压、作者排序、`AddonPackages` 文件夹浏览、入库时间排序与场景启动联动。入库、扫描和刷新资源时自动同步入库时间。详见[插件说明](mods/SceneBrowser/README.md)。
+- **VaM 管理增强插件** — 在设置中安装 / 更新 / 卸载，支持作者、入库时间和资源包大小排序，`AddonPackages` 文件夹浏览与场景启动联动。记住排序，支持中英文；入库、扫描和刷新资源时自动同步入库时间。详见[插件说明](mods/SceneBrowser/README.md)。
 
 - **仪表盘** — 总览包数量、资源体积、最近新增、库健康状态，并检测损坏的资源包。
-- **包管理** — 浏览已索引的 `.var` 包，支持搜索、文件夹 / 标签筛选、缩略图与场景预览；在包详情中选择场景，点击「启动场景」，通过内置 vam管理增强插件（1.0.4+）打开游戏并加载场景。支持桌面 / OpenVR 模式，游戏已运行时直接加载。可快速删除、管理标签，并在系统文件管理器中打开包或路径。
+- **包管理** — 浏览已索引的 `.var` 包，支持搜索、文件夹 / 标签筛选、缩略图与场景预览；在包详情中选择场景，点击「启动场景」，通过内置 VaM 管理增强插件（1.2.0）打开游戏并加载场景。支持桌面 / OpenVR 模式，游戏已运行时直接加载。可快速删除、管理标签，并在系统文件管理器中打开包或路径。
 - **场景与外观** — 专门的视图用于浏览库中的场景与外观预设。
 - **统计** — 资源库的聚合统计信息。
 - **依赖补全** — 查看依赖关系图、单包依赖关系、反向依赖，并查找缺失的依赖。
@@ -195,7 +206,7 @@ VAM Library 是一个用于管理本地 Virt-A-Mate 资源库（`.var` 资源包
 - **下载中心** — 后台下载队列，支持暂停 / 继续 / 取消 / 重试、清理已完成项、可配置下载设置，以及自动解析 Hub 依赖。
 - **一键分享** — 预览并导出选定资源（及其依赖）为 ZIP，或导出已安装包列表。
 - **VAM 偏好设置** — 在应用内读取和编辑 VAM 自身的偏好设置文件。
-- **回收站** — 清理 / 删除项会进入应用回收站，支持恢复、删除和清空；过期回收站在启动时自动清理。
+- **回收站** — 清理 / 删除项会进入应用回收站，支持恢复、删除和清空；批次默认建议保留 30 天，自动永久删除关闭。开启后仅在启动时检查当前实例的已到期完整批次；历史单项保留供手动处理。
 - **多实例设置** — 保存多个 VAM 实例目录以及相关下载、托管配置、Hub 认证 Cookie，并可选择清空本地数据库。
 - **实时文件监听** — 可选的文件系统监听器，让索引与磁盘变更保持同步。
 - **中英双语界面** — 支持简体中文（`zh-CN`）与英文（`en-US`），选择会本地保存（默认中文）。
@@ -223,6 +234,10 @@ cargo test --manifest-path src-tauri/Cargo.toml real_large_scene_extraction_comp
 - **提取场景角色**：在任意资源列表中点击资源包，展开右侧详情面板的“提取场景角色”，选择包内场景和直接保存的 Person 角色。直接读取所选 VAR，无需依赖资源类型标签或内容索引。填写名称并选择保存目录，默认直接保存为 `Custom/Atom/Person/Appearance/Preset_<名称>.vap`。支持手动编辑完整路径、浏览选择文件夹、恢复默认目录；成功保存后按游戏实例记住目录。预设与缩略图写入同一目录。位于当前游戏外观目录内时，可点击“查看外观预设”定位；保存到其他目录时显示实际路径，需手动加载。保留已保存的基础模型、皮肤、变形、服装、头发及相关材质/物理参数，排除场景位置、控制器动作、动画和插件；同名不覆盖，场景和 VAR 保持不变。VAR 内引用会转换为来源包引用，仍需保留并启用原包及依赖。提取面板显示所选场景的默认预览图，保存时以预设同名复制 JPG/PNG/JPEG 缩略图（保留原格式）；没有预览图时仍可保存预设。该图是场景预览，不是角色独立截图。插件运行时修改或子场景内角色需先在游戏内保存到场景。保存前检查场景是否改变，避免导出旧选择。
 
 ### 技术栈
+
+单资源清理：在资源清理页切换到“单资源清理”，查询既不依赖其他资源包，也没有被资源包、本地文件、收藏或启用方案使用的包。默认排除包含场景的包，可同时选中其他要排除的类型；包内包含任一已选类型就会排除，取消全部排除则查询所有类型。缺失依赖、引用检查不完整和手动保护的资源不会列入。选中后照常预览，再移入回收站。
+
+资源清理：在资源包页进入“整理模式”，支持跨页选择、待清理标记、手动保护和作者 / 体积筛选；“选择本页”和“选择全部筛选结果”独立，新下载不会加入已有选择。资源清理页集中显示待清理资源、现有去重工具和批次记录，并提供“有问题”（无效下载、已损坏、缺少依赖）和“可以考虑清理”（没被用到、旧版本、多份副本）筛选；“没被用到”只统计贴图、变形、素材这类依赖包。预览只显示与所选包相关的内容，结论在前，并列出“只被它们用到的依赖”能多腾出的空间。预览针对完整 VAR 与全部物理副本，可选择保留某个包并重新计算依赖。收藏、本地场景 / 预设、启用方案、固定版本与共享依赖默认保留。用户仍想移走某个包时，可在预览里对这个包选择“仍然移走”，或“连同使用它的包一起清理”，确认后移入回收站；只覆盖明确选择的包。引用不完整或快速检查时，自动附带的依赖继续保留；手动保护需先取消，目录映射和共用目录的安全限制仍保留。游戏可接受的非标准 JSON 格式会保守提取引用，完整检查后只记入日志，不在预览中显示，也不阻止清理；缺少 meta.json 的包在完整模式下仍检查全部引用文件。带 `.1_2` 等复制后缀的包仍检查内容引用，不修改原文件名；完全打不开的压缩包（下载失败存下的 HTML/XML 网页、改了扩展名的 7z / RAR、读不出目录的损坏 ZIP）归为问题包，不阻止其他资源清理，选中后无需“仍然移走”即可移入回收站。压缩包内个别文件无法读取、字符串未结束、无效编码或本地文件截断等情况保留不确定提示，停止自动清理依赖，但用户可确认后移走选中包。恢复异常包会恢复原文件；能够解析的非标准名称会补全资源记录，仍无法解析的文件保留之前的检查记录和扫描失败状态。兼容规则升级后旧引用缓存会重新建立一次，后续复用结果。执行前关闭对应游戏，并重新验证预览。取消或失败会尝试回退整个批次，意外退出后保留日志供恢复；恢复不覆盖不同内容，并优先保留已更新的标签和入库时间。回收站默认建议保留 30 天，自动永久删除关闭；开启后仅在应用启动时处理当前实例已到期的完整批次。历史单项不会自动清空，清空索引仍保留整理状态与回收记录。插件运行时生成的引用无法静态推断，请手动保护需要的资源；按需托管映射需先恢复普通目录；多个已配置实例共用的目录需先拆分。
 
 | 层级 | 技术 |
 | --- | --- |
@@ -283,7 +298,24 @@ cargo test --locked --manifest-path src-tauri/Cargo.toml
 
 Hub 描述保留普通 HTML 和 BBCode，经 DOMPurify 清理后显示；脚本、事件属性、危险链接和页面覆盖样式不会进入界面。jsdom 仅用于测试这一边界，不进入桌面运行包。
 
+去重分析提供两种方式：默认“快速查找”先按文件大小筛选，再用完整 SHA-256 比较所有 VAR，文件名不同也能归组；“仔细查找”进一步按 ZIP 文件目录筛选，流式比较全部包内文件（包含 meta.json），识别重新压缩后的相同内容，不生成解压临时文件。整包已确认相同的副本只需选一个代表读取包内内容。与旧版本整理合并为一份预览，每个文件仅出现一次；同名内容冲突会保留，独立名称的引用和手动保护不会被内容相同绕过。
+
+两种方式共享按资源目录保存的检查缓存，通过文件身份和可靠变更标记失效；没有可靠标记时重新检查。界面使用左侧分组、右侧文件对比，区分可清理和需要保留的资源，清理前仍需核对清单；支持停止查找，并显示查找与整理的实际阶段进度。文件内容校验按文件顺序执行以限制磁盘占用；深度比较限制条目数和展开大小，异常或重复的包内路径不会成为相同内容的证据。执行前只复核本次涉及的文件及保留副本，Windows 下持有阻止写入的文件句柄直至操作完成；确认文件身份、可靠变更标记与分析时一致后复用内容比较结果，避免整理时再次完整读取或解压。文件变化、缺少可靠标记或无法阻止写入的平台仍完整复核；跨名称清理仍进行完整引用检查，支持回收站恢复。
+
+文件名按第一个点拆作者、最后一个点拆版本，中间保留为完整名称。`.1_2`、`.1 (2)`、`.v3`、`.latest` 或没有版本的名称会继续尝试读取包内容，保留原文件名和完整标识；未知版本不参与数字版本匹配，仍提示文件名异常。`.1`、`.01` 和 `.1_2` 不会合并成同一个包。更新后重新扫描即可补全原先因名称异常而缺失的资源记录。
+
 扫描需要完整读取目录清单，目录读取失败时保留已有索引并报告错误；大资源库不再受单条清理 SQL 的参数数量限制。设置采用完整文件替换写入，损坏的 JSON 会报告错误，不会在修改实例或登录信息时静默重置。
+
+开发模式的后端 `[perf]` 日志会分别记录依赖任务等待、数据库等锁、快照读取和匹配耗时，以及缩略图路径查询、缓存读取和图片提取耗时；前端 `[perf:ipc]` 是包含 IPC 往返的总耗时。依赖分析按事务版本共享结果，扫描、入库和删除提交后自动失效。扫描保留未变化文件的图片缓存，文件身份或变更时间改变时重新提取；无法取得可靠变更标记时不复用磁盘缓存，显式清空缓存仍然有效。
+
+可用只读基准检查实际资源库的匹配结果与耗时（PowerShell）：
+
+```powershell
+$env:VAM_BENCH_DB = 'C:\path\to\vamlibrary.db'
+cargo test --locked --manifest-path src-tauri/Cargo.toml benchmark_local_missing_dependencies -- --ignored --nocapture
+```
+
+基准以同一数据库快照比较旧算法和新算法，逐项校验缺失记录，并输出数据量、快照读取耗时和新算法 10 次匹配的中位数 / P95；它不代表完整页面加载耗时。
 
 ### 常用脚本
 
@@ -333,8 +365,9 @@ Hub 描述保留普通 HTML 和 BBCode，经 DOMPurify 清理后显示；脚本�
 ### 全目录去重与平铺迁移
 
 - 去重直接递归扫描所选目录中的所有普通文件，无需先入库。`.var` 按作者与资源名分组，保留最高数字版本；版本相同保留修改时间最新的一份。
-- `meta.json` 中明确引用的旧版本保留并集中到资源根目录的 `依赖旧版本/`；`latest` 引用不固定旧版本。依赖无法读取时显示异常，暂时保留各版本，只清理可确认的同版本副本；异常包所在分组全部保留。
-- 其他文件仅在同名且 SHA-256 内容摘要相同时去重。清理文件进入回收站，沿用 **24 小时自动清理**策略；归档旧版本不会进入回收站。
+- `meta.json` 中明确引用的旧版本保留并集中到资源根目录的 `依赖旧版本/`；`latest` 引用不固定旧版本。固定版本依赖只需保留一份副本。依赖无法读取时显示异常，暂时保留各版本；异常分组的同版本文件经 SHA-256 确认内容完全相同后，仍可回收多余副本并保留修改时间最新的一份。内容不同的文件保留并提示冲突。
+- 清理相同副本时只检查文件清单和相关包的内容摘要，不重新解析其他包的场景与预设。删除某个版本的全部副本时仍执行完整引用检查。
+- 其他文件仅在同名且 SHA-256 内容摘要相同时去重。清理文件进入回收站，历史单项由用户确认后手动清空；新批次默认关闭自动永久删除；归档旧版本不会进入回收站。
 - 推荐先确认去重页的“回收 / 归档”清单，再选择迁移的“平铺到根目录”、真实目录及移动。迁移覆盖未索引包、文档、图片等全部普通文件；平铺保留 `依赖旧版本/` 目录。
 - 预览检查磁盘目标和批次内同名冲突：VAR 不改名、不覆盖，冲突项留在原位置并提示先去重；其他同名文件添加序号，保留双方。
 - 移动后仅清理源目录的空子目录；复制不清理目录。根目录、非空目录、链接、下载暂存目录及已知托管映射不会被清理。
@@ -350,7 +383,7 @@ Hub 描述保留普通 HTML 和 BBCode，经 DOMPurify 清理后显示；脚本�
 
 - 本地 SQLite 索引用于缓存扫描结果、依赖关系、标签、迁移记录和下载状态。
 - 清空本地数据只会清除应用数据库，不会删除真实的 VAM 资源文件。
-- 删除和去重清理会优先进入 VAM Library 回收站，回收站内资源会按应用策略自动清理。
+- 删除和去重清理会优先进入 VAM Library 回收站，新批次默认建议保留 30 天且不自动永久删除，历史单项不会自动删除。
 - 资源迁移、快捷入库和下载操作会涉及真实文件的移动或复制，执行前请确认预览内容。
 
 ### 参与开发

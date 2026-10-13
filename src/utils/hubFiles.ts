@@ -18,11 +18,13 @@ export interface HubFileCandidate {
 export function parsePackageId(packageId: string) {
   const parts = packageId.replace(/\.var$/i, '').split('.')
   if (parts.length < 2) return null
-  const version = parts.length > 2 ? Number.parseInt(parts[parts.length - 1], 10) : NaN
+  if (parts.some(part => !part.trim() || part.trim() !== part)) return null
+  const text = parts.length > 2 ? parts[parts.length - 1] : ''
+  const version = /^\d+$/.test(text) ? Number(text) : NaN
   return {
     creator: parts[0],
     name: parts.length === 2 ? parts[1] : parts.slice(1, -1).join('.'),
-    version: Number.isFinite(version) ? version : null,
+    version: Number.isInteger(version) && version <= 2147483647 ? version : null,
   }
 }
 

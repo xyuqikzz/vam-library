@@ -4,7 +4,7 @@
       <div class="stat-icon-wrapper">
         <Icon :size="20" :path="icon" />
       </div>
-      <div v-if="trend" :class="['stat-trend', `trend-${trend}`]">
+      <div v-if="trend && trend !== 'neutral'" :class="['stat-trend', `trend-${trend}`]">
         <Icon v-if="trend === 'up'" :size="12" name="outline-4" />
         <Icon v-else-if="trend === 'down'" :size="12" name="outline-5" />
         <Icon v-else :size="12" name="outline-6" />
@@ -35,28 +35,18 @@ withDefaults(defineProps<Props>(), {
 
 <style scoped>
 .stat-card {
-  background: var(--bg-surface);
+  background: var(--bg-elevated);
   border: none;
   border-radius: var(--radius-lg);
   box-shadow: none;
-  padding: var(--space-5);
-  transition:
-    transform var(--duration-base) var(--ease),
-    box-shadow var(--duration-base) var(--ease),
-    border-color var(--duration-base) var(--ease);
-}
-
-.stat-card:hover {
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-md);
-  border-color: var(--border-strong);
+  padding: var(--space-4) var(--space-panel);
 }
 
 .stat-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: var(--space-4);
+  margin-bottom: var(--space-3);
 }
 
 .stat-icon-wrapper {

@@ -1,244 +1,71 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { PackageImageEntry } from '@/types/package'
-import UiModal from '@/components/ui/UiModal.vue'
+import UiDetailModal, { type DetailImage } from '@/components/ui/UiDetailModal.vue'
 import UiButton from '@/components/ui/UiButton.vue'
-import Icon from '@/components/ui/Icon.vue'
+import { focusInitial } from '@/components/ui/overlay'
 const props = defineProps<{
   open: boolean
   title: string
+  packageId: string
   images: PackageImageEntry[]
   imageUrls: Record<string, string>
   fallbackImage?: string | null
   busy?: boolean
+  canGoBack?: boolean
 }>()
-const emit = defineEmits<{ close: []; image: [image: PackageImageEntry] }>()
+const emit = defineEmits<{ close: []; back: []; image: [image: PackageImageEntry] }>()
 const { t } = useI18n()
-const index = ref(0),
-  fullscreen = ref(false)
-const current = computed(() => props.images[index.value])
-const url = computed(() =>
-  current.value ? props.imageUrls[current.value.path] : props.fallbackImage,
-)
-function select(next: number) {
-  if (!props.images.length) return
-  index.value = (next + props.images.length) % props.images.length
-  emit('image', props.images[index.value])
-}
-watch(
-  () => props.open,
-  (open) => {
-    if (open) select(0)
-    else fullscreen.value = false
-  },
-)
-watch(
-  () => props.title,
-  () => {
-    index.value = 0
-    fullscreen.value = false
-  },
-)
-function keys(event: KeyboardEvent) {
-  if ((event.target as HTMLElement).matches('input, textarea, select, [contenteditable="true"]'))
-    return
-  if (event.key === 'ArrowLeft') {
-    event.preventDefault()
-    select(index.value - 1)
-  }
-  if (event.key === 'ArrowRight') {
-    event.preventDefault()
-    select(index.value + 1)
-  }
+const backButton = ref<InstanceType<typeof UiButton> | null>(null)
+defineExpose({ focusBack: () => { if (backButton.value?.element) focusInitial(backButton.value.element) } })
+const galleryImages = computed<DetailImage[]>(() => props.images.map(image => ({
+  key: image.path,
+  label: image.path,
+  url: props.imageUrls[image.path] || null,
+})))
+function selectImage(index: number) {
+  const image = props.images[index]
+  if (image) emit('image', image)
 }
 </script>
 <template>
-  <UiModal
+  <UiDetailModal
     v-if="open"
-    wide
-    :aria-label="title"
-    :show-close="false"
-    :close-disabled="busy"
+    class="package-detail-modal"
+    :label="title"
+    :images="galleryImages"
+    :fallback-image="fallbackImage"
+    :content-key="packageId"
+    :busy="busy"
     @close="emit('close')"
+    @select="selectImage"
   >
-    <div class="package-detail-modal" :class="{ fullscreen }" @keydown="keys">
-      <div class="gallery">
-        <div class="gallery-image">
-          <img v-if="url" data-resource-preview :src="url" :alt="current?.path || title" />
-          <Icon v-else name="image" :size="34" />
-          <UiButton
-            class="gallery-previous"
-            icon="chevron-left"
-            icon-only
-            size="lg"
-            :aria-label="t('ui.previousImage')"
-            :disabled="images.length < 2"
-            @click="select(index - 1)"
-          />
-          <UiButton
-            class="gallery-next"
-            icon="chevron-right"
-            icon-only
-            size="lg"
-            :aria-label="t('ui.nextImage')"
-            :disabled="images.length < 2"
-            @click="select(index + 1)"
-          />
-          <span class="gallery-caption">
-            {{ images.length ? index + 1 : 0 }} / {{ images.length }} · {{ current?.path || title }}
-          </span>
-          <UiButton
-            class="gallery-fullscreen"
-            icon="expand"
-            icon-only
-            :aria-label="t('ui.fullscreen')"
-            :aria-pressed="fullscreen"
-            @click="fullscreen = !fullscreen"
-          />
-        </div>
-        <div class="gallery-thumbnails">
-          <button
-            v-for="(image, i) in images"
-            :key="image.path"
-            type="button"
-            :class="{ active: i === index }"
-            :aria-label="image.path"
-            :title="image.path"
-            @click="select(i)"
-          >
-            <img
-              v-if="imageUrls[image.path]"
-              data-resource-preview
-              :src="imageUrls[image.path]"
-              :alt="image.path"
-            />
-            <Icon v-else name="image" :size="20" />
-          </button>
-        </div>
-        <p class="gallery-help">{{ t('ui.imageHelp') }}</p>
-      </div>
-      <div class="gallery-details">
-        <UiButton
-          class="gallery-close"
-          variant="ghost"
-          size="sm"
-          icon="close"
-          icon-only
-          :aria-label="t('common.close')"
-          :disabled="busy"
-          @click="emit('close')"
-        />
-        <slot />
-      </div>
-    </div>
-  </UiModal>
-  <slot v-else />
+    <template v-if="canGoBack" #gallery-overlay>
+      <UiButton
+        ref="backButton"
+        class="dependency-back"
+        size="sm"
+        icon="chevron-left"
+        :disabled="busy"
+        @click="emit('back')"
+      >{{ t('ui.backToPreviousPackage') }}</UiButton>
+    </template>
+    <template #header-actions><slot name="header-actions" /></template>
+    <slot />
+  </UiDetailModal>
+  <!--
+    没打开详情时也要挂着内容：卡片右键菜单、快捷键、卡片上的启动按钮都通过这里的操作组件执行。
+    只是不显示，不占位置，也不能被 Tab 到。
+  -->
+  <div v-else class="package-detail-headless" hidden>
+    <slot name="header-actions" />
+    <slot />
+  </div>
 </template>
 <style scoped>
-.package-detail-modal {
-  display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(320px, 1fr);
-  gap: 22px;
-  min-width: 0;
-}
-.gallery {
-  min-width: 0;
-}
-.gallery-image {
-  position: relative;
-  aspect-ratio: 4 / 3;
-  display: grid;
-  place-items: center;
-  border-radius: var(--radius-card);
-  background: var(--bg-input);
-  color: var(--text-tertiary);
-  overflow: hidden;
-}
-.gallery-image > img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-}
-.gallery-previous,
-.gallery-next {
-  position: absolute;
-  top: calc(50% - 22px);
-  background: var(--bg-on-image);
-}
-.gallery-previous {
-  left: 12px;
-}
-.gallery-next {
-  right: 12px;
-}
-.gallery-fullscreen {
-  position: absolute;
-  bottom: 10px;
-  right: 10px;
-  background: var(--bg-on-image);
-}
-.gallery-caption {
-  position: absolute;
-  bottom: 12px;
-  left: 12px;
-  max-width: calc(100% - 76px);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  padding: 4px 8px;
-  background: var(--bg-on-image);
-  border-radius: var(--radius-full);
-  color: var(--text-primary);
-  font-size: var(--text-xs);
-}
-.gallery-thumbnails {
-  display: grid;
-  grid-template-columns: repeat(8, minmax(0, 1fr));
-  gap: 8px;
-  margin-top: 12px;
-}
-.gallery-thumbnails button {
-  display: grid;
-  place-items: center;
-  aspect-ratio: 1;
-  overflow: hidden;
-  border-radius: var(--radius-thumbnail);
-  background: var(--bg-input);
-  color: var(--text-tertiary);
-}
-.gallery-thumbnails img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-.gallery-thumbnails .active {
-  box-shadow: var(--ring-selected);
-}
-.gallery-help {
-  margin-top: 14px;
-  font-size: var(--text-sm);
-  color: var(--text-tertiary);
-}
-.gallery-details {
-  min-width: 0;
-  position: relative;
-}
-.gallery-close {
-  position: absolute;
-  right: 0;
-  top: 0;
-  z-index: 1;
-}
-.fullscreen {
-  grid-template-columns: 1fr;
-}
-.fullscreen .gallery-details {
-  display: none;
-}
-@media (max-width: 850px) {
-  .package-detail-modal {
-    grid-template-columns: minmax(0, 1fr);
-  }
+/* 详情弹窗自带左右留白，面板自己的内边距去掉 */
+:global(.package-detail-modal .detail-body) {
+  padding: 0;
 }
 </style>

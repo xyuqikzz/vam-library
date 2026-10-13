@@ -10,7 +10,7 @@ use std::{
     path::{Path, PathBuf},
     sync::Mutex,
 };
-use tauri::State;
+use tauri::{State, Manager};
 
 const APPEARANCE: &str = "Custom/Atom/Person/Appearance/";
 const PRESET_TYPES: &[(&str, &str)] = &[
@@ -245,22 +245,9 @@ fn packages(
 
 fn package_by_id(db: &Database, ctx: &Context, id: &str) -> Result<Option<PackageSource>, String> {
     component(id)?;
-    let path: Option<String> = db
-        .with_conn(|conn| {
-            use rusqlite::OptionalExtension;
-            conn.query_row("SELECT file_path FROM packages WHERE id = ?1", [id], |r| {
-                r.get(0)
-            })
-            .optional()
-            .map_err(Into::into)
-        })
-        .map_err(|e| e.to_string())?;
-    let Some(path) = path else {
-        return Ok(None);
-    };
-    let Some(actual) = fs::canonicalize(path)
-        .ok()
-        .filter(|p| p.is_file() && ctx.package_roots.iter().any(|root| p.starts_with(root)))
+    let Some(actual) = crate::services::resource_files::resolve_indexed_package_file(
+        db, id, &ctx.package_roots,
+    )?
     else {
         return Ok(None);
     };
@@ -271,15 +258,18 @@ fn package_by_id(db: &Database, ctx: &Context, id: &str) -> Result<Option<Packag
     }))
 }
 
+#[cfg(test)]
 fn package_scenes(ctx: &Context, package: &PackageSource) -> Result<ContentCatalog, String> {
-    let zip = zip::ZipArchive::new(File::open(&package.file).map_err(|e| e.to_string())?)
-        .map_err(|e| format!("无法读取资源包: {e}"))?;
+    let zip = crate::services::resource_files::open_var_archive(&package.file)?;
+    scene_catalog(ctx, package, zip.file_names().filter(|path| is_content(path, "scene")).map(str::to_owned).collect())
+}
+fn scene_catalog(ctx: &Context, package: &PackageSource, paths: Vec<String>) -> Result<ContentCatalog, String> {
     let mut items = vec![];
     let mut warnings = vec![];
-    for path in zip.file_names().filter(|path| is_content(path, "scene")) {
+    for path in paths {
         let source = ContentRef {
             package_id: Some(package.id.clone()),
-            path: path.into(),
+            path: path.clone(),
         };
         match item(&ctx.root, source, true) {
             Ok(item) => items.push(item),
@@ -295,18 +285,18 @@ fn package_scenes(ctx: &Context, package: &PackageSource) -> Result<ContentCatal
 }
 
 #[tauri::command]
-pub async fn list_package_scene_contents(
-    app: tauri::AppHandle,
-    db: State<'_, Database>,
-    vam_root: String,
-    package_id: String,
-) -> Result<ContentCatalog, String> {
-    let ctx = context(&app, &vam_root)?;
-    let package =
-        package_by_id(&db, &ctx, &package_id)?.ok_or("资源包不存在或不属于当前游戏实例")?;
-    tauri::async_runtime::spawn_blocking(move || package_scenes(&ctx, &package))
-        .await
-        .map_err(|e| e.to_string())?
+pub async fn list_package_scene_contents(app: tauri::AppHandle, vam_root: String, package_id: String) -> Result<ContentCatalog, String> {
+    let _timer = crate::services::perf::CommandTimer::new("list_package_scene_contents");
+    tauri::async_runtime::spawn_blocking(move || {
+        let ctx = context(&app, &vam_root)?;
+        let package = package_by_id(&app.state::<Database>(), &ctx, &package_id)?.ok_or("资源包不存在或不属于当前游戏实例")?;
+        let directory = app.path().app_data_dir().map_err(|e| e.to_string())?.join(crate::services::preview_cache::DIRECTORY);
+        let paths = crate::services::preview_cache::PreviewCache::new(&directory, &package.file, "scene-list")?.json(|| {
+            let zip = crate::services::resource_files::open_var_archive(&package.file)?;
+            Ok(zip.file_names().filter(|path| is_content(path, "scene")).map(str::to_owned).collect::<Vec<_>>())
+        })?;
+        scene_catalog(&ctx, &package, paths)
+    }).await.map_err(|e| e.to_string())?
 }
 fn scene_launch_path(ctx: &Context, sources: &[PackageSource], source: &ContentRef) -> Result<String, String> {
     source.validate()?;
@@ -334,7 +324,8 @@ fn scene_launch_path(ctx: &Context, sources: &[PackageSource], source: &ContentR
 }
 
 #[tauri::command]
-pub async fn launch_game_scene(app: tauri::AppHandle, db: State<'_, Database>, vam_root: String, source: ContentRef, mode: String) -> Result<(), String> {
+pub async fn launch_game_scene(app: tauri::AppHandle, db: State<'_, Database>, vam_root: String, source: ContentRef, mode: String, on_progress: tauri::ipc::Channel<String>) -> Result<crate::services::scene_launch::LaunchOutcome, crate::services::scene_launch::LaunchError> {
+    let _execution = crate::commands::cleanup::execution_guard(&app)?;
     let ctx = context(&app, &vam_root)?;
     let sources = packages(&db, &ctx, Some(&source))?;
     let (root, directory, path) = tauri::async_runtime::spawn_blocking(move || {
@@ -343,7 +334,7 @@ pub async fn launch_game_scene(app: tauri::AppHandle, db: State<'_, Database>, v
         let path = scene_launch_path(&ctx, &sources, &source)?;
         Ok::<_, String>((ctx.root, directory, path))
     }).await.map_err(|e| e.to_string())??;
-    crate::services::scene_launch::launch(root, directory, path, mode).await
+    crate::services::scene_launch::launch(root, directory, path, mode, Some(on_progress)).await
 }
 
 fn favorite_path(root: &Path, source: &ContentRef) -> Result<PathBuf, String> {
@@ -421,7 +412,7 @@ fn catalog(
         for path in package.entries.iter().filter(|p| is_content(p, kind)) {
             let source = ContentRef {
                 package_id: Some(package.id.clone()),
-                path: path.clone(),
+                path: path.into(),
             };
             match item(&ctx.root, source, package.file.is_file()) {
                 Ok(i) => {
@@ -550,16 +541,13 @@ fn preview_file(
     packages: &[PackageSource],
     source: &ContentRef,
 ) -> Result<Option<(String, Vec<u8>)>, String> {
+    let mut archive = if source.package_id.is_some() {
+        Some(crate::services::resource_files::open_var_archive(&source_package(packages, source)?.file)?)
+    } else { None };
     for path in image_candidates(&source.path) {
-        let bytes = if source.package_id.is_some() {
-            let package = source_package(packages, source)?;
-            let mut zip =
-                zip::ZipArchive::new(File::open(&package.file).map_err(|e| e.to_string())?)
-                    .map_err(|e| e.to_string())?;
-            if zip.index_for_name(&path).is_none() {
-                continue;
-            }
-            zip_read(&mut zip, &path)?
+        let bytes = if let Some(zip) = archive.as_mut() {
+            if zip.index_for_name(&path).is_none() { continue; }
+            zip_read(zip, &path)?
         } else {
             let path = safe_path(&ctx.root, &path)?;
             if !path.is_file() {
@@ -1124,6 +1112,7 @@ pub async fn save_game_scene_appearance(
     let ctx = context(&app, &vam_root)?;
     let sources = packages(&db, &ctx, Some(&source))?;
     tauri::async_runtime::spawn_blocking(move || {
+        let _maintenance = crate::services::resource_files::maintenance_lock()?;
         let _guard = CONTENT_LOCK.lock().map_err(|e| e.to_string())?;
         save_scene_appearance_to(
             &ctx,
@@ -1454,18 +1443,28 @@ pub async fn get_game_content_detail(
     .map_err(|e| e.to_string())?
 }
 #[tauri::command]
-pub async fn get_game_content_image(
-    app: tauri::AppHandle,
-    db: State<'_, Database>,
-    vam_root: String,
-    source: ContentRef,
-) -> Result<Option<String>, String> {
+pub async fn get_game_content_image(app: tauri::AppHandle, vam_root: String, source: ContentRef) -> Result<Option<String>, String> {
+    let _timer = crate::services::perf::CommandTimer::new("get_game_content_image");
     source.validate()?;
-    let ctx = context(&app, &vam_root)?;
-    let sources = packages(&db, &ctx, Some(&source))?;
-    tauri::async_runtime::spawn_blocking(move || preview(&ctx, &sources, &source))
-        .await
-        .map_err(|e| e.to_string())?
+    tauri::async_runtime::spawn_blocking(move || {
+        let ctx = context(&app, &vam_root)?;
+        let sources = packages(&app.state::<Database>(), &ctx, Some(&source))?;
+        let stamp_source = if source.package_id.is_some() {
+            source_package(&sources, &source)?.file.clone()
+        } else {
+            // Local previews can change independently of their JSON. Missing previews
+            // use the containing directory's stamp so creating a photo invalidates None.
+            let mut image = None;
+            for candidate in image_candidates(&source.path) {
+                let path = safe_path(&ctx.root, &candidate)?;
+                if path.is_file() { image = Some(path); break; }
+            }
+            image.unwrap_or(safe_path(&ctx.root, &source.path)?.parent().ok_or("无效预览目录")?.to_path_buf())
+        };
+        let directory = app.path().app_data_dir().map_err(|e| e.to_string())?.join(crate::services::preview_cache::DIRECTORY);
+        crate::services::preview_cache::PreviewCache::new(&directory, &stamp_source, &format!("content:{}", source.path))?
+            .image(|| preview_file(&ctx, &sources, &source))
+    }).await.map_err(|e| e.to_string())?
 }
 #[tauri::command]
 pub async fn copy_game_presets(
@@ -1486,12 +1485,56 @@ pub async fn copy_game_presets(
         }
     }
     tauri::async_runtime::spawn_blocking(move || {
+        let _maintenance = crate::services::resource_files::maintenance_lock()?;
         let _guard = CONTENT_LOCK.lock().map_err(|e| e.to_string())?;
         Ok(copy_all(&ctx, &sources, source.as_ref(), &kind))
     })
     .await
     .map_err(|e| e.to_string())?
 }
+#[tauri::command]
+pub async fn list_favorite_package_ids(
+    app: tauri::AppHandle,
+    vam_root: String,
+) -> Result<Vec<FavoritePackage>, String> {
+    let ctx = context(&app, &vam_root)?;
+    tauri::async_runtime::spawn_blocking(move || favorite_package_ids(&ctx.root))
+        .await.map_err(|e| e.to_string())?
+}
+
+#[derive(Debug, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct FavoritePackage {
+    package_id: String,
+    count: usize,
+}
+
+// Favorites are scene markers, not archive metadata. Never open VARs to collect them.
+fn favorite_package_ids(root: &Path) -> Result<Vec<FavoritePackage>, String> {
+    let prefs = safe_path(root, "AddonPackagesFilePrefs")?;
+    if !prefs.exists() { return Ok(Vec::new()); }
+    let mut counts = BTreeMap::<String, usize>::new();
+    for entry in fs::read_dir(&prefs).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let meta = fs::symlink_metadata(entry.path()).map_err(|e| e.to_string())?;
+        if !meta.is_dir() || is_link(&meta) { continue; }
+        let id = entry.file_name().to_string_lossy().to_lowercase();
+        if component(&id).is_err() { continue; }
+        let package_dir = entry.path();
+        for marker in walkdir::WalkDir::new(&package_dir).follow_links(false).into_iter()
+            .filter_entry(|entry| fs::symlink_metadata(entry.path()).map(|meta| !is_link(&meta)).unwrap_or(false)) {
+            let marker = marker.map_err(|e| e.to_string())?;
+            if !marker.file_type().is_file() { continue; }
+            let path = marker.path().strip_prefix(&package_dir).map_err(|e| e.to_string())?
+                .to_string_lossy().replace('\\', "/").to_ascii_lowercase();
+            if path.strip_suffix(".fav").is_some_and(|scene| is_content(scene, "scene")) {
+                *counts.entry(id.clone()).or_default() += 1;
+            }
+        }
+    }
+    Ok(counts.into_iter().map(|(package_id, count)| FavoritePackage { package_id, count }).collect())
+}
+
 #[tauri::command]
 pub async fn set_game_scene_favorite(
     app: tauri::AppHandle,
@@ -1503,6 +1546,7 @@ pub async fn set_game_scene_favorite(
     let ctx = context(&app, &vam_root)?;
     let sources = packages(&db, &ctx, Some(&source))?;
     tauri::async_runtime::spawn_blocking(move || {
+        let _maintenance = crate::services::resource_files::maintenance_lock()?;
         let _guard = CONTENT_LOCK.lock().map_err(|e| e.to_string())?;
         set_favorite(&ctx, &sources, &source, favorite)
     })
@@ -1518,6 +1562,7 @@ pub async fn rename_game_preset(
 ) -> Result<ContentRef, String> {
     let ctx = context(&app, &vam_root)?;
     tauri::async_runtime::spawn_blocking(move || {
+        let _maintenance = crate::services::resource_files::maintenance_lock()?;
         let _guard = CONTENT_LOCK.lock().map_err(|e| e.to_string())?;
         rename_preset(&ctx, &source, name.trim())
     })
@@ -1551,6 +1596,23 @@ pub async fn set_game_scene_name(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn favorite_packages_count_only_scene_markers_without_archives() {
+        let f = Fixture::new();
+        assert!(favorite_package_ids(&f.ctx.root).unwrap().is_empty());
+        for path in [
+            "AddonPackagesFilePrefs/Author.Pack.1/Saves/scene/First.json.fav",
+            "AddonPackagesFilePrefs/Author.Pack.1/Saves/scene/Nested/Second.JSON.FAV",
+            "AddonPackagesFilePrefs/Author.Pack.10/Saves/scene/First.json.fav",
+            "AddonPackagesFilePrefs/Author.Pack.1/Custom/Atom/Person/Appearance/Preset.vap.fav",
+            "AddonPackagesFilePrefs/Author.Pack.1/Saves/scene/Third.json",
+            "Saves/scene/Local.json.fav",
+        ] { f.put(path, b""); }
+        assert_eq!(favorite_package_ids(&f.ctx.root).unwrap(), vec![
+            FavoritePackage { package_id: "author.pack.1".into(), count: 2 },
+            FavoritePackage { package_id: "author.pack.10".into(), count: 1 },
+        ]);
+    }
     fn save_scene_appearance(
         ctx: &Context,
         packages: &[PackageSource],
@@ -1678,6 +1740,88 @@ mod tests {
         assert!(package_scenes(&f.ctx, &empty).unwrap().items.is_empty());
         fs::write(&empty.file, b"not a zip").unwrap();
         assert!(package_scenes(&f.ctx, &empty).is_err());
+    }
+
+    #[test]
+    fn package_panel_reads_physical_packages_without_metadata_and_exports_scenes() {
+        let f = Fixture::new();
+        let scene = serde_json::to_vec(&scene_fixture()).unwrap();
+        // Nonstandard filenames are retained by the scanner only in physical_packages.
+        let package = f.package("JYY happy cafe", &[("Saves/scene/Cafe.json", &scene)]);
+        let db = Database::new(&f.ctx.root.join("test.db")).unwrap();
+        db.with_conn(|conn| {
+            conn.execute("INSERT INTO physical_packages(file_path,package_id,scan_time,scan_status,last_error) VALUES (?1,?2,'now','failed','invalid filename')", rusqlite::params![package.file.to_string_lossy(), package.id])?;
+            Ok(())
+        }).unwrap();
+
+        let resolved = package_by_id(&db, &f.ctx, &package.id).unwrap().unwrap();
+        let list = package_scenes(&f.ctx, &resolved).unwrap();
+        assert_eq!(list.items.len(), 1);
+        assert!(list.warnings.is_empty());
+        let source = &list.items[0].source;
+        let sources = packages(&db, &f.ctx, Some(source)).unwrap();
+        let detail = scene_extraction_detail(&f.ctx, &sources, source).unwrap();
+        assert!(!detail.characters.is_empty());
+        let target = save_scene_appearance(
+            &f.ctx, &sources, source, &detail.revision, 2, "FromPhysicalPackage",
+        ).unwrap();
+        assert!(f.ctx.root.join(target).is_file());
+
+        let outside = Fixture::new();
+        assert!(package_by_id(&db, &outside.ctx, &package.id).unwrap().is_none());
+        fs::write(&package.file, b"not a zip").unwrap();
+        let corrupt = package_by_id(&db, &f.ctx, &package.id).unwrap().unwrap();
+        assert!(package_scenes(&f.ctx, &corrupt).err().unwrap().contains("无法读取资源包"));
+        fs::remove_file(&package.file).unwrap();
+        assert!(package_by_id(&db, &f.ctx, &package.id).unwrap().is_none());
+    }
+
+    #[test]
+    fn package_lookup_skips_stale_or_foreign_paths_before_current_physical_copy() {
+        let f = Fixture::new();
+        let outside = Fixture::new();
+        let package = f.package("Author.Scene.1", &[("Saves/scene/One.json", b"{}")]);
+        let foreign = outside.package(&package.id, &[("Saves/scene/One.json", b"{}")]);
+        let stale = f.ctx.root.join("AddonPackages/Missing.var");
+        let db = Database::new(&f.ctx.root.join("test.db")).unwrap();
+        db.with_conn(|conn| {
+            conn.execute("INSERT INTO packages(id,creator,name,version,file_path,scan_time) VALUES (?1,'Author','Scene',1,?2,'now')", rusqlite::params![package.id, stale.to_string_lossy()])?;
+            for path in [&foreign.file, &stale, &f.ctx.root.join("AddonPackages"), &package.file] {
+                conn.execute("INSERT INTO physical_packages(file_path,package_id,scan_time) VALUES (?1,?2,'now')", rusqlite::params![path.to_string_lossy(), package.id])?;
+            }
+            Ok(())
+        }).unwrap();
+        assert_eq!(package_by_id(&db, &f.ctx, &package.id).unwrap().unwrap().file, package.file);
+
+        fs::remove_file(&package.file).unwrap();
+        assert!(package_by_id(&db, &f.ctx, &package.id).unwrap().is_none());
+    }
+
+    #[test]
+    #[ignore = "reads a selected real VAR without modifying the game; set VAM_PACKAGE_TEST_FILE and VAM_CONTENT_TEST_ROOT"]
+    fn real_package_panel_read_only_compatibility() {
+        let file = PathBuf::from(std::env::var("VAM_PACKAGE_TEST_FILE").unwrap());
+        let id = file.file_stem().unwrap().to_str().unwrap().to_string();
+        let root = fs::canonicalize(std::env::var("VAM_CONTENT_TEST_ROOT").unwrap()).unwrap();
+        let ctx = Context {
+            package_roots: vec![root.join("AddonPackages")],
+            root,
+        };
+        let fixture = Fixture::new();
+        let db = Database::new(&fixture.ctx.root.join("test.db")).unwrap();
+        db.with_conn(|conn| {
+            conn.execute("INSERT INTO physical_packages(file_path,package_id,scan_time,scan_status) VALUES (?1,?2,'now','failed')", rusqlite::params![file.to_string_lossy(), id])?;
+            Ok(())
+        }).unwrap();
+        let package = package_by_id(&db, &ctx, &id).unwrap().unwrap();
+        assert_eq!(package.file, fs::canonicalize(&file).unwrap());
+        let catalog = package_scenes(&ctx, &package).unwrap();
+        assert!(catalog.warnings.is_empty(), "{:?}", catalog.warnings);
+        assert!(!catalog.items.is_empty());
+        let source = &catalog.items[0].source;
+        let sources = packages(&db, &ctx, Some(source)).unwrap();
+        let detail = scene_extraction_detail(&ctx, &sources, source).unwrap();
+        eprintln!("Read-only real package check: {id}, {} scenes, {} characters in selected scene, preview available: {}", catalog.items.len(), detail.characters.len(), detail.image.is_some());
     }
 
     #[test]

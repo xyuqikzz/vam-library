@@ -9,7 +9,6 @@
           :disabled="sourceBusy || (!sourceFiles.length && !sourceDir.trim()) || !targetDir"
           @click="handlePreview"
           variant="primary"
-          size="lg"
         >
           {{ scanning ? t('ingestion.scanning') : t('ingestion.preview') }}
         </UiButton>
@@ -82,10 +81,12 @@
                 role="listbox"
                 :aria-label="t('ingestion.commonPaths')"
               >
-                <UiButton
+                <button
                   v-for="(path, index) in ingestionStore.commonPaths"
                   :id="`ingestion-common-path-${index}`"
                   :key="path"
+                  type="button"
+                  tabindex="-1"
                   class="common-path-option"
                   :class="{ active: activePathIndex === index }"
                   role="option"
@@ -93,9 +94,8 @@
                   :title="path"
                   @mouseenter="activePathIndex = index"
                   @click="selectCommonPath(path)"
-                  variant="secondary"
                 >
-                  <Icon :size="18" name="outline-27" />
+                  <Icon :size="16" name="outline-27" />
                   <span>{{ path }}</span>
                   <Icon
                     v-if="sourceDir === path"
@@ -103,18 +103,23 @@
                     :size="16"
                     name="outline-28"
                   />
-                </UiButton>
+                </button>
               </div>
-              <UiButton class="add-common-path" @click="chooseSource(true)" variant="secondary">
-                <Icon :size="18" name="outline-29" />
-                {{ t('ingestion.addCommonPath') }}
-              </UiButton>
+              <div
+                v-if="ingestionStore.commonPaths.length"
+                class="source-dropdown-divider"
+                role="separator"
+              />
+              <button type="button" class="add-common-path" @click="chooseSource(true)">
+                <Icon :size="16" name="outline-29" />
+                <span>{{ t('ingestion.addCommonPath') }}</span>
+              </button>
               <p v-if="sourceMenuError" class="source-dropdown-error error-message" role="alert">
                 {{ sourceMenuError }}
               </p>
             </div>
           </div>
-          <UiButton :disabled="sourceBusy" @click="chooseSource()" variant="secondary">
+          <UiButton :disabled="sourceBusy" size="lg" @click="chooseSource()" variant="secondary">
             {{ t('settings.browse') }}
           </UiButton>
         </div>
@@ -128,7 +133,7 @@
             <label
               v-for="rule in rules"
               :key="rule.value"
-              class="rule-option"
+              class="rule-option choice-card"
               :class="{ selected: mode === rule.value, 'custom-rule': rule.value === 'custom' }"
             >
               <input
@@ -171,6 +176,7 @@
       <p v-if="error" class="error-message" role="alert">{{ error }}</p>
       <UiModal
         ref="previewDialog"
+        wide
         aria-labelledby="ingestion-preview-title"
         aria-describedby="ingestion-preview-summary"
         @cancel.prevent="cancelPreview"
@@ -250,7 +256,6 @@
               :disabled="sourceBusy || consumed || !preview.groups.length"
               @click="handleExecute"
               variant="primary"
-              size="lg"
             >
               {{ t('ingestion.execute') }}
             </UiButton>
@@ -311,7 +316,7 @@
           >
             {{ t('ingestion.openTrash') }}
           </RouterLink>
-          <UiButton autofocus @click="resultDialog?.close()" variant="primary" size="lg">
+          <UiButton autofocus @click="resultDialog?.close()" variant="primary">
             {{ t('common.confirm') }}
           </UiButton>
         </div>
@@ -568,7 +573,6 @@ async function handleExecute() {
 .ingestion-view {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
   min-width: 0;
 }
 .preview-header {
@@ -630,43 +634,50 @@ legend,
 }
 .source-dropdown {
   position: absolute;
-  top: calc(100% + var(--space-2));
+  top: calc(100% + 6px);
   left: 0;
   right: 0;
-  z-index: 10;
-  padding: var(--space-2);
-  background: var(--bg-surface);
-  border: none;
-  border-radius: var(--radius-md);
-  box-shadow: none;
+  z-index: 20;
+  padding: 6px;
+  border-radius: var(--radius-card);
+  background: var(--bg-menu);
+  box-shadow:
+    var(--shadow-lg),
+    inset 0 0 0 1px var(--border-menu);
 }
 .source-dropdown-title {
-  padding: var(--space-1) var(--space-2) var(--space-2);
-  color: var(--text-secondary);
+  padding: 6px 10px 4px;
+  color: var(--text-tertiary);
   font-size: var(--text-xs);
+  font-weight: var(--font-semibold);
+  line-height: 1.4;
 }
 .common-path-list {
-  max-height: 220px;
+  max-height: 228px;
   overflow: auto;
 }
+/* 与 UiMenu 菜单项一致：36 高、圆角 10、13px / 600，悬停与键盘高亮用 --bg-active */
 .common-path-option,
 .add-common-path {
   display: flex;
   align-items: center;
   gap: var(--space-2);
   width: 100%;
-  min-height: 38px;
-  padding: var(--space-2);
+  min-height: 36px;
+  padding: 6px 10px;
   border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: var(--text-base);
+  font-weight: var(--font-semibold);
+  line-height: 1.4;
   text-align: left;
-  font-size: var(--text-sm);
 }
-.common-path-option > svg,
-.add-common-path > svg {
+.common-path-option > svg {
   flex-shrink: 0;
-  color: var(--accent-primary-hover);
+  color: var(--text-tertiary);
 }
-.common-path-option > span {
+.common-path-option > span,
+.add-common-path > span {
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -675,47 +686,29 @@ legend,
 }
 .common-path-option:hover,
 .common-path-option.active,
-.add-common-path:hover {
-  background: var(--bg-hover);
-}
-.common-path-option[aria-selected='true'] {
-  background: var(--accent-subtle);
-}
-.common-path-option:focus-visible,
+.add-common-path:hover,
 .add-common-path:focus-visible {
-  outline: 2px solid var(--accent-primary);
-  outline-offset: -2px;
+  background: var(--bg-active);
+}
+.add-common-path:focus-visible {
+  box-shadow: none !important;
 }
 .common-path-check {
-  margin-left: auto;
+  flex-shrink: 0;
+  color: var(--accent-primary);
 }
-.add-common-path {
-  color: var(--accent-primary-hover);
+.add-common-path > svg {
+  flex-shrink: 0;
+  color: var(--accent-primary);
 }
-.common-path-list:not(:empty) + .add-common-path {
-  margin-top: var(--space-2);
-  border-top: 1px solid var(--border-subtle);
-  border-radius: var(--radius-none) var(--radius-none) var(--radius-sm) var(--radius-sm);
+.source-dropdown-divider {
+  height: 1px;
+  margin: 6px 8px;
+  background: var(--bg-active);
 }
 .source-dropdown-error {
-  padding: var(--space-2);
+  padding: 6px 10px;
   font-size: var(--text-xs);
-}
-input[type='text'],
-input:not([type]) {
-  min-width: 0;
-  width: 100%;
-  height: 38px;
-  padding: 9px 12px;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm);
-  color: var(--text-primary);
-  background: var(--bg-input, var(--bg-base));
-  font-size: var(--text-sm);
-}
-input:focus-visible {
-  outline: 2px solid var(--accent-primary);
-  outline-offset: 2px;
 }
 .target-directory {
   display: grid;
@@ -761,36 +754,24 @@ legend {
   border-radius: var(--radius-lg);
   cursor: pointer;
   line-height: 1.5;
-  transition:
-    background var(--duration-fast) var(--ease),
-    border-color var(--duration-fast) var(--ease);
+  transition: background var(--duration-fast) var(--ease);
 }
 .rules:not(:disabled) .rule-option:hover {
   background: var(--bg-hover);
-  border-color: var(--border-strong);
 }
 .rules:disabled .rule-option {
   opacity: 0.5;
   cursor: not-allowed;
 }
-.rule-option:focus-within {
-  outline: 2px solid var(--accent-primary);
-  outline-offset: 2px;
-}
-.rule-option.selected {
-  background: var(--accent-subtle);
-  border-color: var(--accent-primary);
-}
+.rule-option.selected,
 .rules:not(:disabled) .rule-option.selected:hover {
-  border-color: var(--accent-primary);
+  background: var(--accent-subtle);
+  box-shadow: inset 0 0 0 1.5px var(--accent-primary);
 }
 input[type='radio'] {
   position: absolute;
   top: var(--space-6);
   right: var(--space-6);
-  width: 16px;
-  height: 16px;
-  accent-color: var(--accent-primary);
   cursor: inherit;
 }
 .rule-icon {
@@ -857,7 +838,7 @@ table {
 }
 th,
 td {
-  padding: 12px;
+  padding: var(--space-3);
   border-bottom: 1px solid var(--border-subtle);
   vertical-align: top;
 }
@@ -889,9 +870,11 @@ tbody tr:hover {
   white-space: nowrap;
 }
 .action-tag {
-  display: inline-block;
-  padding: 3px 8px;
-  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-full);
   color: var(--text-secondary);
   background: var(--bg-subtle);
   font-size: var(--text-xs);
@@ -966,9 +949,9 @@ summary {
   width: 16px;
   height: 16px;
   flex-shrink: 0;
-  border: none;
+  border: 2px solid var(--bg-active);
   border-top-color: var(--accent-primary);
-  border-radius: var(--radius-xl) %;
+  border-radius: var(--radius-full);
   animation: progress-spin 0.8s linear infinite;
 }
 progress {
@@ -1204,33 +1187,4 @@ progress:indeterminate::-webkit-progress-bar {
   }
 }
 
-.b2-page {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-height: 0;
-  max-width: none;
-  margin: 0;
-  padding: 0;
-  gap: 0;
-  overflow: hidden;
-}
-.b2-page-body {
-  flex: 1;
-  min-height: 0;
-  min-width: 0;
-  overflow: auto;
-  padding: 20px 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-.b2-page :deep(.page-header) {
-  width: 100%;
-}
-@media (max-width: 800px) {
-  .b2-page-body {
-    padding: 12px;
-  }
-}
 </style>

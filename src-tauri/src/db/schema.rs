@@ -155,6 +155,8 @@ CREATE INDEX IF NOT EXISTS idx_dependencies_depends_on ON dependencies(depends_o
 CREATE INDEX IF NOT EXISTS idx_scene_refs_scene_pkg ON scene_references(scene_package_id);
 CREATE INDEX IF NOT EXISTS idx_scene_refs_ref_pkg ON scene_references(referenced_package_id);
 CREATE INDEX IF NOT EXISTS idx_phys_pkg_id ON physical_packages(package_id);
+CREATE INDEX IF NOT EXISTS idx_phys_normalized_path ON physical_packages(lower(replace(file_path, '\\', '/')));
+CREATE INDEX IF NOT EXISTS idx_packages_normalized_path ON packages(lower(replace(file_path, '\\', '/')));
 CREATE INDEX IF NOT EXISTS idx_phys_pkg_md5 ON physical_packages(file_md5);
 CREATE INDEX IF NOT EXISTS idx_on_demand_plans_updated ON on_demand_plans(updated_at);
 CREATE INDEX IF NOT EXISTS idx_resource_migration_task ON resource_migration_log(task_id);
@@ -164,6 +166,7 @@ CREATE INDEX IF NOT EXISTS idx_package_tags_tag ON package_tags(tag);
 
 /// Execute all CREATE TABLE and CREATE INDEX statements
 pub fn create_tables(conn: &Connection) -> Result<(), AppError> {
+    crate::services::resource_cleanup::init_schema(conn)?;
     conn.execute_batch("CREATE TABLE IF NOT EXISTS game_content_names (
         vam_root TEXT NOT NULL, resource_key TEXT NOT NULL, name TEXT NOT NULL,
         PRIMARY KEY (vam_root, resource_key)
@@ -298,6 +301,8 @@ pub fn create_tables(conn: &Connection) -> Result<(), AppError> {
 
     conn.execute_batch(CREATE_INDEXES)
         .map_err(|e| AppError::Database(format!("Failed to create indexes: {}", e)))?;
+
+    crate::services::dependency_analysis::init_schema(conn)?;
 
     // Record initial migration if not already present
     conn.execute(

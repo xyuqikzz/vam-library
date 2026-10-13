@@ -7,12 +7,8 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, State};
 
 use crate::db::Database;
-use crate::errors::AppError;
-use crate::models::resource::normalize_resource_types;
+use crate::models::resource::{normalize_resource_types, ResourceType};
 use crate::models::var_package::VarPackageSummary;
-use crate::services::dependencies::{
-    load_installed_packages, resolve_installed_dependency_id, InstalledPackage,
-};
 use crate::services::install_context::resolve_install_context;
 
 /// Dashboard statistics for the overview page
@@ -41,6 +37,14 @@ pub struct CorruptedPackage {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PackageImageEntry {
     pub path: String,
+    pub size_bytes: u64,
+}
+
+/// One file inside a package, as recorded when the package was added to the library.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PackageContentEntry {
+    pub path: String,
+    pub resource_type: String,
     pub size_bytes: u64,
 }
 
@@ -80,7 +84,9 @@ pub struct QuickDeleteResult {
 /// Get aggregate dashboard statistics from the database.
 #[tauri::command]
 pub async fn get_dashboard_stats(db: State<'_, Database>) -> Result<DashboardStats, String> {
-    db.with_conn(|conn| {
+    let analysis = crate::services::dependency_analysis::get(&db).await?;
+    let db = db.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || db.with_conn(|conn| {
         let total_packages: usize = conn
             .query_row(
                 "SELECT
@@ -139,20 +145,7 @@ pub async fn get_dashboard_stats(db: State<'_, Database>) -> Result<DashboardSta
             )
             .unwrap_or(0);
 
-        // Count missing dependencies with version resolution logic, matching dependency.rs::find_missing_dependencies
-        let installed_packages = load_installed_packages(conn).unwrap_or_default();
-        let mut dep_stmt = conn
-            .prepare("SELECT depends_on_id FROM dependencies")
-            .unwrap();
-        let dependency_ids = dep_stmt
-            .query_map([], |row| row.get::<_, String>(0))
-            .unwrap()
-            .collect::<Result<Vec<_>, _>>()
-            .unwrap_or_default();
-        let missing_dependencies = dependency_ids
-            .iter()
-            .filter(|dep_id| resolve_installed_dependency_id(dep_id, &installed_packages).is_none())
-            .count();
+        let missing_dependencies = analysis.missing.len();
 
         let duplicate_resources: usize = conn
             .query_row(
@@ -198,8 +191,7 @@ pub async fn get_dashboard_stats(db: State<'_, Database>) -> Result<DashboardSta
             orphaned_packages,
             corrupted_packages,
         })
-    })
-    .map_err(|e| e.to_string())
+    })).await.map_err(|e| e.to_string())?.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -237,48 +229,11 @@ pub async fn find_corrupted_packages(
 #[tauri::command]
 pub async fn quick_delete_package(
     app_handle: AppHandle,
-    db: State<'_, Database>,
+    _db: State<'_, Database>,
     package_id: String,
     include_dependencies: bool,
 ) -> Result<QuickDeleteResult, String> {
-    let install_context = resolve_install_context(&app_handle)?;
-    let trash_dir = PathBuf::from(install_context.vam_root)
-        .join("VAMBoxLibrary")
-        .join(".trash");
-    std::fs::create_dir_all(&trash_dir)
-        .map_err(|e| format!("创建回收站目录失败 {}: {}", trash_dir.display(), e))?;
-
-    let result = db
-        .with_conn(|conn| {
-            ensure_package_exists(conn, &package_id)?;
-            let (package_ids, skipped_package_ids) = if include_dependencies {
-                build_quick_delete_plan(conn, &package_id)?
-            } else {
-                (vec![package_id.clone()], Vec::new())
-            };
-
-            move_packages_to_trash(conn, &trash_dir, &package_ids, skipped_package_ids)
-        })
-        .map_err(|e| e.to_string())?;
-
-    if result.deleted_count > 0 {
-        crate::commands::library_events::emit_library_index_changed(
-            &app_handle,
-            "packages_deleted",
-            &[
-                "packages",
-                "dashboard",
-                "dependencies",
-                "statistics",
-                "folders",
-                "dedupe",
-            ],
-            result.deleted_package_ids.clone(),
-            Vec::new(),
-        );
-    }
-
-    Ok(result)
+    crate::commands::cleanup::quick_delete(app_handle, package_id, include_dependencies).await
 }
 
 /// List all packages as summaries for the package list view.
@@ -629,13 +584,8 @@ fn physical_package_summary(
 }
 
 fn package_identity_from_id(package_id: &str) -> (String, String, i32) {
-    let version_split = package_id.rsplit_once('.');
-    if let Some((base, version_text)) = version_split {
-        if let Ok(version) = version_text.parse::<i32>() {
-            if let Some((creator, name)) = base.split_once('.') {
-                return (creator.to_string(), name.to_string(), version);
-            }
-        }
+    if let Some(identity) = crate::services::package_identity::from_id(package_id) {
+        return (identity.creator.into(), identity.name.into(), identity.version.unwrap_or(0));
     }
 
     (String::new(), package_id.to_string(), 0)
@@ -697,328 +647,119 @@ fn collect_package_folders(
     Ok(())
 }
 
-fn ensure_package_exists(conn: &Connection, package_id: &str) -> Result<(), AppError> {
-    let exists = conn
-        .query_row(
-            "SELECT EXISTS(SELECT 1 FROM packages WHERE id = ?1)",
-            [package_id],
-            |row| row.get::<_, bool>(0),
-        )
-        .map_err(|e| AppError::Database(e.to_string()))?;
-
-    if exists {
-        Ok(())
-    } else {
-        Err(AppError::Database(format!("未找到包: {}", package_id)))
-    }
+fn thumbnail_directory(app: &AppHandle) -> Result<PathBuf, String> {
+    Ok(app.path().app_data_dir().map_err(|e| e.to_string())?.join(crate::services::preview_cache::DIRECTORY))
+}
+fn package_roots(app: &AppHandle) -> Result<Vec<PathBuf>, String> {
+    let context = resolve_install_context(app)?;
+    Ok([context.real_addon_dir, context.managed_library_dir].into_iter()
+        .filter_map(|root| std::fs::canonicalize(root).ok()).collect())
+}
+fn package_file_path(app: &AppHandle, db: &Database, package_id: &str) -> Result<Option<PathBuf>, String> {
+    crate::services::resource_files::resolve_indexed_package_file(db, package_id, &package_roots(app)?)
 }
 
-fn build_quick_delete_plan(
-    conn: &Connection,
-    root_package_id: &str,
-) -> Result<(Vec<String>, Vec<String>), AppError> {
-    let installed_packages = load_installed_packages(conn)?;
-    let reachable_dependencies =
-        collect_reachable_dependencies(conn, root_package_id, &installed_packages)?;
-    let mut delete_set = HashSet::from([root_package_id.to_string()]);
-
-    loop {
-        let mut changed = false;
-        for dep_id in &reachable_dependencies {
-            if delete_set.contains(dep_id) {
-                continue;
-            }
-            let dependents = load_resolved_dependents(conn, dep_id, &installed_packages)?;
-            if dependents.iter().all(|id| delete_set.contains(id)) {
-                delete_set.insert(dep_id.clone());
-                changed = true;
-            }
-        }
-        if !changed {
-            break;
-        }
-    }
-
-    let mut delete_ids: Vec<String> = delete_set.into_iter().collect();
-    delete_ids.sort();
-    delete_ids.sort_by_key(|id| if id == root_package_id { 0 } else { 1 });
-
-    let mut skipped_ids: Vec<String> = reachable_dependencies
-        .into_iter()
-        .filter(|id| !delete_ids.contains(id))
-        .collect();
-    skipped_ids.sort();
-
-    Ok((delete_ids, skipped_ids))
+#[tauri::command]
+pub async fn get_package_thumbnail(app: AppHandle, package_id: String) -> Result<Option<String>, String> {
+    let _timer = crate::services::perf::CommandTimer::new("get_package_thumbnail");
+    tauri::async_runtime::spawn_blocking(move || {
+        let Some(path) = package_file_path(&app, &app.state::<Database>(), &package_id)? else { return Ok(None); };
+        thumbnail_for_path(&path, &package_id, &thumbnail_directory(&app)?)
+    }).await.map_err(|e| e.to_string())?
 }
 
-fn collect_reachable_dependencies(
-    conn: &Connection,
-    root_package_id: &str,
-    installed_packages: &[InstalledPackage],
-) -> Result<HashSet<String>, AppError> {
-    let mut visited = HashSet::new();
-    let mut stack = vec![root_package_id.to_string()];
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ThumbnailResult { package_id: String, path: Option<String>, cached: bool, error: Option<String> }
 
-    while let Some(package_id) = stack.pop() {
-        let mut stmt = conn
-            .prepare("SELECT depends_on_id FROM dependencies WHERE package_id = ?1")
-            .map_err(|e| AppError::Database(e.to_string()))?;
-        let dep_ids = stmt
-            .query_map([&package_id], |row| row.get::<_, String>(0))
-            .map_err(|e| AppError::Database(e.to_string()))?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| AppError::Database(e.to_string()))?;
-
-        for dep_id in dep_ids {
-            let Some(resolved_id) = resolve_installed_dependency_id(&dep_id, installed_packages)
-            else {
-                continue;
-            };
-            if visited.insert(resolved_id.clone()) {
-                stack.push(resolved_id);
-            }
-        }
-    }
-
-    visited.remove(root_package_id);
-    Ok(visited)
+/// One IPC for all warm/negative hits. Cold extraction runs separately so a slow VAR
+/// cannot delay cached images on the same page.
+#[tauri::command]
+pub async fn get_package_thumbnails(app: AppHandle, package_ids: Vec<String>, cached_only: bool) -> Result<Vec<ThumbnailResult>, String> {
+    let _timer = crate::services::perf::CommandTimer::new("get_package_thumbnails");
+    if package_ids.len() > 400 { return Err("一次最多读取 400 个预览".into()); }
+    tauri::async_runtime::spawn_blocking(move || {
+        let roots = package_roots(&app)?;
+        let directory = thumbnail_directory(&app)?;
+        let db = app.state::<Database>();
+        let paths = crate::services::resource_files::indexed_package_paths(&db, &package_ids)?;
+        let _cache_timer = crate::services::perf::CommandTimer::new("thumbnails.cache_lookup");
+        package_ids.into_iter().map(|id| {
+            let result = (|| -> Result<Option<Option<String>>, String> {
+                let Some(path) = crate::services::resource_files::resolve_package_candidates(paths.get(&id).map(Vec::as_slice).unwrap_or(&[]), &roots) else { return Ok(Some(None)); };
+                let cache = crate::services::preview_cache::PreviewCache::new(&directory, &path, &format!("cover:{id}"))?;
+                if cached_only { cache.lookup() } else { thumbnail_for_path(&path, &id, &directory).map(Some) }
+            })();
+            Ok(match result {
+                Ok(value) => ThumbnailResult { package_id: id, cached: value.is_some(), path: value.flatten(), error: None },
+                Err(error) => ThumbnailResult { package_id: id, cached: false, path: None, error: Some(error) },
+            })
+        }).collect()
+    }).await.map_err(|e| e.to_string())?
 }
 
-fn load_resolved_dependents(
-    conn: &Connection,
-    target_package_id: &str,
-    installed_packages: &[InstalledPackage],
-) -> Result<Vec<String>, AppError> {
-    let mut stmt = conn
-        .prepare("SELECT package_id, depends_on_id FROM dependencies ORDER BY package_id")
-        .map_err(|e| AppError::Database(e.to_string()))?;
-    let pairs = stmt
-        .query_map([], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-        })
-        .map_err(|e| AppError::Database(e.to_string()))?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| AppError::Database(e.to_string()))?;
-
-    let mut dependents = HashSet::new();
-    for (source_id, depends_on_id) in pairs {
-        let Some(resolved_id) = resolve_installed_dependency_id(&depends_on_id, installed_packages)
-        else {
-            continue;
-        };
-        if resolved_id == target_package_id {
-            dependents.insert(source_id);
-        }
-    }
-
-    Ok(dependents.into_iter().collect())
-}
-
-fn move_packages_to_trash(
-    conn: &Connection,
-    trash_dir: &Path,
-    package_ids: &[String],
-    skipped_package_ids: Vec<String>,
-) -> Result<QuickDeleteResult, AppError> {
-    let tx = conn
-        .unchecked_transaction()
-        .map_err(|e| AppError::Database(e.to_string()))?;
-    let mut deleted_package_ids = Vec::new();
-    let mut deleted_file_count = 0usize;
-    let mut freed_bytes = 0u64;
-
-    for package_id in package_ids {
-        let files = load_package_physical_files(&tx, package_id)?;
-        for (file_path, size_bytes) in &files {
-            let path = Path::new(file_path);
-            if !path.exists() {
-                continue;
-            }
-
-            let trash_path = build_trash_path(trash_dir, path);
-            std::fs::rename(path, &trash_path)
-                .map_err(|e| AppError::Io(format!("删除文件失败 {}: {}", path.display(), e)))?;
-            tx.execute(
-                "INSERT INTO cleanup_trash (package_id, original_path, trash_path, size_bytes)
-                 VALUES (?1, ?2, ?3, ?4)",
-                rusqlite::params![
-                    package_id,
-                    file_path,
-                    trash_path.to_string_lossy().to_string(),
-                    *size_bytes as i64,
-                ],
-            )
-            .map_err(|e| AppError::Database(e.to_string()))?;
-            deleted_file_count += 1;
-            freed_bytes += *size_bytes;
-        }
-
-        tx.execute(
-            "DELETE FROM physical_packages WHERE package_id = ?1",
-            [package_id],
-        )
-        .map_err(|e| AppError::Database(e.to_string()))?;
-        tx.execute("DELETE FROM packages WHERE id = ?1", [package_id])
-            .map_err(|e| AppError::Database(e.to_string()))?;
-        deleted_package_ids.push(package_id.clone());
-    }
-
-    tx.commit().map_err(|e| AppError::Database(e.to_string()))?;
-
-    Ok(QuickDeleteResult {
-        deleted_count: deleted_package_ids.len(),
-        skipped_count: skipped_package_ids.len(),
-        deleted_package_ids,
-        skipped_package_ids,
-        deleted_file_count,
-        freed_bytes,
+fn thumbnail_for_path(var_path: &Path, package_id: &str, directory: &Path) -> Result<Option<String>, String> {
+    crate::services::preview_cache::PreviewCache::new(directory, var_path, &format!("cover:{package_id}"))?.image(|| {
+        let mut archive = crate::services::resource_files::open_var_archive(var_path)?;
+        let creator = parse_package_creator(package_id);
+        let Some(name) = find_best_cover_entry_name(&mut archive, creator.as_deref()) else { return Ok(None); };
+        let mut entry = archive.by_name(&name).map_err(|e| e.to_string())?;
+        let mut data = Vec::new();
+        entry.read_to_end(&mut data).map_err(|e| e.to_string())?;
+        Ok(Some((name, data)))
     })
 }
 
-fn load_package_physical_files(
-    conn: &Connection,
-    package_id: &str,
-) -> Result<Vec<(String, u64)>, AppError> {
-    let mut stmt = conn
-        .prepare(
-            "SELECT file_path, size_bytes
-             FROM physical_packages
-             WHERE package_id = ?1",
-        )
-        .map_err(|e| AppError::Database(e.to_string()))?;
-    let mut files = stmt
-        .query_map([package_id], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)? as u64))
-        })
-        .map_err(|e| AppError::Database(e.to_string()))?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| AppError::Database(e.to_string()))?;
-
-    if files.is_empty() {
-        if let Ok(file) = conn.query_row(
-            "SELECT file_path, size_bytes FROM packages WHERE id = ?1",
-            [package_id],
-            |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)? as u64)),
-        ) {
-            files.push(file);
-        }
-    }
-
-    let mut seen = HashSet::new();
-    files.retain(|(path, _)| seen.insert(normalize_path_key(path)));
-    Ok(files)
-}
-
-fn build_trash_path(trash_dir: &Path, original_path: &Path) -> PathBuf {
-    let file_name = original_path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or("package.var");
-    let stamp = chrono::Utc::now().timestamp_millis();
-    trash_dir.join(format!("{}_{}", stamp, file_name))
-}
-
-fn normalize_path_key(path: &str) -> String {
-    path.replace('\\', "/").to_lowercase()
-}
-
-const THUMBNAIL_CACHE_DIR_NAME: &str = "thumbnails-v9";
-
-/// 获取包的缩略图 base64 数据（data:image/xxx;base64,... 格式），无则从 .var 中提取并缓存
+/// Files inside a package, read from the library records (no archive access).
 #[tauri::command]
-pub async fn get_package_thumbnail(
-    app: tauri::AppHandle,
+pub async fn list_package_contents(
     db: State<'_, Database>,
     package_id: String,
-) -> Result<Option<String>, String> {
-    // 缓存目录使用 app 数据目录（Tauri 有访问权限）
-    let cache_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("获取 app data 目录失败: {}", e))?
-        .join(THUMBNAIL_CACHE_DIR_NAME);
-    std::fs::create_dir_all(&cache_dir).map_err(|e| format!("创建缓存目录失败: {}", e))?;
-
-    // 先检查缓存中是否有该包的缩略图
-    for entry in std::fs::read_dir(&cache_dir).map_err(|e| format!("读取缓存目录失败: {}", e))?
-    {
-        let entry = entry.map_err(|e| format!("读取目录项失败: {}", e))?;
-        let filename = entry.file_name();
-        let name_str = filename.to_string_lossy();
-        if name_str.starts_with(&package_id) {
-            // 读取缓存文件并返回 base64
-            let data =
-                std::fs::read(entry.path()).map_err(|e| format!("读取缓存文件失败: {}", e))?;
-            let mime = guess_mime_from_ext(&name_str);
-            return Ok(Some(format!("data:{};base64,{}", mime, base64(&data))));
-        }
-    }
-
-    // 缓存未命中，从 .var 压缩包中提取
-    let file_path: String = db
-        .with_conn(|conn| {
-            conn.query_row(
-                "SELECT file_path FROM packages WHERE id = ?1",
-                [&package_id],
-                |row| row.get(0),
+) -> Result<Vec<PackageContentEntry>, String> {
+    db.with_conn(|conn| {
+        let mut stmt = conn
+            .prepare(
+                "SELECT file_path, size_bytes FROM contents
+                 WHERE package_id = ?1
+                 ORDER BY file_path COLLATE NOCASE",
             )
             .map_err(|e| {
-                crate::errors::AppError::Database(format!("Failed to get package path: {}", e))
+                crate::errors::AppError::Database(format!("Failed to prepare query: {}", e))
+            })?;
+        let rows = stmt
+            .query_map([&package_id], |row| {
+                let path: String = row.get(0)?;
+                let size: i64 = row.get(1)?;
+                Ok(PackageContentEntry {
+                    resource_type: ResourceType::from_path(&path).as_str().to_string(),
+                    path,
+                    size_bytes: size.max(0) as u64,
+                })
             })
+            .map_err(|e| {
+                crate::errors::AppError::Database(format!("Failed to list package contents: {}", e))
+            })?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(|e| {
+            crate::errors::AppError::Database(format!("Failed to read package contents: {}", e))
         })
-        .map_err(|e| e.to_string())?;
-
-    let var_path = Path::new(&file_path);
-    if !var_path.exists() {
-        return Ok(None);
-    }
-
-    let file = std::fs::File::open(var_path).map_err(|e| format!("打开文件失败: {}", e))?;
-    let mut archive = zip::ZipArchive::new(file).map_err(|e| format!("读取 ZIP 失败: {}", e))?;
-
-    let creator = parse_package_creator(&package_id);
-
-    if let Some(best_name) = find_best_cover_entry_name(&mut archive, creator.as_deref()) {
-        let mut entry = archive
-            .by_name(&best_name)
-            .map_err(|e| format!("读取封面图片失败: {}", e))?;
-        return Ok(Some(extract_and_cache(
-            &mut entry,
-            &best_name,
-            &package_id,
-            &cache_dir,
-        )?));
-    }
-
-    Ok(None)
+    })
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub async fn list_package_images(
-    db: State<'_, Database>,
-    package_id: String,
-) -> Result<Vec<PackageImageEntry>, String> {
-    let file_path: String = db
-        .with_conn(|conn| {
-            conn.query_row(
-                "SELECT file_path FROM packages WHERE id = ?1",
-                [&package_id],
-                |row| row.get(0),
-            )
-            .map_err(|e| {
-                crate::errors::AppError::Database(format!("Failed to get package path: {}", e))
-            })
-        })
-        .map_err(|e| e.to_string())?;
+pub async fn list_package_images(app: AppHandle, package_id: String) -> Result<Vec<PackageImageEntry>, String> {
+    let _timer = crate::services::perf::CommandTimer::new("list_package_images");
+    tauri::async_runtime::spawn_blocking(move || {
+        let Some(path) = package_file_path(&app, &app.state::<Database>(), &package_id)? else { return Ok(Vec::new()); };
+        package_images_cached(&path, &package_id, &thumbnail_directory(&app)?)
+    }).await.map_err(|e| e.to_string())?
+}
+fn package_images_cached(path: &Path, id: &str, directory: &Path) -> Result<Vec<PackageImageEntry>, String> {
+    crate::services::preview_cache::PreviewCache::new(directory, path, &format!("gallery:{id}"))?.json(|| package_images(path, id))
+}
 
-    let var_path = Path::new(&file_path);
-    if !var_path.exists() {
-        return Ok(Vec::new());
-    }
-
-    let file = std::fs::File::open(var_path).map_err(|e| format!("打开文件失败: {}", e))?;
-    let mut archive = zip::ZipArchive::new(file).map_err(|e| format!("读取 ZIP 失败: {}", e))?;
+fn package_images(var_path: &Path, package_id: &str) -> Result<Vec<PackageImageEntry>, String> {
+    let mut archive = crate::services::resource_files::open_var_archive(var_path)?;
 
     let creator = parse_package_creator(&package_id);
     let images_with_sizes = collect_display_image_candidates(&mut archive, creator.as_deref());
@@ -1035,53 +776,21 @@ pub async fn list_package_images(
 }
 
 #[tauri::command]
-pub async fn get_package_image(
-    db: State<'_, Database>,
-    package_id: String,
-    image_path: String,
-) -> Result<Option<String>, String> {
-    let file_path: String = db
-        .with_conn(|conn| {
-            conn.query_row(
-                "SELECT file_path FROM packages WHERE id = ?1",
-                [&package_id],
-                |row| row.get(0),
-            )
-            .map_err(|e| {
-                crate::errors::AppError::Database(format!("Failed to get package path: {}", e))
-            })
+pub async fn get_package_image(app: AppHandle, package_id: String, image_path: String) -> Result<Option<String>, String> {
+    let _timer = crate::services::perf::CommandTimer::new("get_package_image");
+    tauri::async_runtime::spawn_blocking(move || {
+        let Some(path) = package_file_path(&app, &app.state::<Database>(), &package_id)? else { return Ok(None); };
+        let directory = thumbnail_directory(&app)?;
+        crate::services::preview_cache::PreviewCache::new(&directory, &path, &format!("image:{image_path}"))?.image(|| {
+            let mut archive = crate::services::resource_files::open_var_archive(&path)?;
+            let mut entry = match archive.by_name(&image_path) { Ok(entry) => entry, Err(_) => return Ok(None) };
+            let creator = parse_package_creator(&package_id);
+            if !entry.is_file() || !is_webview_image_path(entry.name()) || (!is_saves_image_path(entry.name()) && !is_custom_display_image_path(entry.name(), creator.as_deref())) { return Ok(None); }
+            let mut data = Vec::new();
+            entry.read_to_end(&mut data).map_err(|e| e.to_string())?;
+            Ok(Some((image_path, data)))
         })
-        .map_err(|e| e.to_string())?;
-
-    let var_path = Path::new(&file_path);
-    if !var_path.exists() {
-        return Ok(None);
-    }
-
-    let file = std::fs::File::open(var_path).map_err(|e| format!("打开文件失败: {}", e))?;
-    let mut archive = zip::ZipArchive::new(file).map_err(|e| format!("读取 ZIP 失败: {}", e))?;
-    let mut entry = match archive.by_name(&image_path) {
-        Ok(entry) => entry,
-        Err(_) => return Ok(None),
-    };
-
-    let creator = parse_package_creator(&package_id);
-
-    if !entry.is_file()
-        || !is_webview_image_path(entry.name())
-        || (!is_saves_image_path(entry.name())
-            && !is_custom_display_image_path(entry.name(), creator.as_deref()))
-    {
-        return Ok(None);
-    }
-
-    let mut data = Vec::new();
-    entry
-        .read_to_end(&mut data)
-        .map_err(|e| format!("读取图片失败: {}", e))?;
-    let mime = guess_mime_from_ext(&image_path);
-
-    Ok(Some(format!("data:{};base64,{}", mime, base64(&data))))
+    }).await.map_err(|e| e.to_string())?
 }
 
 fn find_best_cover_entry_name(
@@ -1355,60 +1064,22 @@ fn normalize_zip_path(path: &str) -> String {
     path.replace('\\', "/").to_lowercase()
 }
 
-pub fn clear_thumbnail_cache_inner(app: &tauri::AppHandle) -> Result<(), String> {
-    let cache_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("获取 app data 目录失败: {}", e))?
-        .join(THUMBNAIL_CACHE_DIR_NAME);
-    if cache_dir.exists() {
-        std::fs::remove_dir_all(&cache_dir).map_err(|e| format!("清空缩略图缓存失败: {}", e))?;
-        std::fs::create_dir_all(&cache_dir).map_err(|e| format!("重新创建缓存目录失败: {}", e))?;
-    }
-    Ok(())
+pub fn clear_thumbnail_cache_inner(app: &AppHandle) -> Result<(), String> {
+    crate::services::preview_cache::clear(&app.path().app_data_dir().map_err(|e| e.to_string())?)
 }
-
 #[tauri::command]
-pub async fn clear_thumbnail_cache(app: tauri::AppHandle) -> Result<(), String> {
-    clear_thumbnail_cache_inner(&app)
+pub async fn clear_thumbnail_cache(app: AppHandle) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || clear_thumbnail_cache_inner(&app)).await.map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
 pub async fn open_package_in_explorer(file_path: String) -> Result<(), String> {
     let path = std::path::Path::new(&file_path);
-    if !path.exists() {
+    if !path.is_file() {
         return Err("文件不存在".to_string());
     }
-
-    #[cfg(target_os = "windows")]
-    {
-        use std::process::Command;
-        let windows_path = file_path.replace('/', "\\");
-        let result = Command::new("explorer.exe")
-            .arg(format!("/select,{}", windows_path))
-            .spawn();
-        match result {
-            Ok(_) => Ok(()),
-            Err(e) => Err(format!("无法打开文件管理器: {}", e)),
-        }
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        let parent = path.parent().unwrap_or(path);
-        #[cfg(target_os = "macos")]
-        {
-            use std::process::Command;
-            let result = Command::new("open").arg("-R").arg(path).spawn();
-            match result {
-                Ok(_) => Ok(()),
-                Err(e) => Err(format!("无法打开访达: {}", e)),
-            }
-        }
-        #[cfg(not(target_os = "macos"))]
-        {
-            Ok(())
-        }
-    }
+    tauri_plugin_opener::reveal_item_in_dir(path)
+        .map_err(|e| format!("无法打开文件位置: {e}"))
 }
 
 #[tauri::command]
@@ -1440,49 +1111,6 @@ pub async fn open_path_in_explorer(path: String) -> Result<(), String> {
     #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
     {
         Err("当前系统暂不支持直接打开该路径".to_string())
-    }
-}
-
-/// 从 zip entry 中提取图片数据，存到缓存，返回 base64 data URL
-fn extract_and_cache(
-    entry: &mut zip::read::ZipFile<'_>,
-    original_name: &str,
-    package_id: &str,
-    cache_dir: &Path,
-) -> Result<String, String> {
-    let ext = Path::new(original_name)
-        .extension()
-        .and_then(|e| e.to_str())
-        .unwrap_or("jpg");
-    let cache_path = cache_dir.join(format!("{}.{}", package_id, ext));
-
-    let mut data = Vec::new();
-    entry
-        .read_to_end(&mut data)
-        .map_err(|e| format!("读取图片失败: {}", e))?;
-
-    // 写入缓存
-    std::fs::write(&cache_path, &data).map_err(|e| format!("写入缓存失败: {}", e))?;
-
-    let mime = guess_mime_from_ext(&format!("{}.{}", package_id, ext));
-    Ok(format!("data:{};base64,{}", mime, base64(&data)))
-}
-
-/// 根据文件扩展名返回 MIME 类型
-fn guess_mime_from_ext(filename: &str) -> &'static str {
-    let lower = filename.to_lowercase();
-    if lower.ends_with(".png") {
-        "image/png"
-    } else if lower.ends_with(".jpeg") || lower.ends_with(".jpg") {
-        "image/jpeg"
-    } else if lower.ends_with(".webp") {
-        "image/webp"
-    } else if lower.ends_with(".bmp") {
-        "image/bmp"
-    } else if lower.ends_with(".gif") {
-        "image/gif"
-    } else {
-        "image/jpeg" // 默认
     }
 }
 
@@ -1540,6 +1168,71 @@ mod summary_tests {
 mod thumbnail_tests {
     use super::*;
     use std::collections::HashSet;
+
+    #[test]
+    fn seven_zip_files_renamed_as_var_report_format_instead_of_a_missing_path() {
+        use crate::services::resource_files::{open_var_archive, tests::TestDir};
+        let dir = TestDir::new();
+        let file = dir.write("JYY happy cafe.var", &[0x37, 0x7a, 0xbc, 0xaf, 0x27, 0x1c]);
+        assert!(open_var_archive(&file).err().unwrap().contains("实际是 7z"));
+        assert!(package_images(&file, "JYY happy cafe").err().unwrap().contains("实际是 7z"));
+    }
+
+    #[test]
+    fn web_or_xml_downloads_renamed_as_var_report_non_archive_content() {
+        use crate::services::resource_files::{open_var_archive, tests::TestDir};
+        let dir = TestDir::new();
+        for (name, content) in [
+            ("Web.1.var", "<!DOCTYPE html><html>Download failed</html>"),
+            ("Xml.1.var", "<?xml version=\"1.0\"?><Error/>"),
+        ] {
+            let file = dir.write(name, content.as_bytes());
+            assert!(open_var_archive(&file).err().unwrap().contains("不是 VAR 压缩包"));
+        }
+    }
+
+    #[test]
+    #[ignore = "reads a selected real 7z file without modifying it; set VAM_PACKAGE_TEST_FILE"]
+    fn real_seven_zip_package_reports_format_read_only() {
+        use crate::services::resource_files::open_var_archive;
+        let file = PathBuf::from(std::env::var("VAM_PACKAGE_TEST_FILE").unwrap());
+        let mut signature = [0; 6];
+        std::fs::File::open(&file).unwrap().read_exact(&mut signature).unwrap();
+        assert_eq!(signature, [0x37, 0x7a, 0xbc, 0xaf, 0x27, 0x1c]);
+        let error = open_var_archive(&file).err().unwrap();
+        assert!(error.contains("实际是 7z"));
+        eprintln!("Read-only format check: {error}");
+    }
+
+    #[test]
+    fn physical_packages_with_spaces_and_unicode_read_images_without_metadata() {
+        use crate::services::resource_files::{resolve_indexed_package_file, tests::TestDir};
+        use std::io::Write;
+        let dir = TestDir::new();
+        let file = dir.0.join("作者 happy cafe, preview.var");
+        let image_path = "Saves/scene/Cafe.jpg";
+        let mut zip = zip::ZipWriter::new(std::fs::File::create(&file).unwrap());
+        zip.start_file(image_path, zip::write::SimpleFileOptions::default()).unwrap();
+        zip.write_all(b"preview bytes").unwrap();
+        zip.finish().unwrap();
+        let db = Database::new(&dir.0.join("test.db")).unwrap();
+        let id = "作者 happy cafe, preview";
+        db.with_conn(|conn| {
+            conn.execute("INSERT INTO physical_packages(file_path,package_id,scan_time,scan_status) VALUES (?1,?2,'now','failed')", rusqlite::params![file.to_string_lossy(), id])?;
+            Ok(())
+        }).unwrap();
+        let roots = vec![std::fs::canonicalize(&dir.0).unwrap()];
+        let resolved = resolve_indexed_package_file(&db, id, &roots).unwrap().unwrap();
+        let images = package_images(&resolved, id).unwrap();
+        assert_eq!(images.len(), 1);
+        assert_eq!(images[0].path, image_path);
+        let mut archive = zip::ZipArchive::new(std::fs::File::open(&resolved).unwrap()).unwrap();
+        assert_eq!(find_best_cover_entry_name(&mut archive, parse_package_creator(id).as_deref()).as_deref(), Some(image_path));
+        let outside = TestDir::new();
+        assert!(resolve_indexed_package_file(&db, id, &[std::fs::canonicalize(&outside.0).unwrap()]).unwrap().is_none());
+        std::fs::remove_file(&file).unwrap();
+        assert!(resolve_indexed_package_file(&db, id, &roots).unwrap().is_none());
+    }
 
     fn candidate(path: &str, order: usize) -> ImageCandidate {
         ImageCandidate {
@@ -1762,5 +1455,36 @@ mod thumbnail_tests {
         assert!(is_saves_image_path("saves/person/preview.png"));
         assert!(!is_saves_image_path("Custom/Saves/preview.jpg"));
         assert!(!is_saves_image_path("meta.jpg"));
+    }
+}
+
+#[cfg(test)]
+mod performance_measurement {
+    use super::*;
+    #[test]
+    #[ignore = "read-only local performance sample; requires VAM_BENCH_DB and VAM_BENCH_CACHE"]
+    fn measure_thumbnail_cache() {
+        let conn = Connection::open_with_flags(std::env::var("VAM_BENCH_DB").unwrap(), rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
+        let cache = PathBuf::from(std::env::var("VAM_BENCH_CACHE").unwrap());
+        let mut stmt = conn.prepare("SELECT id,file_path FROM packages ORDER BY id").unwrap();
+        let rows: Vec<(String,String)> = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?))).unwrap().map(Result::unwrap).collect();
+        let samples: Vec<_> = rows.into_iter().filter(|(id,path)| cache.join(format!("{id}.jpg")).is_file() && Path::new(path).is_file()).take(100).collect();
+        let cache = PathBuf::from(std::env::var("VAM_BENCH_OUTPUT").unwrap());
+        assert!(!samples.is_empty());
+        let samples: Vec<_> = samples.iter().cycle().take(100).collect();
+        for _ in 0..3 {
+            let t = std::time::Instant::now();
+            let mut bytes = 0;
+            for (id, path) in &samples {
+                bytes += thumbnail_for_path(Path::new(path), id, &cache).unwrap().unwrap().len();
+            }
+            eprintln!("MEASURE thumbnails100={:.2}ms ipc_bytes={bytes}", t.elapsed().as_secs_f64()*1000.0);
+        }
+        let path: String = conn.query_row("SELECT file_path FROM packages WHERE id='Solerrain.Caroline.1'", [], |r| r.get(0)).unwrap();
+        for _ in 0..3 {
+            let t = std::time::Instant::now();
+            let images = package_images_cached(Path::new(&path), "Solerrain.Caroline.1", &cache).unwrap();
+            eprintln!("MEASURE image_list={:.2}ms count={}", t.elapsed().as_secs_f64()*1000.0, images.len());
+        }
     }
 }

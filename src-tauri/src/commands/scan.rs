@@ -2,7 +2,7 @@ use std::path::Path;
 use std::sync::Mutex;
 
 use tauri::State;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 
 use crate::db::Database;
 use crate::services::scanner::{self, ScanCacheEntry, ScanProgress, ScanResult};
@@ -68,21 +68,17 @@ pub async fn scan_vam_directory(
     let app_clone = app.clone();
     let scan_cache = load_scan_cache(&db)?;
 
-    // Clear thumbnail cache so that optimized/updated thumbnails are regenerated using the new cover heuristics
-    let _ = crate::commands::packages::clear_thumbnail_cache_inner(&app);
+    // Preview keys include source identity and modification metadata. Preserve warm
+    // previews on unchanged scans; extraction-rule changes bump the cache version.
 
     let (packages, scan_result) = tokio::task::spawn_blocking(move || {
+        let _maintenance = crate::services::resource_files::maintenance_lock()?;
         let mut progress_cb = |progress: ScanProgress| {
             let _ = app_clone.emit("scan-progress", &progress);
         };
-        scanner::scan_addon_packages_with_cache(&root_path, scan_cache, Some(&mut progress_cb))
-    })
-    .await
-    .map_err(|e| format!("Scan task failed: {}", e))?
-    .map_err(|e| e.to_string())?;
-
+        let (packages, scan_result) = scanner::scan_addon_packages_with_cache(&root_path, scan_cache, Some(&mut progress_cb)).map_err(|e| e.to_string())?;
     // Store packages in database
-    db.with_conn(|conn| {
+    app_clone.state::<Database>().with_conn(|conn| {
         let tx = conn.unchecked_transaction().map_err(|e| {
             crate::errors::AppError::Database(format!("Failed to begin transaction: {}", e))
         })?;
@@ -146,6 +142,11 @@ pub async fn scan_vam_directory(
         Ok(())
     })
     .map_err(|e| e.to_string())?;
+
+        Ok::<_, String>((packages, scan_result))
+    })
+    .await
+    .map_err(|e| format!("Scan task failed: {}", e))??;
 
     // Emit completion event
     let _ = app.emit(

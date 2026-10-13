@@ -3,7 +3,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/ui/Icon.vue'
 import UiButton from '@/components/ui/UiButton.vue'
-defineProps<{ icon?: string; title: string; description?: string }>()
+defineProps<{ icon?: string; title: string; description?: string; hideAction?: boolean }>()
 const router = useRouter()
 const route = useRoute()
 const { t } = useI18n()
@@ -14,7 +14,7 @@ function nextStep() { router.push(route.path === '/packages' ? '/settings' : '/p
     <div class="empty-icon-wrapper"><Icon :path="icon" :size="28" /></div>
     <h3 class="empty-title">{{ title }}</h3>
     <p v-if="description" class="empty-description">{{ description }}</p>
-    <div class="empty-action">
+    <div v-if="!hideAction || $slots.action" class="empty-action">
       <slot name="action">
         <UiButton variant="primary" size="lg" @click="nextStep">
           {{ route.path === '/packages' ? t('packages.selectDirectory') : t('ui.browsePackages') }}

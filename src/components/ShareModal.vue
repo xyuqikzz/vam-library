@@ -1,213 +1,99 @@
 <template>
-  <UiModal v-if="visible" :show-close="false" :close-disabled="isZipping" @close="handleClose">
-    <!-- Header -->
-    <div class="modal-header">
-      <h3 class="modal-title">
-        <Icon class="title-icon" :size="18" name="outline-8" />
-        {{ $t('share.title') }}
-      </h3>
-      <UiButton
-        :disabled="isZipping"
-        @click="handleClose"
-        variant="ghost"
-        icon-only
-        :aria-label="$t('common.close')"
-      >
-        <Icon :size="16" name="outline-9" />
-      </UiButton>
+  <UiModal
+    v-if="visible"
+    large
+    :title="$t('share.title')"
+    :description="$t('share.desc')"
+    :close-disabled="isZipping"
+    @close="handleClose"
+  >
+    <div v-if="loading" class="share-state" role="status">
+      <span class="spinner-ring" aria-hidden="true" />
+      <p>{{ $t('share.preparing') }}</p>
     </div>
 
-    <!-- Body -->
-    <div class="modal-body">
-      <p class="share-desc text-secondary text-sm">
-        {{ $t('share.desc') }}
+    <div v-else-if="phase === 'error'" class="share-state">
+      <span class="state-icon error"><Icon name="warning" :size="24" /></span>
+      <h4>{{ $t('share.failedTitle') }}</h4>
+      <p class="state-detail">{{ progressError || $t('share.unknownError') }}</p>
+      <UiButton @click="fetchPreview">{{ $t('download.actions.retry') }}</UiButton>
+    </div>
+
+    <div v-else-if="phase === 'done'" class="share-state">
+      <span class="state-icon success"><Icon name="check" :size="24" /></span>
+      <h4>{{ $t('share.successTitle') }}</h4>
+      <p>{{ $t('share.successDesc') }}</p>
+      <div class="state-actions">
+        <UiButton icon="folder" @click="revealZip">{{ $t('share.reveal') }}</UiButton>
+        <UiButton variant="primary" @click="handleClose">{{ $t('share.close') }}</UiButton>
+      </div>
+    </div>
+
+    <div v-else-if="phase === 'zipping'" class="share-progress" role="status">
+      <div class="progress-head">
+        <span>{{ $t('share.zipping') }}</span>
+        <span class="progress-percent">{{ percentage.toFixed(0) }}%</span>
+      </div>
+      <div class="progress-track">
+        <div class="progress-fill" :style="{ width: `${percentage}%` }" />
+      </div>
+      <p class="progress-file" :title="currentFile">{{ currentFile }}</p>
+      <p class="progress-count">{{ processedFiles }} / {{ totalFiles }}</p>
+    </div>
+
+    <div v-else class="share-preview">
+      <p class="share-total">
+        {{ $t('share.total', { count: totalFiles, size: formatSize(totalSizeBytes) }) }}
       </p>
 
-      <!-- Loading State -->
-      <div v-if="loading" class="loading-state">
-        <div class="spinner"></div>
-        <p class="text-secondary text-sm">{{ $t('share.preparing') }}</p>
-      </div>
+      <section class="share-section">
+        <h4>{{ $t('share.packList') }}</h4>
+        <ul class="share-list">
+          <li>
+            <span class="item-name" :title="packageId">{{ packageId }}</span>
+            <span class="item-tag">{{ $t('share.selectedPackage') }}</span>
+          </li>
+          <li v-for="dep in dependencies" :key="dep.id">
+            <span class="item-name" :title="dep.id">{{ dep.id }}</span>
+            <span class="item-size">{{ formatSize(dep.size_bytes) }}</span>
+          </li>
+        </ul>
+        <p v-if="dependencies.length === 0" class="share-hint">{{ $t('share.noDependencies') }}</p>
+      </section>
 
-      <!-- Error Phase State -->
-      <div v-else-if="phase === 'error'" class="status-panel error-panel">
-        <div class="status-icon-wrapper error">
-          <Icon :size="36" name="outline-10" />
-        </div>
-        <h4 class="text-sm font-semibold text-primary" style="margin-top: var(--space-2);">
-          {{ $t('common.error') }}
+      <section v-if="missingDependencies.length > 0" class="share-section">
+        <h4 class="missing-title">
+          <Icon name="warning" :size="14" />
+          {{ $t('share.missingCount', { count: missingDependencies.length }) }}
         </h4>
-        <p
-          class="text-secondary text-xs"
-          style="margin-top: var(--space-1); text-align: center; max-width: 90%;"
-        >
-          {{ $t('share.failed', { error: progressError || 'Unknown Error' }) }}
-        </p>
-        <UiButton @click="fetchPreview" variant="secondary">
-          {{ $t('download.actions.retry') }}
-        </UiButton>
-      </div>
+        <ul class="share-list missing">
+          <li v-for="missing in missingDependencies" :key="missing">
+            <span class="item-name" :title="missing">{{ missing }}</span>
+            <span class="item-size">{{ $t('share.missing') }}</span>
+          </li>
+        </ul>
+      </section>
 
-      <!-- Done Phase State -->
-      <div v-else-if="phase === 'done'" class="status-panel success-panel">
-        <div class="status-icon-wrapper success">
-          <Icon class="checkmark" :size="36" name="outline-11" />
-        </div>
-        <h4 class="text-sm font-semibold text-primary" style="margin-top: var(--space-2);">
-          {{ $t('share.successTitle') }}
-        </h4>
-        <p
-          class="text-secondary text-xs"
-          style="margin-top: var(--space-1); text-align: center; max-width: 90%;"
-        >
-          {{ $t('share.successDesc') }}
-        </p>
-        <div class="success-actions">
-          <UiButton @click="revealZip" variant="secondary">
-            {{ $t('share.reveal') }}
-          </UiButton>
-          <UiButton @click="handleClose" variant="primary" size="lg">
-            {{ $t('share.close') }}
-          </UiButton>
-        </div>
-      </div>
-
-      <!-- Zipping Phase State -->
-      <div v-else-if="phase === 'zipping'" class="status-panel zipping-panel">
-        <div class="progress-info">
-          <span class="text-primary text-sm font-semibold">{{ $t('share.zipping') }}</span>
-          <span class="text-secondary text-sm font-semibold font-numeric">
-            {{ percentage.toFixed(0) }}%
+      <section class="share-exclude">
+        <div class="exclude-text">
+          <strong>{{ excludeListPath ? $t('share.importedExcludeList', { name: excludeListName }) : $t('share.excludeTitle') }}</strong>
+          <span>
+            {{ excludeListPath ? (excludedCount > 0 ? $t('share.excludedInfo', { count: excludedCount }) : $t('share.excludedNone')) : $t('share.excludeHint') }}
           </span>
         </div>
-        <div class="progress-track" style="margin-top: var(--space-2);">
-          <div class="progress-fill" :style="{ width: `${percentage}%` }"></div>
-        </div>
-        <div class="zipping-details" style="margin-top: var(--space-3);">
-          <p class="current-file text-xs text-primary truncate" :title="currentFile">
-            {{ currentFile }}
-          </p>
-          <p class="file-counts text-xs text-secondary font-numeric" style="margin-top: 2px;">
-            {{ processedFiles }} / {{ totalFiles }}
-          </p>
-        </div>
-      </div>
-
-      <!-- Preview & Action State -->
-      <div v-else class="preview-layout animate-fadeIn">
-        <!-- Summary Stats Card -->
-        <div class="summary-stats-card">
-          <div class="stat-column">
-            <span class="stat-val font-numeric">{{ totalFiles }}</span>
-            <span class="stat-lbl text-xs text-tertiary">
-              {{ $t('share.packageCount', { count: totalFiles }).split(':')[0] }}
-            </span>
-          </div>
-          <div class="stat-divider"></div>
-          <div class="stat-column">
-            <span class="stat-val font-numeric">{{ formatSize(totalSizeBytes) }}</span>
-            <span class="stat-lbl text-xs text-tertiary">
-              {{ $t('share.totalSize', { size: '' }).split(':')[0] }}
-            </span>
-          </div>
-        </div>
-
-        <!-- Exclusion List Panel -->
-        <div class="exclusion-list-card">
-          <div
-            v-if="!excludeListPath"
-            class="exclusion-import-trigger"
-            @click="handleImportExcludeList"
-          >
-            <Icon class="import-icon" :size="14" name="outline-12" />
-            <span class="text-xs">{{ $t('share.importExcludeBtn') }}</span>
-          </div>
-          <div v-else class="exclusion-active-state">
-            <div class="exclusion-info-wrapper">
-              <Icon class="active-icon" :size="14" name="outline-13" />
-              <div class="exclusion-text">
-                <p class="exclusion-title text-xs truncate" :title="excludeListName">
-                  {{ $t('share.importedExcludeList', { name: excludeListName }) }}
-                </p>
-                <p v-if="excludedCount > 0" class="exclusion-subtitle text-xs text-secondary">
-                  {{ $t('share.excludedInfo', { count: excludedCount }) }}
-                </p>
-              </div>
-            </div>
-            <UiButton class="text-xs" @click="handleClearExcludeList" variant="secondary">
-              {{ $t('share.clearExcludeList') }}
-            </UiButton>
-          </div>
-        </div>
-
-        <!-- Content Lists -->
-        <div class="list-sections-container">
-          <!-- Selected Target -->
-          <div class="selected-target-wrapper">
-            <h5 class="section-title text-xs text-tertiary">{{ $t('share.selectedPackage') }}</h5>
-            <div class="selected-package-row text-sm text-primary">
-              <span class="type-dot type-scene"></span>
-              <span class="package-name truncate" :title="packageId">{{ packageId }}</span>
-            </div>
-          </div>
-
-          <!-- Dependencies To Pack -->
-          <div class="dependency-list-wrapper">
-            <h5 class="section-title text-xs text-tertiary">
-              {{ $t('share.dependencies') }}
-              <span class="count-badge font-numeric" v-if="dependencies.length > 0">
-                {{ dependencies.length }}
-              </span>
-            </h5>
-            <div v-if="dependencies.length === 0" class="empty-list-hint text-xs text-tertiary">
-              {{ $t('share.noDependencies') }}
-            </div>
-            <div v-else class="list-scrollbar list-content">
-              <div v-for="dep in dependencies" :key="dep.id" class="list-item-row text-sm">
-                <span class="dep-name truncate text-primary" :title="dep.id">{{ dep.id }}</span>
-                <span class="dep-size font-numeric text-secondary text-xs">
-                  {{ formatSize(dep.size_bytes) }}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Missing Dependencies (Warning list) -->
-          <div
-            v-if="missingDependencies.length > 0"
-            class="dependency-list-wrapper missing-wrapper"
-          >
-            <h5 class="section-title text-xs text-error">
-              {{ $t('share.missingDependencies') }}
-              <span class="count-badge missing font-numeric">{{ missingDependencies.length }}</span>
-            </h5>
-            <div class="list-scrollbar list-content missing-list">
-              <div
-                v-for="missing in missingDependencies"
-                :key="missing"
-                class="list-item-row text-sm missing-row"
-              >
-                <span class="dep-name truncate text-error" :title="missing">{{ missing }}</span>
-                <span class="dep-status text-error text-xs">{{ $t('share.missing') }}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Warning Banner -->
-        <div v-if="missingDependencies.length > 0" class="warning-banner text-xs">
-          <Icon class="warn-icon" :size="14" name="outline-14" />
-          <span>{{ $t('share.missingCount', { count: missingDependencies.length }) }}</span>
-        </div>
-
-        <!-- Confirm Button -->
-        <div class="action-footer">
-          <UiButton @click="startSharing" variant="primary" size="lg">
-            {{ $t('share.confirmBtn') }}
-          </UiButton>
-        </div>
-      </div>
+        <UiButton v-if="!excludeListPath" size="sm" icon="upload" @click="handleImportExcludeList">
+          {{ $t('share.importExcludeBtn') }}
+        </UiButton>
+        <UiButton v-else size="sm" variant="ghost" @click="handleClearExcludeList">
+          {{ $t('share.clearExcludeList') }}
+        </UiButton>
+      </section>
     </div>
+
+    <template v-if="!loading && phase !== 'error' && phase !== 'done' && phase !== 'zipping'" #footer>
+      <UiButton @click="handleClose">{{ $t('common.cancel') }}</UiButton>
+      <UiButton variant="primary" @click="startSharing">{{ $t('share.confirmBtn') }}</UiButton>
+    </template>
   </UiModal>
 </template>
 
@@ -431,435 +317,219 @@ function handleClose() {
 </script>
 
 <style scoped>
-/* Header */
-.modal-header {
+.share-state {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: space-between;
-  padding: var(--space-4) var(--space-5);
-  border-bottom: 1px solid var(--border-subtle);
-  flex-shrink: 0;
+  gap: var(--space-3);
+  padding: var(--space-8) var(--space-4);
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: var(--text-base);
 }
 
-.modal-title {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: var(--text-md);
-  font-weight: var(--font-semibold);
+.share-state h4 {
   color: var(--text-primary);
+  font-size: var(--text-md);
+  font-weight: var(--font-heavy);
 }
 
-.title-icon {
-  color: var(--accent-primary);
+.state-detail {
+  max-width: 100%;
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+  user-select: text;
 }
 
-/* Body */
-.modal-body {
-  padding: var(--space-5);
-  overflow-y: auto;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
+.state-icon {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: var(--radius-full);
 }
 
-.share-desc {
-  margin-bottom: var(--space-4);
-  line-height: 1.5;
-}
-
-/* Loading & Status Panels */
-.loading-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-8) 0;
-  gap: var(--space-4);
-}
-
-.spinner {
-  width: 32px;
-  height: 32px;
-  border: none;
-  border-top-color: var(--accent-primary);
-  border-radius: var(--radius-xl) %;
-  animation: spin 1s linear infinite;
-}
-
-.status-panel {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-6) var(--space-4);
-  background: var(--bg-subtle);
-  border: none;
-  border-radius: var(--radius-md);
-}
-
-.status-icon-wrapper {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 60px;
-  height: 60px;
-  border-radius: var(--radius-xl) %;
-}
-
-.status-icon-wrapper.success {
-  background: var(--color-success-bg);
-  color: var(--color-success);
-}
-
-.status-icon-wrapper.error {
+.state-icon.error {
   background: var(--color-error-bg);
   color: var(--color-error);
 }
 
-.success-actions {
+.state-icon.success {
+  background: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+.state-actions {
   display: flex;
-  gap: var(--space-3);
-  margin-top: var(--space-5);
-  width: 100%;
-  justify-content: center;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
 }
 
-/* Zipping styling */
-.zipping-panel {
-  align-items: stretch;
+.share-progress {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-6) 0;
 }
 
-.progress-info {
+.progress-head {
   display: flex;
   justify-content: space-between;
+  font-size: var(--text-base);
+  font-weight: var(--font-semibold);
+}
+
+.progress-percent,
+.progress-count {
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
 }
 
 .progress-track {
-  height: 8px;
-  background: var(--bg-subtle);
+  height: 6px;
   border-radius: var(--radius-full);
+  background: var(--bg-active);
   overflow: hidden;
 }
 
 .progress-fill {
   height: 100%;
-  background: var(--accent-gradient);
   border-radius: var(--radius-full);
-  transition: width 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  background: var(--accent-primary);
+  transition: width 0.2s ease;
 }
 
-.zipping-details {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+.progress-file {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
 }
 
-.current-file {
-  max-width: 70%;
+.progress-count {
+  font-size: var(--text-xs);
 }
 
-/* Preview Layout */
-.preview-layout {
+.share-preview {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  flex: 1;
 }
 
-.summary-stats-card {
-  display: flex;
-  background: var(--bg-subtle);
-  border: none;
-  border-radius: var(--radius-md);
-  padding: var(--space-3) 0;
-}
-
-.stat-column {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-}
-
-.stat-divider {
-  width: 1px;
-  background: var(--border-subtle);
-}
-
-.stat-val {
-  font-size: var(--text-lg);
-  font-weight: var(--font-bold);
+.share-total {
   color: var(--text-primary);
-}
-
-.stat-lbl {
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-/* Scrollable Lists */
-.list-sections-container {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  max-height: 260px;
-  overflow: hidden;
-}
-
-.selected-target-wrapper {
-  background: var(--bg-subtle);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
-  padding: var(--space-2) var(--space-3);
-}
-
-.section-title {
+  font-size: var(--text-base);
   font-weight: var(--font-semibold);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-bottom: var(--space-2);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
 }
 
-.count-badge {
-  background: var(--border-default);
-  padding: 1px 6px;
-  border-radius: var(--radius-full);
-  font-size: var(--text-xs);
-  color: var(--text-secondary);
-}
-
-.count-badge.missing {
-  background: var(--color-error-bg);
-  color: var(--color-error);
-}
-
-.selected-package-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-weight: var(--font-medium);
-}
-
-.type-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: var(--radius-xl) %;
-}
-
-.type-dot.type-scene {
-  background: var(--color-scene);
-}
-
-.dependency-list-wrapper {
-  flex: 1;
+.share-section {
   display: flex;
   flex-direction: column;
-  min-height: 90px;
-}
-
-.empty-list-hint {
-  padding: var(--space-3);
-  text-align: center;
-  border: none;
-  border-radius: var(--radius-sm);
-  background: var(--bg-subtle);
-}
-
-.list-content {
-  flex: 1;
-  overflow-y: auto;
-  border: none;
-  border-radius: var(--radius-sm);
-  background: var(--border-subtle);
-  padding: var(--space-1) 0;
-}
-
-.list-item-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: var(--space-2) var(--space-3);
-  border-bottom: 1px solid var(--bg-subtle);
-}
-
-.list-item-row:last-child {
-  border-bottom: none;
-}
-
-.dep-name {
-  max-width: 75%;
-}
-
-.missing-list {
-  border-color: var(--color-error-bg);
-  background: var(--color-error-bg);
-}
-
-.missing-row {
-  border-bottom-color: var(--color-error-bg);
-}
-
-/* Warning Banner */
-.warning-banner {
-  display: flex;
-  align-items: flex-start;
   gap: var(--space-2);
-  padding: var(--space-3);
-  background: var(--color-warning-bg);
-  border: none;
-  border-radius: var(--radius-sm);
-  color: var(--color-warning);
-  line-height: 1.4;
 }
 
-.warn-icon {
-  flex-shrink: 0;
-  margin-top: 1px;
+.share-section h4 {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: var(--font-bold);
 }
 
-/* Actions footer */
-.action-footer {
+.missing-title {
   display: flex;
-  margin-top: var(--space-2);
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-warning) !important;
 }
 
-/* Scrollbar styling */
-.list-scrollbar::-webkit-scrollbar {
-  width: 6px;
+.share-list {
+  max-height: 240px;
+  overflow: auto;
+  border-radius: var(--radius-md);
+  background: var(--bg-input);
 }
 
-.list-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
+.share-list li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 40px;
+  padding: var(--space-1) var(--space-4);
+  font-size: var(--text-sm);
 }
 
-.list-scrollbar::-webkit-scrollbar-thumb {
-  background: var(--border-default);
-  border-radius: var(--radius-full);
+.share-list li + li {
+  border-top: 1px solid var(--border-subtle);
 }
 
-.list-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: var(--border-strong);
+.item-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-/* Animations */
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-.checkmark {
-  animation: scaleIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
-}
-
-@keyframes scaleIn {
-  from {
-    transform: scale(0.8);
-    opacity: 0;
-  }
-  to {
-    transform: scale(1);
-    opacity: 1;
-  }
-}
-
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.25s var(--ease);
-}
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
-}
-
-@keyframes scaleUp {
-  from {
-    transform: scale(0.95);
-    opacity: 0;
-  }
-  to {
-    transform: scale(1);
-    opacity: 1;
-  }
-}
-
-.font-numeric {
+.item-size {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
   font-variant-numeric: tabular-nums;
 }
 
-/* Exclusion List Panel styling */
-.exclusion-list-card {
-  background: var(--bg-subtle);
-  border: none;
-  border-radius: var(--radius-md);
-  padding: var(--space-3);
-  transition: all var(--transition-normal);
-}
-
-.exclusion-list-card:hover {
-  background: var(--bg-subtle);
-  border-color: var(--border-strong);
-}
-
-.exclusion-import-trigger {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
-  color: var(--text-secondary);
-  cursor: pointer;
-  height: 38px;
-  user-select: none;
-  transition: color var(--transition-fast);
-}
-
-.exclusion-import-trigger:hover {
-  color: var(--text-primary);
-}
-
-.import-icon {
-  color: var(--accent-primary);
-}
-
-.exclusion-active-state {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-}
-
-.exclusion-info-wrapper {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-width: 0;
-}
-
-.active-icon {
-  color: var(--color-success);
+.item-tag {
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--accent-subtle);
+  color: var(--accent-primary);
+  font-size: var(--text-xs);
+  font-weight: var(--font-bold);
 }
 
-.exclusion-text {
+.share-list.missing {
+  background: var(--color-warning-bg);
+}
+
+.share-list.missing .item-size {
+  color: var(--color-warning);
+}
+
+.share-hint {
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+}
+
+.share-exclude {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--bg-input);
+}
+
+.exclude-text {
+  flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
 }
 
-.exclusion-title {
-  color: var(--text-primary);
-  font-weight: var(--font-medium);
+.exclude-text strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-sm);
 }
 
-.exclusion-subtitle {
-  color: var(--text-secondary);
+.exclude-text span {
+  color: var(--text-tertiary);
   font-size: var(--text-xs);
 }
 </style>

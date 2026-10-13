@@ -40,7 +40,7 @@ defineEmits<{ 'update:modelValue': [value: boolean] }>()
   width: 20px;
   height: 20px;
   border: 2px solid var(--border-control);
-  border-radius: var(--radius-xs);
+  border-radius: calc(var(--radius-checkbox) + 1px);
   background: var(--bg-input);
   animation: none;
 }

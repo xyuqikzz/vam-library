@@ -31,7 +31,7 @@ withDefaults(defineProps<Props>(), {
 }
 
 .skeleton-loader.circle {
-  border-radius: var(--radius-xl) %;
+  border-radius: var(--radius-full);
 }
 
 .skeleton-loader.card {

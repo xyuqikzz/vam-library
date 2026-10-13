@@ -58,7 +58,7 @@ function toggleCollapse() {
 <style scoped>
 .glass-panel-component {
   flex-shrink: 0;
-  background: var(--bg-surface);
+  background: var(--bg-elevated);
   border: none;
   border-radius: var(--radius-lg);
   box-shadow: none;
@@ -69,7 +69,9 @@ function toggleCollapse() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-4) var(--space-5);
+  min-height: 52px;
+  box-sizing: border-box;
+  padding: var(--space-3) var(--space-panel);
   border-bottom: 1px solid var(--border-subtle);
   cursor: default;
 }
@@ -79,11 +81,10 @@ function toggleCollapse() {
 }
 
 .panel-title {
-  font-size: var(--text-sm);
-  font-weight: var(--font-semibold);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--text-secondary);
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: var(--font-heavy);
+  color: var(--text-primary);
 }
 
 .collapse-toggle {
@@ -113,7 +114,7 @@ function toggleCollapse() {
 }
 
 .panel-content {
-  padding: var(--space-5);
+  padding: var(--space-panel);
 }
 
 /* Collapse transition */

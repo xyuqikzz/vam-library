@@ -7,7 +7,7 @@
           <UiButton :disabled="isRestoringAll" @click="handleRestoreAll" variant="ghost">
             {{ isRestoringAll ? $t('migration.restoringAll') : $t('migration.restoreAll') }}
           </UiButton>
-          <UiButton :disabled="!selectedMode" @click="currentStep = 1" variant="primary" size="lg">
+          <UiButton :disabled="!selectedMode" @click="currentStep = 1" variant="primary">
             {{ $t('common.next') }}
           </UiButton>
         </template>
@@ -17,7 +17,7 @@
           <UiButton @click="currentStep = 0" variant="ghost">
             {{ $t('common.back') }}
           </UiButton>
-          <UiButton @click="handlePreview" variant="primary" size="lg">
+          <UiButton @click="handlePreview" variant="primary">
             {{ $t('common.next') }}
           </UiButton>
         </template>
@@ -30,9 +30,9 @@
           <UiButton
             v-if="preview?.plan_id && (preview.operations.length > 0 || preview.cleanup_empty_dirs)"
             @click="handleExecute"
-            variant="secondary"
+            variant="primary"
           >
-            {{ $t('common.confirm') }}
+            {{ config.action === 'copy' ? $t('migration.startCopy') : $t('migration.startMove') }}
           </UiButton>
         </template>
 
@@ -77,12 +77,13 @@
         <p class="step-description text-secondary">{{ $t('migration.chooseModeDesc') }}</p>
 
         <div class="mode-grid stagger-children">
-          <UiButton
+          <button
             v-for="mode in modes"
             :key="mode.id"
-            :class="['mode-card glass-card-component', { selected: selectedMode === mode.id }]"
+            type="button"
+            :class="['mode-card', { selected: selectedMode === mode.id }]"
+            :aria-pressed="selectedMode === mode.id"
             @click="selectedMode = mode.id"
-            variant="secondary"
           >
             <div class="mode-icon-wrapper" :style="{ '--mode-color': mode.color }">
               <Icon :size="24" :path="mode.icon" />
@@ -92,7 +93,7 @@
             <div v-if="selectedMode === mode.id" class="selected-indicator">
               <Icon :size="16" name="outline-31" />
             </div>
-          </UiButton>
+          </button>
         </div>
       </div>
 
@@ -119,17 +120,12 @@
 
           <div class="config-field">
             <label class="config-label text-sm">{{ $t('migration.targetDirectory') }}</label>
-            <div class="target-option-row">
-              <UiChip
-                v-for="option in targetOptions"
-                :key="option.id"
-                :class="['config-toggle', { active: config.targetKind === option.id }]"
-                @click="config.targetKind = option.id"
-                :selected="config.targetKind === option.id"
-              >
-                {{ option.label }}
-              </UiChip>
-            </div>
+            <UiSegmented
+              :model-value="config.targetKind"
+              :options="targetOptions.map((option) => ({ value: option.id, label: option.label }))"
+              :label="$t('migration.targetDirectory')"
+              @update:model-value="config.targetKind = $event as 'real_addon' | 'managed_library'"
+            />
             <div class="selected-target">
               <span class="selected-target-path truncate">
                 {{ selectedTargetDir || $t('migration.targetDirectoryPlaceholder') }}
@@ -142,22 +138,15 @@
 
           <div class="config-field">
             <label class="config-label text-sm">{{ $t('migration.operation') }}</label>
-            <div class="config-toggle-row">
-              <UiChip
-                :class="['config-toggle', { active: config.action === 'move' }]"
-                @click="config.action = 'move'"
-                :selected="config.action === 'move'"
-              >
-                {{ $t('migration.move') }}
-              </UiChip>
-              <UiChip
-                :class="['config-toggle', { active: config.action === 'copy' }]"
-                @click="config.action = 'copy'"
-                :selected="config.action === 'copy'"
-              >
-                {{ $t('migration.copySafe') }}
-              </UiChip>
-            </div>
+            <UiSegmented
+              :model-value="config.action"
+              :options="[
+                { value: 'move', label: $t('migration.move') },
+                { value: 'copy', label: $t('migration.copySafe') },
+              ]"
+              :label="$t('migration.operation')"
+              @update:model-value="config.action = $event as 'copy' | 'move'"
+            />
           </div>
         </div>
       </div>
@@ -213,7 +202,7 @@
             :class="['preview-row', { 'preview-conflict': op.conflict !== 'none' }]"
           >
             <span class="preview-cell name" :title="op.source">{{ fileName(op.source) }}</span>
-            <span class="preview-cell type">{{ op.resource_type }}</span>
+            <span class="preview-cell type">{{ $te(`resourceType.${op.resource_type}`) ? $t(`resourceType.${op.resource_type}`) : op.resource_type }}</span>
             <span class="preview-cell size">{{ formatSize(op.size_bytes) }}</span>
             <span class="preview-cell dest text-xs text-tertiary">{{ op.destination }}</span>
           </div>
@@ -330,7 +319,7 @@
 </template>
 
 <script setup lang="ts">
-import UiChip from '@/components/ui/UiChip.vue'
+import UiSegmented from '@/components/ui/UiSegmented.vue'
 import PageHeader from '@/components/layout/PageHeader.vue'
 import UiInput from '@/components/ui/UiInput.vue'
 import UiButton from '@/components/ui/UiButton.vue'
@@ -642,7 +631,6 @@ function fileName(path: string) { return path.split(/[\\/]/).pop() || path }
 .migration-view {
   display: flex;
   flex-direction: column;
-  gap: var(--space-6);
 }
 
 .step-indicator {
@@ -677,7 +665,7 @@ function fileName(path: string) { return path.split(/[\\/]/).pop() || path }
   justify-content: center;
   width: 28px;
   height: 28px;
-  border-radius: var(--radius-xl) %;
+  border-radius: var(--radius-full);
   background: var(--bg-hover);
   color: var(--text-tertiary);
   font-size: var(--text-sm);
@@ -744,12 +732,14 @@ function fileName(path: string) { return path.split(/[\\/]/).pop() || path }
   position: relative;
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
   gap: var(--space-3);
-  padding: var(--space-6);
-  background: var(--glass-bg);
-  backdrop-filter: var(--glass-blur);
+  padding: var(--space-panel);
+  background: var(--bg-elevated);
   border: none;
   border-radius: var(--radius-lg);
+  color: inherit;
+  font: inherit;
   text-align: left;
   cursor: pointer;
   transition:
@@ -759,13 +749,15 @@ function fileName(path: string) { return path.split(/[\\/]/).pop() || path }
 }
 
 .mode-card:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
-  border-color: var(--border-strong);
+  background: var(--bg-hover);
+}
+.mode-card:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 .mode-card.selected {
-  border-color: var(--accent-primary);
-  box-shadow: none;
+  background: var(--bg-hover);
+  box-shadow: var(--ring-selected);
 }
 
 .mode-icon-wrapper {
@@ -780,11 +772,13 @@ function fileName(path: string) { return path.split(/[\\/]/).pop() || path }
 }
 
 .mode-title {
+  margin: 0;
   font-size: var(--text-md);
-  font-weight: var(--font-semibold);
+  font-weight: var(--font-heavy);
   color: var(--text-primary);
 }
 .mode-description {
+  margin: 0;
   font-size: var(--text-sm);
   color: var(--text-secondary);
   line-height: var(--leading-relaxed);
@@ -829,60 +823,26 @@ function fileName(path: string) { return path.split(/[\\/]/).pop() || path }
   gap: var(--space-1);
 }
 
-.config-input {
-  transition: border-color var(--duration-fast) var(--ease);
-}
 
-.config-input:focus {
-  outline: none;
-}
-
-.target-option-row {
-  display: flex;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-}
-
+/* 只读路径：与设置页 path-display 一致（44 高、输入底色、方圆角、无边框） */
 .selected-target {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: var(--space-3);
-  min-height: 36px;
-  padding: 0 var(--space-3);
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
+  height: var(--control-h-lg);
+  padding: 0 var(--space-4);
+  background: var(--bg-input);
+  border-radius: var(--radius-control);
 }
 
 .selected-target-path {
-  color: var(--text-primary);
-  font-size: var(--text-sm);
-}
-
-.config-toggle-row {
-  display: flex;
-  gap: var(--space-2);
-}
-
-.config-toggle {
-  padding: var(--space-2) var(--space-4);
-  border-radius: var(--radius-md);
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-  background: var(--bg-elevated);
   color: var(--text-secondary);
-  border: none;
-  transition:
-    background var(--duration-fast) var(--ease),
-    color var(--duration-fast) var(--ease),
-    border-color var(--duration-fast) var(--ease);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
 }
 
-.config-toggle.active {
-  background: var(--accent-muted);
-  color: var(--accent-primary);
-  border-color: var(--accent-primary);
+.config-field > :deep(.ui-segmented) {
+  align-self: flex-start;
 }
 
 /* ── Preview ──────────────────────────────────────────────── */
@@ -905,8 +865,10 @@ function fileName(path: string) { return path.split(/[\\/]/).pop() || path }
 }
 
 .warning-item {
-  color: var(--color-warning);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
   padding: 2px 0;
+  overflow-wrap: anywhere;
 }
 .warning-more {
   padding-top: var(--space-1);
@@ -924,7 +886,6 @@ function fileName(path: string) { return path.split(/[\\/]/).pop() || path }
   padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--border-subtle);
   font-weight: var(--font-semibold);
-  text-transform: uppercase;
   letter-spacing: 0.06em;
 }
 
@@ -941,6 +902,11 @@ function fileName(path: string) { return path.split(/[\\/]/).pop() || path }
 
 .preview-row.preview-conflict {
   background: var(--color-warning-bg);
+}
+
+/* 冲突行底色偏亮，目标路径用 secondary 灰才够对比度 */
+.preview-row.preview-conflict .dest {
+  color: var(--text-secondary);
 }
 
 .preview-cell {
@@ -983,9 +949,9 @@ function fileName(path: string) { return path.split(/[\\/]/).pop() || path }
 .dep-spinner {
   width: 32px;
   height: 32px;
-  border: none;
+  border: 3px solid var(--bg-active);
   border-top-color: transparent;
-  border-radius: var(--radius-xl) %;
+  border-radius: var(--radius-full);
   animation: spin 0.8s linear infinite;
 }
 
@@ -1096,33 +1062,4 @@ function fileName(path: string) { return path.split(/[\\/]/).pop() || path }
   background: var(--color-error-bg);
 }
 
-.b2-page {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-height: 0;
-  max-width: none;
-  margin: 0;
-  padding: 0;
-  gap: 0;
-  overflow: hidden;
-}
-.b2-page-body {
-  flex: 1;
-  min-height: 0;
-  min-width: 0;
-  overflow: auto;
-  padding: 20px 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-.b2-page :deep(.page-header) {
-  width: 100%;
-}
-@media (max-width: 800px) {
-  .b2-page-body {
-    padding: 12px;
-  }
-}
 </style>

@@ -11,7 +11,7 @@ const appStoreUrl = moduleUrl('export const useAppStore = () => ({ vamRootPath: 
 const eventsUrl = await compileModule(new URL('../src/utils/eventListeners.ts', import.meta.url))
 const { useLocalLibraryStore } = await import(await compileModule(
   new URL('../src/stores/localLibrary.ts', import.meta.url),
-  { './app': appStoreUrl, '@/utils/eventListeners': eventsUrl },
+  { './app': appStoreUrl, '@/utils/eventListeners': eventsUrl, '@/utils/resourceCache': await compileModule(new URL('../src/utils/resourceCache.ts', import.meta.url)) },
 ))
 
 function deferred() {
@@ -242,4 +242,80 @@ test('failed full refresh clears all stale secondary data', async t => {
   assert.deepEqual(store.corruptedPackages, [])
   assert.equal(store.state, 'error')
   assert.match(store.error, /database unavailable/)
+})
+
+test('a change invalidates old secondary data before the debounce fires', async t => {
+  const pending = deferred()
+  const { store } = setup(t, { find_missing_dependencies: () => pending.promise })
+  await store.startListeners()
+  await store.refreshStartup()
+  store.missingDependencies = [{ package_id: 'keep' }]
+  await emit('library-index-changed', {
+    revision: 2, reason: 'package_indexed', changed_package_ids: [original.id], changed_paths: [], invalidates: [],
+  })
+  pending.resolve([{ package_id: 'obsolete' }])
+  await setImmediate()
+  assert.deepEqual(store.missingDependencies, [{ package_id: 'keep' }])
+  assert.equal(store.state, 'indexing')
+})
+
+test('failed dependency analysis preserves previous missing rows instead of reporting zero', async t => {
+  const { store } = setup(t, { find_missing_dependencies: () => { throw new Error('analysis failed') } })
+  store.missingDependencies = [{ package_id: 'keep' }]
+  store.dashboardStats = { total_packages: 1, missing_dependencies: 1 }
+  await store.refreshStartup()
+  await setImmediate()
+  assert.deepEqual(store.missingDependencies, [{ package_id: 'keep' }])
+  assert.equal(store.dashboardStats.missing_dependencies, 1)
+  assert.equal(store.state, 'stale')
+  assert.match(store.error, /analysis failed/)
+})
+
+test('dashboard missing count is taken from the same successful missing-list snapshot', async t => {
+  const { store } = setup(t, {
+    get_dashboard_stats: () => ({ total_packages: 1, missing_dependencies: 999 }),
+    find_missing_dependencies: () => [{ package_id: 'one' }, { package_id: 'two' }],
+  })
+  await store.refreshAll()
+  assert.equal(store.dashboardStats.missing_dependencies, 2)
+})
+
+test('a tag change interrupting startup also refreshes unfinished secondary data', async t => {
+  const pending = deferred()
+  let calls = 0
+  const { store } = setup(t, {
+    find_missing_dependencies: () => ++calls === 1 ? pending.promise : [{ package_id: 'current' }],
+  })
+  await store.startListeners()
+  await store.refreshStartup()
+  await change(t, 'tags_changed')
+  pending.resolve([{ package_id: 'obsolete' }])
+  await setImmediate()
+  assert.deepEqual(store.missingDependencies, [{ package_id: 'current' }])
+  assert.equal(store.dashboardStats.missing_dependencies, 1)
+  assert.equal(store.state, 'ready')
+})
+
+test('an explicit deletion refresh consumes the queued event without reading the library twice', async t => {
+  let lists = 0
+  const { store } = setup(t, { list_packages: () => { lists++; return [] } })
+  await store.startListeners()
+  await emit('library-index-changed', { revision: 2, reason: 'cleanup_changed', changed_package_ids: [original.id], changed_paths: [], invalidates: ['packages'] })
+  await store.refreshAll()
+  t.mock.timers.tick(200); await setImmediate()
+  assert.equal(lists, 1)
+  assert.equal(store.state, 'ready')
+})
+
+test('a new mutation during deletion refresh still invalidates the old snapshot', async t => {
+  const first = deferred(); let lists = 0
+  const { store } = setup(t, { list_packages: () => ++lists === 1 ? first.promise : [] })
+  await store.startListeners()
+  const refresh = store.refreshAll()
+  await emit('library-index-changed', { revision: 3, reason: 'cleanup_changed', changed_package_ids: [original.id], changed_paths: [], invalidates: ['packages'] })
+  first.resolve([original]); await refresh
+  assert.deepEqual(store.packages, [])
+  t.mock.timers.tick(200); await setImmediate()
+  assert.equal(lists, 2)
+  assert.deepEqual(store.packages, [])
 })

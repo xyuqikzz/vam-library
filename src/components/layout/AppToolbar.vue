@@ -56,6 +56,7 @@ const pageTitle = computed(() => {
     '/appearances': () => t('sidebar.appearances'),
     '/dependency-completion': () => t('sidebar.dependencyCompletion'),
     '/deduplication': () => t('sidebar.deduplication'),
+    '/cleanup': () => t('cleanup.title'),
     '/migration': () => t('sidebar.migration'),
     '/ingestion': () => t('sidebar.ingestion'),
     '/trash': () => t('sidebar.trash'),

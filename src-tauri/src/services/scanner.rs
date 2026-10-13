@@ -97,7 +97,9 @@ pub fn scan_addon_packages_with_cache(
     // 第一阶段只遍历目录并读取文件状态，后续增量判断直接复用这里的数据。
     let mut var_files = Vec::new();
     for source_dir in source_dirs {
-        for entry in WalkDir::new(&source_dir).follow_links(true) {
+        for entry in WalkDir::new(&source_dir).follow_links(true).into_iter().filter_entry(|entry| {
+            entry.depth() == 0 || !entry.file_type().is_dir() || !matches!(entry.file_name().to_string_lossy().to_ascii_lowercase().as_str(), ".trash" | ".downloads" | ".vamboxlibrary-downloads")
+        }) {
             // A partial directory listing must never drive removal of existing index rows.
             let entry = entry.map_err(|e| {
                 AppError::Io(format!(
@@ -276,6 +278,54 @@ fn system_time_to_rfc3339(time: SystemTime) -> String {
 mod tests {
     use super::*;
     use crate::services::resource_files::tests::TestDir;
+
+    #[test]
+    fn nonstandard_names_scan_contents_and_keep_distinct_database_identities() {
+        use crate::db::Database;
+        use crate::services::{dependencies::{DependencyIndex, load_installed_packages}, resource_files::index_parsed_package};
+        use std::io::Write;
+        let root = TestDir::new();
+        let addons = root.0.join("AddonPackages");
+        std::fs::create_dir(&addons).unwrap();
+        let names = ["Author.Scene.1", "Author.Scene.01", "Author.Scene.1_2",
+            "Author.Scene.1 (2)", "Author.Scene.v3", "Author.Scene.latest", "Author.Scene"];
+        let mut originals = Vec::new();
+        for id in names {
+            let path = addons.join(format!("{id}.var"));
+            let mut zip = zip::ZipWriter::new(std::fs::File::create(&path).unwrap());
+            let options = zip::write::SimpleFileOptions::default();
+            zip.start_file("meta.json", options).unwrap();
+            zip.write_all(br#"{"dependencies":{"Other.Asset.2":{}}}"#).unwrap();
+            zip.start_file("Saves/scene/test.json", options).unwrap();
+            zip.write_all(b"{}").unwrap();
+            zip.finish().unwrap();
+            originals.push((path.clone(), std::fs::read(path).unwrap()));
+        }
+        let (packages, result) = scan_addon_packages_simple(&root.0).unwrap();
+        assert!(result.failures.is_empty(), "{:?}", result.failures);
+        assert_eq!(packages.len(), names.len());
+        let db = Database::new(&root.0.join("library.db")).unwrap();
+        db.with_conn(|conn| {
+            for package in &packages {
+                assert!(names.contains(&package.id.as_str()));
+                assert_eq!(package.creator, "Author");
+                assert_eq!(package.name, "Scene");
+                assert!(package.resource_types.iter().any(|kind| kind == "scene"));
+                assert_eq!(package.contents.len(), 2);
+                assert!(package.meta.as_ref().unwrap().dependencies.contains_key("Other.Asset.2"));
+                index_parsed_package(conn, package)?;
+            }
+            assert_eq!(conn.query_row("SELECT COUNT(*) FROM packages", [], |r| r.get::<_, usize>(0))?, names.len());
+            assert_eq!(conn.query_row("SELECT COUNT(*) FROM dependencies", [], |r| r.get::<_, usize>(0))?, names.len());
+            let installed = load_installed_packages(conn)?;
+            let index = DependencyIndex::new(&installed);
+            assert_eq!(index.resolve("Author.Scene.1").resolved, Some("Author.Scene.1"));
+            assert!(matches!(index.resolve("Author.Scene.latest").resolved, Some("Author.Scene.1" | "Author.Scene.01")));
+            assert!(index.resolve("Author.Scene.2").resolved.is_none());
+            Ok(())
+        }).unwrap();
+        for (path, bytes) in originals { assert_eq!(std::fs::read(path).unwrap(), bytes); }
+    }
 
     #[test]
     fn invalid_scan_root_is_not_reported_as_an_empty_library() {

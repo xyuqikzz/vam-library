@@ -1,3 +1,4 @@
+import { invalidateResourceCache } from '@/utils/resourceCache'
 import { computed, onScopeDispose, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { invoke } from '@tauri-apps/api/core'
@@ -71,6 +72,7 @@ export const useLocalLibraryStore = defineStore('localLibrary', () => {
 
   let refreshTimer: ReturnType<typeof setTimeout> | null = null
   let refreshToken = 0
+  let secondaryRefreshNeeded = false
   let pendingChange: LibraryIndexChangedPayload | null = null
 
   const loading = computed(() => ['loading', 'scanning', 'indexing', 'refreshing'].includes(state.value))
@@ -107,6 +109,9 @@ export const useLocalLibraryStore = defineStore('localLibrary', () => {
   }
 
   function scheduleRefresh(payload: LibraryIndexChangedPayload) {
+    // Invalidate in-flight snapshots immediately, including during the debounce.
+    refreshToken += 1
+    if (payload.reason !== 'tags_changed') invalidateResourceCache()
     pendingChange = mergePendingChange(pendingChange, payload)
     state.value = payload.reason === 'scan_completed'
       ? 'scanning'
@@ -175,6 +180,7 @@ export const useLocalLibraryStore = defineStore('localLibrary', () => {
   }
 
   async function refreshSecondaryStartupData(token: number) {
+    secondaryRefreshNeeded = true
     try {
       const [
         stats,
@@ -184,23 +190,26 @@ export const useLocalLibraryStore = defineStore('localLibrary', () => {
       ] = await Promise.all([
         invoke<DashboardStats>('get_dashboard_stats').catch(() => emptyDashboardStats()),
         invoke<DependencyGraphData>('get_dependency_graph').catch(() => emptyDependencyGraph()),
-        invoke<MissingDependency[]>('find_missing_dependencies').catch(() => []),
+        invoke<MissingDependency[]>('find_missing_dependencies'),
         invoke<CorruptedPackage[]>('find_corrupted_packages').catch(() => []),
       ])
 
       if (token !== refreshToken) return
-      dashboardStats.value = stats || emptyDashboardStats()
+      dashboardStats.value = { ...(stats || emptyDashboardStats()), missing_dependencies: missing.length }
       dependencyGraph.value = graph || emptyDependencyGraph()
       missingDependencies.value = missing || []
       corruptedPackages.value = corrupted || []
-    } catch {
-      // 首屏已可用，后台统计失败时保持空数据。
+      secondaryRefreshNeeded = false
+    } catch (err) {
+      if (token !== refreshToken) return
+      error.value = String(err)
+      state.value = 'stale'
     }
   }
 
   async function refreshForChange(change: LibraryIndexChangedPayload | null) {
     if (!change) return
-    if (packages.value.length === 0 || change.reason === 'scan_completed' || change.reason === 'multiple_changes') {
+    if (secondaryRefreshNeeded || packages.value.length === 0 || change.reason === 'scan_completed' || change.reason === 'multiple_changes') {
       await refreshAll(change.reason === 'scan_completed' ? 'scanning' : 'refreshing')
       return
     }
@@ -233,7 +242,9 @@ export const useLocalLibraryStore = defineStore('localLibrary', () => {
   }
 
   async function refreshAll(nextState: LocalLibraryState = 'refreshing') {
-    const token = ++refreshToken
+    // An explicit refresh also covers the event queued by the same mutation.
+    cancelPendingRefresh()
+    const token = refreshToken
     const appStore = useAppStore()
     state.value = nextState
     error.value = null
@@ -251,7 +262,7 @@ export const useLocalLibraryStore = defineStore('localLibrary', () => {
         invoke<PackageDisplayItem[]>('list_packages'),
         invoke<DashboardStats>('get_dashboard_stats'),
         invoke<DependencyGraphData>('get_dependency_graph').catch(() => emptyDependencyGraph()),
-        invoke<MissingDependency[]>('find_missing_dependencies').catch(() => []),
+        invoke<MissingDependency[]>('find_missing_dependencies'),
         invoke<CorruptedPackage[]>('find_corrupted_packages').catch(() => []),
         invoke<string[]>('list_all_tags').catch(() => []),
         loadPackageFolders(appStore.vamRootPath),
@@ -259,10 +270,11 @@ export const useLocalLibraryStore = defineStore('localLibrary', () => {
 
       if (token !== refreshToken) return
       packages.value = packageList || []
-      dashboardStats.value = stats || emptyDashboardStats()
+      dashboardStats.value = { ...(stats || emptyDashboardStats()), missing_dependencies: missing.length }
       dependencyGraph.value = graph || emptyDependencyGraph()
       missingDependencies.value = missing || []
       corruptedPackages.value = corrupted || []
+      secondaryRefreshNeeded = false
       allTags.value = tags || []
       packageFolders.value = folders
       markReady()
@@ -296,11 +308,11 @@ export const useLocalLibraryStore = defineStore('localLibrary', () => {
   async function refreshDashboard(token: number) {
     const [stats, missing, corrupted] = await Promise.all([
       invoke<DashboardStats>('get_dashboard_stats'),
-      invoke<MissingDependency[]>('find_missing_dependencies').catch(() => []),
+      invoke<MissingDependency[]>('find_missing_dependencies'),
       invoke<CorruptedPackage[]>('find_corrupted_packages').catch(() => []),
     ])
     if (token !== refreshToken) return
-    dashboardStats.value = stats
+    dashboardStats.value = { ...stats, missing_dependencies: missing.length }
     missingDependencies.value = missing
     corruptedPackages.value = corrupted
   }
@@ -336,6 +348,7 @@ export const useLocalLibraryStore = defineStore('localLibrary', () => {
 
   function resetState(nextState: LocalLibraryState = 'idle') {
     cancelPendingRefresh()
+    secondaryRefreshNeeded = false
     packages.value = []
     dashboardStats.value = emptyDashboardStats()
     dependencyGraph.value = emptyDependencyGraph()

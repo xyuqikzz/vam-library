@@ -29,6 +29,11 @@ const tooltipId = useId()
 const label = computed(
   () => props.ariaLabel || String(attrs['aria-label'] || attrs.title || props.tooltip || ''),
 )
+// 只在键盘聚焦时显示提示：弹窗/菜单用脚本把焦点移到按钮上时，不应凭空冒出 tooltip。
+function onFocus(event: FocusEvent) {
+  const target = event.target as HTMLElement
+  focused.value = target.matches(':focus-visible') && !target.hasAttribute('data-initial-focus')
+}
 defineExpose({ focus: () => element.value?.focus(), element })
 </script>
 <template>
@@ -44,7 +49,7 @@ defineExpose({ focus: () => element.value?.focus(), element })
     :aria-describedby="iconOnly && (hovered || focused) ? tooltipId : undefined"
     @mouseenter="hovered = true"
     @mouseleave="hovered = false"
-    @focus="focused = true"
+    @focus="onFocus"
     @blur="focused = false"
   >
     <span v-if="loading" class="ui-spinner" aria-hidden="true" />
@@ -68,9 +73,9 @@ defineExpose({ focus: () => element.value?.focus(), element })
   gap: var(--space-2);
   flex-shrink: 0;
   height: var(--control-h-md);
-  padding: 0 18px;
+  padding: 0 var(--space-4);
   border: none;
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-control);
   background: var(--bg-control);
   color: var(--text-primary);
   font-size: var(--text-base);
@@ -83,11 +88,12 @@ defineExpose({ focus: () => element.value?.focus(), element })
 }
 .ui-button.sm {
   height: var(--control-h-sm);
-  padding: 0 12px;
+  border-radius: var(--radius-control-sm);
+  padding: 0 var(--space-3);
 }
 .ui-button.lg {
   height: var(--control-h-lg);
-  padding: 0 22px;
+  padding: 0 var(--space-5);
 }
 .ui-button:hover {
   background: var(--bg-control-hover);
@@ -112,10 +118,10 @@ defineExpose({ focus: () => element.value?.focus(), element })
   color: var(--text-muted-strong);
 }
 .ui-button.ghost:hover {
-  background: var(--bg-menu);
+  background: var(--bg-ghost-hover);
 }
 .ui-button.ghost:active:not(:disabled) {
-  background: var(--bg-control);
+  background: var(--bg-ghost-active);
 }
 .ui-button.danger {
   background: var(--color-error-surface);

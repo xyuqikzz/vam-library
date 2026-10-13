@@ -49,6 +49,7 @@ pub struct AppSettings {
     pub auto_scan: bool,
     /// UI 主题。
     pub theme: String,
+    pub language: String,
     /// 是否模糊所有资源预览图，旧配置默认开启。
     pub blur_previews: bool,
     /// 是否已启用资源接管。
@@ -79,6 +80,7 @@ impl Default for AppSettings {
             vam_root_path: None,
             auto_scan: false,
             theme: "dark".to_string(),
+            language: "zh-CN".to_string(),
             blur_previews: true,
             managed_enabled: false,
             managed_library_path: None,
@@ -100,12 +102,26 @@ pub async fn get_settings(app_handle: tauri::AppHandle) -> Result<AppSettings, S
     read_settings_file(&settings_file_path(&app_handle)?)
 }
 
+#[tauri::command]
+pub async fn set_app_language(app_handle: tauri::AppHandle, language: String) -> Result<(), String> {
+    if language != "zh-CN" && language != "en-US" { return Err("Unsupported language".into()); }
+    let path = settings_file_path(&app_handle)?;
+    let mut settings = read_settings_file(&path)?;
+    if settings.language != language {
+        settings.language = language;
+        write_settings_file(&path, &settings)?;
+    }
+    crate::services::scene_browser_index::schedule_sync(&app_handle);
+    Ok(())
+}
+
 /// 保存设置。
 #[tauri::command]
 pub async fn save_settings(
     mut settings: AppSettings,
     app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
+    crate::commands::cleanup::ensure_idle(&app_handle)?;
     let path = settings_file_path(&app_handle)?;
     normalize_settings(&mut settings);
     sync_current_instance_state(&mut settings);
@@ -123,6 +139,7 @@ pub async fn save_vam_instances(
     instances: Vec<VamInstance>,
     active_instance_id: Option<String>,
 ) -> Result<AppSettings, String> {
+    crate::commands::cleanup::ensure_idle(&app_handle)?;
     let path = settings_file_path(&app_handle)?;
     let mut settings = read_settings_file(&path)?;
 
@@ -166,11 +183,12 @@ pub async fn clear_local_database(
     app_handle: tauri::AppHandle,
     db: State<'_, Database>,
 ) -> Result<(), String> {
+    crate::commands::cleanup::ensure_idle(&app_handle)?;
+    let _guard = crate::services::resource_files::maintenance_lock()?;
     db.with_conn(|conn| {
         conn.execute_batch(
             "
             BEGIN IMMEDIATE;
-            DELETE FROM cleanup_trash;
             DELETE FROM resource_migration_log;
             DELETE FROM on_demand_state;
             DELETE FROM on_demand_plans;
@@ -185,8 +203,7 @@ pub async fn clear_local_database(
                 'contents',
                 'dependencies',
                 'scene_references',
-                'resource_migration_log',
-                'cleanup_trash'
+                'resource_migration_log'
             );
             COMMIT;
             ",
@@ -227,7 +244,7 @@ pub fn mark_managed_disabled(app_handle: &tauri::AppHandle) -> Result<(), String
     Ok(())
 }
 
-fn read_settings_file(path: &Path) -> Result<AppSettings, String> {
+pub(crate) fn read_settings_file(path: &Path) -> Result<AppSettings, String> {
     let contents = match std::fs::read_to_string(path) {
         Ok(contents) => contents,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {

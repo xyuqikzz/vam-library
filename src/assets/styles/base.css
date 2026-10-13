@@ -162,10 +162,17 @@ ol {
 /* ── Custom Select (下拉框) ───────────────────────────────────── */
 select,
 .sort-select,
-.setting-select {
+.setting-select,
+.hub-select {
   appearance: none;
   -webkit-appearance: none;
   -moz-appearance: none;
+  box-sizing: border-box;
+  height: var(--control-h-md);
+  min-width: 140px;
+  padding: 0 var(--space-8) 0 var(--space-4);
+  border: none;
+  border-radius: var(--radius-control);
   background-color: var(--bg-input);
   /* 两个变量着色的三角片保留下拉箭头，避免 data URI 内写死描边颜色。 */
   background-image:
@@ -173,46 +180,43 @@ select,
     linear-gradient(135deg, var(--text-tertiary) 50%, transparent 50%);
   background-repeat: no-repeat;
   background-position:
-    right 14px center,
-    right 10px center;
+    right 20px center,
+    right 16px center;
   background-size: 4px 4px;
-  padding-right: 30px;
-  padding-left: 10px;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
   color: var(--text-primary);
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
+  font-size: var(--text-base);
+  font-weight: var(--font-semibold);
   cursor: pointer;
-  transition:
-    border-color var(--duration-fast) var(--ease),
-    box-shadow var(--duration-fast) var(--ease),
-    background-color var(--duration-fast) var(--ease);
-  height: 30px;
-  min-width: 140px;
   outline: none;
+  transition:
+    background-color var(--duration-fast) var(--ease),
+    box-shadow var(--duration-fast) var(--ease);
 }
 
 select:hover,
 .sort-select:hover,
-.setting-select:hover {
-  border-color: var(--border-strong);
-  background-color: var(--bg-hover);
+.setting-select:hover,
+.hub-select:hover {
+  background-color: var(--bg-control);
   background-image:
     linear-gradient(45deg, transparent 50%, var(--text-secondary) 50%),
     linear-gradient(135deg, var(--text-secondary) 50%, transparent 50%);
 }
 
-select:focus,
-.sort-select:focus,
-.setting-select:focus {
-  border-color: var(--accent-primary);
+select:focus-visible,
+.sort-select:focus-visible,
+.setting-select:focus-visible,
+.hub-select:focus-visible {
   box-shadow: inset 0 0 0 2px var(--accent-primary);
-  background-color: var(--bg-hover);
+}
+
+select:disabled {
+  color: var(--text-disabled);
+  cursor: not-allowed;
 }
 
 select option {
-  background-color: var(--bg-surface);
+  background-color: var(--bg-menu);
   color: var(--text-primary);
   padding: var(--space-2);
 }
@@ -225,7 +229,7 @@ input[type='checkbox'] {
   width: 16px;
   height: 16px;
   border: 1.5px solid var(--border-strong);
-  border-radius: var(--radius-xs);
+  border-radius: var(--radius-checkbox);
   background-color: var(--bg-input);
   cursor: pointer;
   position: relative;
@@ -247,8 +251,7 @@ input[type='checkbox']:hover:not(:disabled) {
   background-color: var(--bg-hover);
 }
 
-input[type='checkbox']:focus {
-  box-shadow: inset 0 0 0 2px var(--accent-primary);
+input[type='checkbox']:focus-visible {
   border-color: var(--accent-primary);
 }
 
@@ -338,10 +341,12 @@ textarea:focus {
   align-items: center;
   justify-content: center;
   gap: var(--space-2);
-  padding: var(--space-2) var(--space-4);
-  border-radius: var(--radius-full);
+  height: var(--control-h-md);
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-control);
   font-size: var(--text-base);
   font-weight: var(--font-bold);
+  white-space: nowrap;
   cursor: pointer;
   transition:
     background-color var(--duration-fast) var(--ease),
@@ -377,11 +382,43 @@ textarea:focus {
 }
 
 .btn-secondary:hover {
+  color: var(--text-primary);
+}
+
+.btn-secondary:hover {
   background: var(--bg-control-hover);
 }
 
 .btn-secondary:active {
   background: var(--bg-active);
+}
+
+/* ── Custom Radio (单选) ─────────────────────────────────────── */
+input[type='radio'] {
+  appearance: none;
+  -webkit-appearance: none;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  border: 2px solid var(--border-control);
+  border-radius: var(--radius-full);
+  background: var(--bg-input);
+  cursor: pointer;
+  transition: border-width var(--duration-fast) var(--ease), border-color var(--duration-fast) var(--ease);
+}
+
+input[type='radio']:hover:not(:disabled) {
+  border-color: var(--text-tertiary);
+}
+
+input[type='radio']:checked {
+  border: 6px solid var(--accent-primary);
+}
+
+input[type='radio']:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* ── Focus Visible ───────────────────────────────────────────── */
@@ -390,6 +427,36 @@ textarea:focus {
      保留控件自身圆角，避免焦点时改变形状。 */
   box-shadow: var(--focus-ring) !important;
   outline: none !important;
+}
+
+/* 文本类控件只用一道内描边表示聚焦，不再叠加外环（鼠标点进输入框也会命中 :focus-visible）。 */
+/* :where() 让这条规则保持 (0,1,0) 优先级，下面的组件级例外才能覆盖它。 */
+:where(input:not([type='checkbox'], [type='radio'], [type='range']), textarea, select):focus-visible {
+  box-shadow: inset 0 0 0 2px var(--accent-primary) !important;
+}
+
+/* UiInput 的聚焦态由外壳 .ui-input-shell:focus-within 绘制，内部原生控件不再画任何环。 */
+.ui-input-shell :is(input, textarea):focus-visible {
+  box-shadow: none !important;
+}
+
+/* 整卡/整行可点的"命中层"按钮：由外层容器显示焦点环（:has(:focus-visible)），自身不重复画。 */
+.card-hit-target:focus-visible,
+.focus-proxy:focus-visible {
+  box-shadow: none !important;
+}
+
+/* 弹窗/菜单用鼠标打开时，脚本放上去的初始焦点不画环；按 Tab 移走后照常显示（见 overlay.ts focusInitial） */
+[data-initial-focus]:focus-visible {
+  box-shadow: none !important;
+}
+
+/* 卡片式单选/多选：焦点环画在整张卡上，隐藏内部小控件的环 */
+.choice-card input:focus-visible {
+  box-shadow: none !important;
+}
+.choice-card:has(input:focus-visible) {
+  box-shadow: var(--focus-ring) !important;
 }
 
 /* Preview blur is enabled unless an explicitly saved preference turns it off.
@@ -441,4 +508,114 @@ textarea:focus {
   background: var(--bg-input);
   color: var(--text-primary);
   font-size: var(--text-sm);
+}
+
+
+/* ============================================================
+   Page shell — 所有使用 PageHeader 的页面共用，不要在页面里重复定义
+   ============================================================ */
+.b2-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.b2-page-body {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: auto;
+  padding: var(--space-page-y) var(--space-page-x);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-section);
+}
+
+/* 折叠标题（details > summary）：统一用细箭头代替浏览器默认的 ▶，并给出悬停反馈。
+   需要自定义箭头的地方在组件里把 summary::before 设为 display: none。 */
+summary {
+  width: fit-content;
+  max-width: 100%;
+  cursor: pointer;
+  list-style: none;
+  border-radius: var(--radius-xs);
+  transition: color var(--duration-fast) var(--ease);
+}
+
+summary::-webkit-details-marker {
+  display: none;
+}
+
+summary::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin: 0 10px 0 2px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  opacity: 0.7;
+  transform: translateY(-2px) rotate(-45deg);
+  transition: transform var(--duration-fast) var(--ease);
+}
+
+details[open] > summary::before {
+  transform: translateY(-3px) rotate(45deg);
+}
+
+/* 多一层 details 提高优先级，组件里给 summary 设了颜色也能看到悬停变化 */
+details > summary:hover {
+  color: var(--text-primary);
+}
+
+/* 加载圈：所有页面统一用这个，不要再各写一份（之前有 8 处因 border: none 根本不显示） */
+.spinner-ring {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--bg-active);
+  border-top-color: var(--accent-primary);
+  border-radius: var(--radius-full);
+  animation: ui-spin 0.8s linear infinite;
+}
+
+.spinner-ring.sm {
+  width: 14px;
+  height: 14px;
+  border-width: 2px;
+}
+
+@keyframes ui-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 一排筛选片 / 切换片：片与片之间固定 8px，不要让它们贴在一起 */
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+/* 表单页（设置、游戏设置）限制可读宽度，左缘仍与页头对齐 */
+.b2-page-body.is-form {
+  max-width: calc(880px + 2 * var(--space-page-x));
+}
+
+@media (max-width: 800px) {
+  .b2-page-body {
+    padding: var(--space-4);
+  }
+}
+
+.resource-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--resource-card-width)), 1fr));
+  gap: var(--space-grid);
 }

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import Icon from './Icon.vue'
+import { focusInitial } from './overlay'
 import type { IconName } from './icons'
 export interface MenuItem {
   value: string
@@ -19,6 +20,8 @@ const props = defineProps<{
   x?: number
   y?: number
   label: string
+  /** bottom-start：锚点下方左对齐（默认）；right-start：锚点右侧顶对齐，用于侧边栏这类竖向导航。 */
+  placement?: 'bottom-start' | 'bottom-end' | 'right-start'
 }>()
 const emit = defineEmits<{ 'update:open': [open: boolean]; select: [item: MenuItem] }>()
 const menu = ref<HTMLElement | null>(null)
@@ -75,11 +78,25 @@ watch(
     if (!props.open || !menu.value) return
     const bounds = menu.value.getBoundingClientRect(),
       anchor = props.anchor?.getBoundingClientRect()
-    position.value = {
-      left: `${Math.max(8, Math.min(window.innerWidth - bounds.width - 8, props.x ?? anchor?.left ?? 8))}px`,
-      top: `${Math.max(8, Math.min(window.innerHeight - bounds.height - 8, props.y ?? (anchor ? anchor.bottom + 6 : 8)))}px`,
+    let left = props.x ?? anchor?.left ?? 8
+    let top = props.y ?? (anchor ? anchor.bottom + 6 : 8)
+    if (anchor && props.x === undefined && props.y === undefined) {
+      if (props.placement === 'right-start') {
+        left = anchor.right + 8
+        top = anchor.top
+      } else {
+        if (props.placement === 'bottom-end') left = anchor.right - bounds.width
+        // 下方放不下（例如贴底的浮动操作栏）时翻到锚点上方，而不是压住锚点
+        if (top + bounds.height > window.innerHeight - 8 && anchor.top - 6 - bounds.height >= 8)
+          top = anchor.top - 6 - bounds.height
+      }
     }
-    menu.value.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus()
+    position.value = {
+      left: `${Math.max(8, Math.min(window.innerWidth - bounds.width - 8, left))}px`,
+      top: `${Math.max(8, Math.min(window.innerHeight - bounds.height - 8, top))}px`,
+    }
+    const first = menu.value.querySelector<HTMLButtonElement>('button:not(:disabled)')
+    if (first) focusInitial(first)
     document.addEventListener('pointerdown', outside)
   },
   { immediate: true },
@@ -149,6 +166,13 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', outside))
 .ui-menu button:hover,
 .ui-menu button:focus-visible {
   background: var(--bg-active);
+}
+/* 菜单项用整行高亮表示键盘位置，不再叠加全局白色焦点环 */
+.ui-menu button:focus-visible {
+  box-shadow: none !important;
+}
+.ui-menu button[aria-checked='true'] {
+  color: var(--text-primary);
 }
 .ui-menu button.danger {
   color: var(--color-error);

@@ -44,3 +44,20 @@ test('Hub selection preserves first minimum and last maximum on version ties', (
   assert.equal(selectHubFile([a, b], null), b)
   assert.equal(selectHubFile([], null), null)
 })
+
+test('filename versions are complete numbers, never truncated copy suffixes', () => {
+  for (const suffix of ['1_2', '1 (2)', 'v3', '3abc', 'latest', '-1', '+1', '2147483648']) {
+    assert.deepEqual(parsePackageId(`Author.Sub.Name.${suffix}.var`), { creator: 'Author', name: 'Sub.Name', version: null })
+    assert.deepEqual(parseHubFiles([{ filename: `Author.Name.${suffix}.var`, urlHosted: 'file' }]), [])
+  }
+  for (const id of ['.Name.1', 'Author..1', 'Author.Name.', 'Author. .1']) assert.equal(parsePackageId(id), null)
+  assert.deepEqual(parsePackageId('Author.Name.001'), { creator: 'Author', name: 'Name', version: 1 })
+})
+
+const { resourceVersion } = await import(await compileModule(new URL('../src/utils/resourcePresentation.ts', import.meta.url)))
+test('unknown versions display their raw suffix instead of the numeric placeholder', () => {
+  for (const [id, expected] of [['A.Name.1_2', '1_2'], ['A.Name.latest', 'latest'], ['A.Name.1 (2)', '1 (2)'], ['A.Name', '—'], ['A.Name.0', 'v0']]) {
+    assert.equal(resourceVersion({ id, version: 0 }), expected)
+  }
+  assert.equal(resourceVersion({ id: 'A.Name.12', version: 12 }), 'v12')
+})

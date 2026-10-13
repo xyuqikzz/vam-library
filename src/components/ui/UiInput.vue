@@ -12,6 +12,8 @@ const props = withDefaults(
     error?: string
     disabled?: boolean
     shortcut?: string
+    /** lg = 44（表单字段，默认）；md = 40（工具栏、行内设置这类与 40 高按钮同排的场景） */
+    size?: 'md' | 'lg'
     modelModifiers?: { number?: boolean; trim?: boolean; lazy?: boolean }
   }>(),
   { type: 'text' },
@@ -39,7 +41,7 @@ defineExpose({ focus: () => input.value?.focus(), select: () => input.value?.sel
   <div
     :style="$attrs.style as StyleValue"
     class="ui-input-field"
-    :class="[$attrs.class, { 'is-search': search, 'has-error': !!error, disabled }]"
+    :class="[$attrs.class, { 'is-search': search, 'is-md': size === 'md', 'has-error': !!error, disabled }]"
   >
     <div class="ui-input-shell" :class="{ multiline }">
       <Icon v-if="search" name="search" class="search-icon" />
@@ -67,7 +69,7 @@ defineExpose({ focus: () => input.value?.focus(), select: () => input.value?.sel
 .ui-input-shell.multiline {
   height: auto;
   min-height: 100px;
-  padding: 12px 14px;
+  padding: var(--space-3) var(--space-4);
 }
 .ui-input-shell textarea {
   width: 100%;
@@ -84,9 +86,9 @@ defineExpose({ focus: () => input.value?.focus(), select: () => input.value?.sel
   align-items: center;
   gap: var(--space-2);
   height: var(--control-h-lg);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-control);
   background: var(--bg-input);
-  padding: 0 14px;
+  padding: 0 var(--space-4);
 }
 .ui-input-shell:focus-within {
   box-shadow: inset 0 0 0 2px var(--accent-primary);
@@ -106,9 +108,9 @@ defineExpose({ focus: () => input.value?.focus(), select: () => input.value?.sel
 .ui-input-shell input::placeholder {
   color: var(--text-tertiary);
 }
-.is-search .ui-input-shell {
+.is-search .ui-input-shell,
+.is-md .ui-input-shell {
   height: var(--control-h-md);
-  border-radius: var(--radius-full);
 }
 .search-icon {
   color: var(--text-tertiary);
@@ -118,8 +120,8 @@ kbd {
   padding: 0 8px;
   display: grid;
   place-items: center;
-  height: 26px;
-  border-radius: var(--radius-full);
+  height: 24px;
+  border-radius: var(--radius-xs);
   background: var(--bg-control);
   color: var(--text-tertiary);
   font-size: var(--text-xs);

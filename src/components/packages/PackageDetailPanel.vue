@@ -1,41 +1,46 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { PackageDisplayItem, PackageImageEntry } from '@/types/package'
+import type { PackageImageEntry, ResourceDetailItem } from '@/types/package'
 import { formatSize } from '@/utils/bytes'
-import { resourceColor, resourceThumbnail } from '@/utils/resourcePresentation'
+import { resourceColor, resourceThumbnail, resourceVersion } from '@/utils/resourcePresentation'
 import Icon from '@/components/ui/Icon.vue'
+import { focusInitial } from '@/components/ui/overlay'
 import UiButton from '@/components/ui/UiButton.vue'
-export interface DetailDependency {
-  id: string
-  status: string
-  statusText: string
-  tier?: number
-}
-defineProps<{
-  item: PackageDisplayItem
+import PackageDependencyList, { type DetailDependency } from './PackageDependencyList.vue'
+withDefaults(defineProps<{
+  item: ResourceDetailItem
+  subtitle?: string
   image?: string | null
-  images: PackageImageEntry[]
-  imageUrls: Record<string, string>
+  images?: PackageImageEntry[]
+  imageUrls?: Record<string, string>
   activeImage?: string
   expanded?: boolean
   busy?: boolean
-  dependencies: DetailDependency[]
-  missing: number
+  canGoBack?: boolean
+  dependencyThumbnails?: Record<string, string | null>
+  openingDependency?: string
+  dependencies?: DetailDependency[]
+  missing?: number
   loading?: boolean
   error?: string
-}>()
+}>(), { images: () => [], imageUrls: () => ({}), dependencies: () => [], missing: 0 })
 const emit = defineEmits<{
   close: []
   image: [image: PackageImageEntry]
   details: []
   complete: []
+  copy: []
+  copyDependency: [id: string]
+  dependencyDetails: [dependency: DetailDependency]
 }>()
+const titleCopy = ref<InstanceType<typeof UiButton> | null>(null)
+defineExpose({ focusTitle: () => { if (titleCopy.value?.element) focusInitial(titleCopy.value.element) } })
 const { t } = useI18n()
 const date = computed(() => (value: string) => (value ? new Date(value).toLocaleDateString() : '—'))
 </script>
 <template>
-  <aside class="detail-panel" :class="{ expanded }">
+  <aside class="detail-panel" :class="{ expanded, 'has-back': canGoBack }">
     <div
       v-if="!expanded"
       class="detail-preview"
@@ -47,15 +52,6 @@ const date = computed(() => (value: string) => (value ? new Date(value).toLocale
         <i :style="{ background: resourceColor(item.resource_types[0]) }" />
         {{ t('resourceType.' + (item.resource_types[0] || 'other')) }}
       </span>
-      <UiButton
-        class="detail-close"
-        size="sm"
-        icon="close"
-        icon-only
-        :aria-label="t('ui.closeDetail')"
-        :disabled="busy"
-        @click="emit('close')"
-      />
       <div v-if="images.length" class="detail-thumbnails">
         <button
           v-for="imageItem in images.slice(0, 5)"
@@ -91,13 +87,28 @@ const date = computed(() => (value: string) => (value ? new Date(value).toLocale
         {{ t('resourceType.' + (item.resource_types[0] || 'other')) }}
       </span>
       <div>
-        <h2>{{ item.name }}</h2>
+        <div class="detail-title">
+          <h2>{{ item.name }}</h2>
+          <UiButton
+            ref="titleCopy"
+            class="copy-package-name"
+            variant="ghost"
+            size="sm"
+            icon="copy"
+            icon-only
+            :aria-label="t('ui.copyResourceName', { name: item.name })"
+            @click="emit('copy')"
+          />
+        </div>
         <p class="detail-subtitle">
-          {{ item.creator }} · v{{ item.version }} · {{ formatSize(item.size_bytes) }} ·
-          {{ date(item.scan_time) }}
+          <template v-if="subtitle !== undefined">{{ subtitle }}</template>
+          <template v-else>
+            {{ item.creator }} · {{ resourceVersion(item) }} · {{ formatSize(item.size_bytes ?? 0) }} ·
+            {{ date(item.scan_time || '') }}
+          </template>
         </p>
       </div>
-      <div v-if="item.tags.length" class="detail-tags">
+      <div v-if="item.tags?.length" class="detail-tags">
         <span v-for="tag in item.tags" :key="tag">{{ tag }}</span>
       </div>
       <slot name="actions" />
@@ -110,31 +121,16 @@ const date = computed(() => (value: string) => (value ? new Date(value).toLocale
           </div>
           <p v-if="loading" class="detail-muted" role="status">{{ t('common.loading') }}</p>
           <p v-else-if="error" class="detail-error" role="alert">{{ error }}</p>
-          <div v-else-if="dependencies.length" class="dependency-list">
-            <div
-              v-for="dependency in dependencies"
-              :key="dependency.id"
-              class="dependency-row"
-              :class="{
-                missing: dependency.status === 'missing' || dependency.status === 'lower-version',
-              }"
-            >
-              <span class="dependency-thumb"><Icon name="package" :size="16" /></span>
-              <div class="dependency-name">
-                <strong :title="dependency.id">{{ dependency.id }}</strong>
-                <span>{{ dependency.id.split('.')[0] }}</span>
-              </div>
-              <UiButton
-                v-if="dependency.status === 'missing' || dependency.status === 'lower-version'"
-                size="sm"
-                class="resolve-button"
-                @click="emit('complete')"
-              >
-                {{ t('ui.complete') }}
-              </UiButton>
-              <span v-else class="dependency-owned">{{ t('ui.installed') }}</span>
-            </div>
-          </div>
+          <PackageDependencyList
+            v-else-if="dependencies.length"
+            :dependencies="dependencies"
+            :thumbnails="dependencyThumbnails"
+            :busy="busy"
+            :opening="openingDependency"
+            @copy="emit('copyDependency', $event)"
+            @details="emit('dependencyDetails', $event)"
+            @complete="emit('complete')"
+          />
           <p v-else class="detail-muted">{{ t('ui.noData') }}</p>
         </section>
       </slot>
@@ -143,12 +139,8 @@ const date = computed(() => (value: string) => (value ? new Date(value).toLocale
 </template>
 <style scoped>
 .detail-panel {
-  width: 320px;
-  flex: 0 0 320px;
-  align-self: flex-start;
-  max-height: 100%;
-  overflow: auto;
-  border-radius: var(--radius-shell);
+  width: 100%;
+  min-width: 0;
   background: var(--bg-elevated);
 }
 .detail-panel.expanded {
@@ -163,9 +155,12 @@ const date = computed(() => (value: string) => (value ? new Date(value).toLocale
   overflow: hidden;
 }
 .detail-preview > img {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
+  background: var(--bg-base);
 }
 .detail-placeholder {
   color: var(--text-image-placeholder);
@@ -176,9 +171,9 @@ const date = computed(() => (value: string) => (value ? new Date(value).toLocale
   top: 12px;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-2);
   height: 22px;
-  padding: 0 8px;
+  padding: 0 var(--space-2);
   background: var(--bg-on-image);
   border-radius: var(--radius-full);
   font-size: var(--text-xs);
@@ -189,19 +184,13 @@ const date = computed(() => (value: string) => (value ? new Date(value).toLocale
   height: 6px;
   border-radius: var(--radius-full);
 }
-.detail-close {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  background: var(--bg-on-image);
-}
 .detail-thumbnails {
   position: absolute;
   bottom: 10px;
   left: 12px;
   right: 12px;
   display: flex;
-  gap: 6px;
+  gap: var(--space-2);
 }
 .detail-thumbnails > button:not(.more-images) {
   width: 36px;
@@ -226,16 +215,16 @@ const date = computed(() => (value: string) => (value ? new Date(value).toLocale
 .detail-body {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  padding: 16px 18px 18px;
+  gap: var(--space-section);
+  padding: var(--space-panel);
 }
 .expanded-type {
   display: inline-flex;
   align-items: center;
   align-self: flex-start;
-  gap: 6px;
+  gap: var(--space-2);
   min-height: 22px;
-  padding: 0 8px;
+  padding: 0 var(--space-2);
   border-radius: var(--radius-full);
   background: var(--bg-input);
   font-size: var(--text-xs);
@@ -246,6 +235,13 @@ const date = computed(() => (value: string) => (value ? new Date(value).toLocale
   height: 6px;
   border-radius: var(--radius-full);
 }
+.detail-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-item);
+}
+.detail-title h2 { flex: 1; min-width: 0; }
+.has-back .detail-type { top: calc(var(--space-stack) + var(--control-h-sm) + var(--space-item)); }
 .detail-body h2 {
   font-size: var(--text-xl);
   font-weight: var(--font-heavy);
@@ -255,7 +251,7 @@ const date = computed(() => (value: string) => (value ? new Date(value).toLocale
   font-size: var(--text-3xl);
 }
 .detail-subtitle {
-  margin-top: 6px;
+  margin-top: var(--space-2);
   color: var(--text-tertiary);
   font-size: var(--text-base);
   overflow-wrap: anywhere;
@@ -263,13 +259,13 @@ const date = computed(() => (value: string) => (value ? new Date(value).toLocale
 .detail-tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--space-2);
 }
 .detail-tags span {
   display: inline-flex;
   align-items: center;
   min-height: 26px;
-  padding: 0 10px;
+  padding: 0 var(--space-3);
   border-radius: var(--radius-full);
   background: var(--divider);
   color: var(--text-secondary);
@@ -279,8 +275,8 @@ const date = computed(() => (value: string) => (value ? new Date(value).toLocale
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: var(--space-2);
-  margin-bottom: var(--space-2);
+  gap: var(--space-item);
+  margin-bottom: var(--space-stack);
 }
 .dependency-heading h3 {
   font-size: var(--text-lg);
@@ -289,58 +285,6 @@ const date = computed(() => (value: string) => (value ? new Date(value).toLocale
   color: var(--color-warning);
   font-size: var(--text-xs);
 }
-.dependency-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.dependency-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 44px;
-  padding: 6px;
-  border-radius: var(--radius-icon);
-}
-.dependency-row.missing {
-  background: var(--color-warning-subtle);
-}
-.dependency-thumb {
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  flex-shrink: 0;
-  border-radius: var(--radius-sm);
-  background: var(--bg-control);
-  color: var(--text-tertiary);
-}
-.dependency-name {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-width: 0;
-}
-.dependency-name strong {
-  font-size: var(--text-tooltip);
-  font-weight: var(--font-bold);
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  overflow: hidden;
-}
-.dependency-name span {
-  color: var(--text-tertiary);
-  font-size: var(--text-xs);
-}
-.dependency-owned {
-  color: var(--color-success);
-  font-size: var(--text-xs);
-  white-space: nowrap;
-}
-.resolve-button {
-  background: var(--color-warning);
-  color: var(--color-warning-ink);
-}
 .detail-muted {
   color: var(--text-tertiary);
   font-size: var(--text-sm);
@@ -348,18 +292,5 @@ const date = computed(() => (value: string) => (value ? new Date(value).toLocale
 .detail-error {
   color: var(--color-error);
   font-size: var(--text-sm);
-}
-@media (max-width: 1000px) {
-  .detail-panel:not(.expanded) {
-    width: 280px;
-    flex-basis: 280px;
-  }
-}
-@media (max-width: 760px) {
-  .detail-panel:not(.expanded) {
-    width: 100%;
-    flex-basis: auto;
-    max-height: 55vh;
-  }
 }
 </style>

@@ -38,7 +38,7 @@ const mostMissing = computed(() => { const counts = new Map<string, number>(); f
   <div class="health-status">
     <p v-if="!totalIssues" class="health-ok">
       <Icon name="check" :size="16" />
-      {{ t('dashboard.noHealthData') }}
+      {{ t('dashboard.noIssuesFound') }}
     </p>
     <div class="health-row">
       <span class="health-icon warning"><Icon name="link" /></span>
@@ -80,12 +80,20 @@ const mostMissing = computed(() => { const counts = new Map<string, number>(); f
         <small>{{ t('dashboard.corruptedPackageCount', { count: corrupted }) }}</small>
       </div>
       <UiButton
-        variant="ghost"
+        variant="secondary"
         size="sm"
         :aria-expanded="showCorrupted"
         @click="showCorrupted = !showCorrupted"
       >
         {{ t('ui.inspect') }}
+      </UiButton>
+      <UiButton
+        variant="secondary"
+        size="sm"
+        :disabled="!corrupted"
+        @click="router.push({ path: '/cleanup', query: { issue: 'damaged' } })"
+      >
+        {{ t('cleanup.issues.cleanUp') }}
       </UiButton>
     </div>
     <div v-if="showCorrupted" class="health-detail">
@@ -101,7 +109,7 @@ const mostMissing = computed(() => { const counts = new Map<string, number>(); f
         <strong>{{ t('ui.duplicates') }}</strong>
         <small>{{ t('dashboard.duplicateResource', { count: duplicates }) }}</small>
       </div>
-      <UiButton variant="ghost" size="sm" @click="router.push('/deduplication')">
+      <UiButton variant="secondary" size="sm" @click="router.push('/deduplication')">
         {{ t('sidebar.deduplication') }}
       </UiButton>
     </div>
@@ -109,7 +117,7 @@ const mostMissing = computed(() => { const counts = new Map<string, number>(); f
       <h3>{{ t('ui.missingMany') }}</h3>
       <div v-for="[id, count] in mostMissing" :key="id" class="dep-row">
         <span :title="id">{{ id }}</span>
-        <small>{{ count }}</small>
+        <small>{{ t('ui.usedByCount', { count }) }}</small>
         <UiButton
           icon="copy"
           icon-only
@@ -125,19 +133,24 @@ const mostMissing = computed(() => { const counts = new Map<string, number>(); f
 .health-status {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-item);
 }
 .health-ok {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-2);
   color: var(--color-success);
   font-size: var(--text-sm);
 }
 .health-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-3);
+  min-height: 64px;
+  padding: var(--space-3);
+  box-sizing: border-box;
+  border-radius: var(--radius-md);
+  background: var(--bg-hover);
 }
 .health-icon {
   display: grid;
@@ -164,9 +177,12 @@ const mostMissing = computed(() => { const counts = new Map<string, number>(); f
   flex-direction: column;
   flex: 1;
   min-width: 0;
-  gap: 3px;
+  gap: 2px;
   text-align: left;
   border-radius: var(--radius-xs);
+}
+button.health-label:hover strong {
+  color: var(--accent-primary-hover);
 }
 .health-label strong {
   font-size: var(--text-md);
@@ -177,31 +193,31 @@ const mostMissing = computed(() => { const counts = new Map<string, number>(); f
   font-size: var(--text-xs);
 }
 .health-detail {
-  padding: 8px;
+  padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-sm);
   background: var(--bg-input);
   font-size: var(--text-sm);
 }
 .corrupted-row {
-  margin-bottom: 8px;
+  margin-bottom: var(--space-2);
   overflow-wrap: anywhere;
 }
 .corrupted-row p {
   color: var(--color-error);
 }
 .missing-list {
-  margin-top: 8px;
-  padding-top: 14px;
+  margin-top: var(--space-2);
+  padding-top: var(--space-4);
   border-top: 1px solid var(--divider);
 }
 .missing-list h3 {
   font-size: var(--text-base);
-  margin-bottom: 8px;
+  margin: 0 0 var(--space-2);
 }
 .dep-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   min-width: 0;
   min-height: 32px;
   font-size: var(--text-xs);
@@ -214,6 +230,7 @@ const mostMissing = computed(() => { const counts = new Map<string, number>(); f
   white-space: nowrap;
 }
 .dep-row small {
-  color: var(--color-warning);
+  flex-shrink: 0;
+  color: var(--text-tertiary);
 }
 </style>

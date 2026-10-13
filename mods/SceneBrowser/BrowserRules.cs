@@ -10,7 +10,8 @@ namespace VamLibrary.SceneBrowser
         {
             public string Label;
             public string RelativePath;
-            public FolderLink(string label, string relativePath) { Label = label; RelativePath = relativePath; }
+            public bool Navigation;
+            public FolderLink(string label, string relativePath, bool navigation = false) { Label = label; RelativePath = relativePath; Navigation = navigation; }
         }
 
         public static List<FolderLink> ListFolders(string root, string relative)
@@ -20,17 +21,17 @@ namespace VamLibrary.SceneBrowser
             // Navigation stays available even when this folder contains no scenes.
             if (relative.Length > 0)
             {
-                result.Add(new FolderLink("返回 AddonPackages 根目录", ""));
+                result.Add(new FolderLink(BrowserText.Get("root"), "", true));
                 int slash = relative.LastIndexOf('/');
-                result.Add(new FolderLink(".. / 返回上一级", slash < 0 ? "" : relative.Substring(0, slash)));
+                result.Add(new FolderLink(BrowserText.Get("parent"), slash < 0 ? "" : relative.Substring(0, slash), true));
             }
             string[] children = Directory.GetDirectories(path);
-            Array.Sort(children, StringComparer.OrdinalIgnoreCase);
+            Array.Sort(children, delegate(string a, string b) { return CompareName(Path.GetFileName(a), Path.GetFileName(b)); });
             foreach (string child in children)
             {
                 string name = Path.GetFileName(child);
-                if (name.StartsWith(".", StringComparison.Ordinal) || (File.GetAttributes(child) & FileAttributes.ReparsePoint) != 0) continue;
-                result.Add(new FolderLink("[文件夹] " + name, relative.Length == 0 ? name : relative + "/" + name));
+                if (name.StartsWith(".", StringComparison.Ordinal)) continue;
+                result.Add(new FolderLink(BrowserText.Get("folder") + name, relative.Length == 0 ? name : relative + "/" + name));
             }
             return result;
         }
@@ -40,7 +41,7 @@ namespace VamLibrary.SceneBrowser
             // Loose scenes have no package author and follow the named creators.
             int result = string.IsNullOrEmpty(authorA).CompareTo(string.IsNullOrEmpty(authorB));
             if (result == 0) result = StringComparer.OrdinalIgnoreCase.Compare(authorA, authorB);
-            if (result == 0) result = StringComparer.OrdinalIgnoreCase.Compare(nameA, nameB);
+            if (result == 0) result = CompareName(nameA, nameB);
             if (result == 0) result = StringComparer.Ordinal.Compare(pathA, pathB);
             return result;
         }
@@ -62,6 +63,43 @@ namespace VamLibrary.SceneBrowser
             if (result == 0 && sizeA.HasValue)
                 result = descending ? sizeB.Value.CompareTo(sizeA.Value) : sizeA.Value.CompareTo(sizeB.Value);
             return result != 0 ? result : Compare(authorA, nameA, pathA, authorB, nameB, pathB);
+        }
+
+        public static int CompareName(string a, string b)
+        {
+            a = a ?? ""; b = b ?? "";
+            int i = 0, j = 0;
+            while (i < a.Length && j < b.Length)
+            {
+                if (a[i] >= '0' && a[i] <= '9' && b[j] >= '0' && b[j] <= '9')
+                {
+                    int endA = i, endB = j;
+                    while (endA < a.Length && a[endA] >= '0' && a[endA] <= '9') endA++;
+                    while (endB < b.Length && b[endB] >= '0' && b[endB] <= '9') endB++;
+                    while (i < endA && a[i] == '0') i++;
+                    while (j < endB && b[j] == '0') j++;
+                    int result = (endA - i).CompareTo(endB - j);
+                    if (result != 0) return result;
+                    while (i < endA) { result = a[i++].CompareTo(b[j++]); if (result != 0) return result; }
+                    i = endA; j = endB;
+                }
+                else
+                {
+                    int result = Char.ToUpperInvariant(a[i++]).CompareTo(Char.ToUpperInvariant(b[j++]));
+                    if (result != 0) return result;
+                }
+            }
+            int remaining = (a.Length - i).CompareTo(b.Length - j);
+            return remaining != 0 ? remaining : StringComparer.Ordinal.Compare(a, b);
+        }
+
+        // Return the immediate child containing this package, including descendants.
+        public static string ChildFolder(string current, string folder)
+        {
+            string prefix = current.Length == 0 ? "" : current + "/";
+            if (folder == null || !folder.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) || folder.Length <= prefix.Length) return null;
+            int slash = folder.IndexOf('/', prefix.Length);
+            return slash < 0 ? folder : folder.Substring(0, slash);
         }
 
         public static string PackageFolder(string root, string packagePath)

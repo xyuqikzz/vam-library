@@ -30,6 +30,9 @@ class RuntimeProbe
             }
             var plugin = assembly.GetType("VamLibrary.SceneBrowser.SceneBrowserPlugin", true);
             System.Runtime.CompilerServices.RuntimeHelpers.RunClassConstructor(plugin.TypeHandle);
+            plugin.GetMethod("CheckBrowserContract", BindingFlags.Static | BindingFlags.NonPublic).Invoke(null, null);
+            plugin.GetMethod("CheckLaunchContract", BindingFlags.Static | BindingFlags.NonPublic).Invoke(null, null);
+            Console.WriteLine("PASS: runtime browser and launch contracts");
             // Exercise the state factory without instantiating a Unity component.
             var state = plugin.GetMethod("State", BindingFlags.Static | BindingFlags.NonPublic);
             if (state.Invoke(null, new object[] { null }) == null) throw new Exception("State factory failed");
@@ -43,22 +46,17 @@ class RuntimeProbe
             if (count != 9) throw new Exception("Expected 9 runtime hooks, got " + count);
             harmonyType.GetMethod("UnpatchSelf").Invoke(harmony, null);
             Console.WriteLine("PASS: all 9 scene browser and scene launch Harmony hooks applied and removed in game Mono");
-            foreach (string removed in new[] { "ZipLookupOptimization", "LoadingTelemetry", "LoadMetrics" })
+            foreach (string removed in new[] { "ZipLookupOptimization", "LoadingTelemetry", "LoadMetrics", "NativeDecompression" })
                 if (assembly.GetType("VamLibrary.SceneBrowser." + removed) != null) throw new Exception("Removed feature remains: " + removed);
             if (plugin.GetMethod("UpdateTelemetry", BindingFlags.NonPublic | BindingFlags.Instance) != null)
                 throw new Exception("Loading overlay update remains");
-            var decoder = assembly.GetType("VamLibrary.SceneBrowser.NativeDecompression", true);
-            if (!(bool)decoder.GetMethod("Enable").Invoke(null, null)) throw new Exception("Native decompression hook failed to enable");
-            var decoderHarmony = Activator.CreateInstance(harmonyType, new object[] { "com.vamlibrary.native-decompression" });
-            int decoderHooks = 0;
-            foreach (object method in (System.Collections.IEnumerable)harmonyType.GetMethod("GetPatchedMethods").Invoke(decoderHarmony, null)) decoderHooks++;
-            if (decoderHooks != 1) throw new Exception("Expected 1 isolated decompression hook, got " + decoderHooks);
-            decoder.GetMethod("Disable").Invoke(null, null);
-            Console.WriteLine("PASS: isolated native decompression hook, no loading statistics or lookup optimization");
+            if (plugin.GetMethod("ApplyDecompression", BindingFlags.NonPublic | BindingFlags.Instance) != null)
+                throw new Exception("Native decompression setting remains");
+            Console.WriteLine("PASS: no native decompression, loading statistics or lookup optimization");
             var launchType = assembly.GetType("VamLibrary.SceneBrowser.SceneLaunchRequest", true);
             long now = (long)launchType.GetProperty("Now").GetValue(null, null);
-            string launchText = "# VAM Library scene launch v1\nabc-1\n" + now + "\n作者.Scene.1:/Saves/scene/中文 场景.json\n";
-            object request = launchType.GetMethod("Parse").Invoke(null, new object[] { launchText, "abc-1", now });
+            string launchText = "# VAM Library scene launch v2\nabc-1\n" + now + "\n作者.Scene.1:/Saves/scene/中文 场景.json\n";
+            object request = launchType.GetMethod("Parse").Invoke(null, new object[] { launchText, "abc-1", now, now });
             if ((string)launchType.GetField("Scene").GetValue(request) != "作者.Scene.1:/Saves/scene/中文 场景.json") throw new Exception("Scene launch wire contract failed in game Mono");
             Console.WriteLine("PASS: scene launch Unicode request parsed in game Mono");
             var rules = assembly.GetType("VamLibrary.SceneBrowser.BrowserRules", true);
@@ -88,6 +86,9 @@ class RuntimeProbe
             var itemType = browserType.GetNestedType("FileAndDirInfo", BindingFlags.Public | BindingFlags.NonPublic);
             var packageType = gameAssembly.GetType("MVR.FileManagement.VarPackage", true);
             var entryType = gameAssembly.GetType("MVR.FileManagement.VarFileEntry", true);
+            Delegate.CreateDelegate(typeof(Action<>).MakeGenericType(browserType), plugin.GetField("SyncSort", BindingFlags.Static | BindingFlags.NonPublic).GetValue(null) as MethodInfo);
+            Delegate.CreateDelegate(typeof(Action<,>).MakeGenericType(browserType, gameAssembly.GetType("uFileBrowser.FileButton", true)), plugin.GetField("HideButton", BindingFlags.Static | BindingFlags.NonPublic).GetValue(null) as MethodInfo);
+            Console.WriteLine("PASS: open instance delegates bind private browser methods in game Mono");
             object browser = System.Runtime.Serialization.FormatterServices.GetUninitializedObject(browserType);
             object browserState = state.Invoke(null, new[] { browser });
             browserState.GetType().GetField("Scene").SetValue(browserState, true);
@@ -115,6 +116,16 @@ class RuntimeProbe
             if ((string)itemType.GetProperty("Name").GetValue(sizeItems[0], null) != "Empty")
                 throw new Exception("Package size sorting affected a non-scene browser");
             Console.WriteLine("PASS: real game sort callback uses 64-bit VAR sizes in both directions, keeps local scenes last and other browsers unchanged");
+            string linkRoot = Environment.GetEnvironmentVariable("VAM_LINK_PROBE_ROOT");
+            if (!String.IsNullOrEmpty(linkRoot))
+            {
+                // Cecil confirms FileManager.Refresh uses this exact call with AllDirectories.
+                string[] discovered = Directory.GetFiles(linkRoot, "*.var", SearchOption.AllDirectories);
+                if (discovered.Length != 1 || discovered[0].IndexOf("Linked") < 0) throw new Exception("Game Mono cannot discover VARs through directory junctions");
+                var links = (System.Collections.IList)rules.GetMethod("ListFolders").Invoke(null, new object[] { linkRoot, "" });
+                if (links.Count != 1) throw new Exception("Folder browser hid a valid directory junction");
+                Console.WriteLine("PASS: game Mono discovers VARs through junctions and folder navigation exposes them");
+            }
             var folders = (System.Collections.IList)rules.GetMethod("ListFolders").Invoke(null, new object[] { Path.Combine(root, "AddonPackages"), "" });
             if (folders.Count == 0) throw new Exception("Expected folders in the regression game library");
             var createItem = plugin.GetMethod("CreateNavigationItem", BindingFlags.Static | BindingFlags.NonPublic);

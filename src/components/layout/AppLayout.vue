@@ -2,13 +2,11 @@
   <div class="app-layout">
     <div v-if="visibleStartupError" class="startup-error-overlay">
       <div class="startup-error-card">
-        <strong>启动遇到问题</strong>
+        <strong>{{ t('ui.startupProblem') }}</strong>
         <p>{{ visibleStartupError }}</p>
         <div class="startup-error-actions">
-          <UiButton class="primary" @click="retryStartup" variant="primary" size="lg">
-            重试
-          </UiButton>
-          <UiButton @click="openSettings" variant="secondary">打开设置</UiButton>
+          <UiButton variant="secondary" @click="openSettings">{{ t('ui.openSettings') }}</UiButton>
+          <UiButton variant="primary" @click="retryStartup">{{ t('ui.retry') }}</UiButton>
         </div>
       </div>
     </div>
@@ -51,10 +49,12 @@
 
 <script setup lang="ts">
 import UiButton from '@/components/ui/UiButton.vue'
-import { computed, onMounted, ref, nextTick } from 'vue'
+import { computed, onMounted, ref, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 import { useLocalLibraryStore } from '@/stores/localLibrary'
+import { useFavoritesStore } from '@/stores/favorites'
+import { invalidateResourceCache } from '@/utils/resourceCache'
 import { storeToRefs } from 'pinia'
 import { toastRef } from '@/composables/useNotification'
 import { useI18n } from 'vue-i18n'
@@ -65,6 +65,8 @@ import ExternalImportPrompt from '@/components/ExternalImportPrompt.vue'
 
 const appStore = useAppStore()
 const localLibraryStore = useLocalLibraryStore()
+const favoritesStore = useFavoritesStore()
+watch(() => [appStore.vamRootPath, localLibraryStore.revision], () => invalidateResourceCache())
 const { state: localLibraryState, loading: localLibraryLoading, error: localLibraryError } = storeToRefs(localLibraryStore)
 const { t } = useI18n()
 
@@ -178,6 +180,7 @@ async function bootstrapApp() {
   await appStore.setupScanListener()
   await localLibraryStore.startListeners()
   await appStore.loadSettings()
+  favoritesStore.start()
   startupReady.value = true
 
   window.requestAnimationFrame(() => {
@@ -319,7 +322,7 @@ onMounted(async () => {
   overflow: hidden;
   height: 6px;
   border-radius: var(--radius-full);
-  background: var(--border-default);
+  background: var(--bg-active);
 }
 
 .global-loading-progress-bar {

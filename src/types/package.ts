@@ -30,6 +30,9 @@ export interface PackageDisplayItem {
   tags: string[];
 }
 
+/** Shared details accept package metadata or a local resource without invented package fields. */
+export type ResourceDetailItem = Pick<PackageDisplayItem, 'id' | 'name' | 'creator' | 'resource_types'> & Partial<PackageDisplayItem>;
+
 export interface PackageImageEntry {
   path: string;
   size_bytes: number;

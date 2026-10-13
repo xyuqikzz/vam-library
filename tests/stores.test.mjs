@@ -8,7 +8,7 @@ import { emit } from '@tauri-apps/api/event'
 import { compileModule, moduleUrl } from './helpers/typescript.mjs'
 
 const eventsUrl = await compileModule(new URL('../src/utils/eventListeners.ts', import.meta.url))
-const imports = { '@/utils/eventListeners': eventsUrl }
+const imports = { '@/utils/eventListeners': eventsUrl, '@/utils/resourceCache': await compileModule(new URL('../src/utils/resourceCache.ts', import.meta.url)) }
 const { useDownloadStore } = await import(await compileModule(new URL('../src/stores/download.ts', import.meta.url), imports))
 const { useAppStore } = await import(await compileModule(new URL('../src/stores/app.ts', import.meta.url), {
   ...imports, '../i18n': moduleUrl('export default { global: { locale: { value: "zh-CN" } } }'),

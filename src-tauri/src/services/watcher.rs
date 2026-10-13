@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 
 use crate::errors::AppError;
 
@@ -42,6 +42,7 @@ pub fn start_watching(
                 };
 
                 for path in &event.paths {
+                    if app.try_state::<crate::commands::cleanup::CleanupState>().is_some_and(|s| s.executing.load(std::sync::atomic::Ordering::SeqCst)) || path.components().any(|c| c.as_os_str() == ".trash") { continue; }
                     if let Some(p) = path.to_str() {
                         let is_var = p.ends_with(".var");
                         let change = FileChangeEvent {

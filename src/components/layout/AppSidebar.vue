@@ -73,7 +73,16 @@ const toolMenuItems = computed<MenuItem[]>(() => [
 const toolsOpen = ref(false)
 const toolsAnchor = ref<HTMLElement | null>(null)
 const toolsActive = computed(() => toolMenuItems.value.some(item => isActive(item.value)))
-function toggleTools(event: MouseEvent) { toolsAnchor.value = event.currentTarget as HTMLElement; toolsOpen.value = !toolsOpen.value }
+const toolsPosition = ref<{ x?: number; y?: number }>({})
+function toggleTools(event: MouseEvent) {
+  const button = event.currentTarget as HTMLElement
+  toolsAnchor.value = button
+  // 浮层贴着整条侧边栏的右缘弹出（而不是按钮右缘），顶部与「工具」按钮对齐
+  const rail = (button.closest('.app-sidebar') as HTMLElement | null)?.getBoundingClientRect()
+  const rect = button.getBoundingClientRect()
+  toolsPosition.value = { x: (rail?.right ?? rect.right) + 8, y: rect.top }
+  toolsOpen.value = !toolsOpen.value
+}
 function navigate(path: string) {
   toolsOpen.value = false
   router.push(path)
@@ -85,11 +94,6 @@ function isActive(path: string): boolean {
 </script>
 <template>
   <aside class="app-sidebar">
-    <div class="sidebar-header" data-tauri-drag-region>
-      <div class="brand-logo" :title="t('app.name')" data-tauri-drag-region>
-        <Icon name="package" :size="24" />
-      </div>
-    </div>
     <nav class="sidebar-nav" :aria-label="t('app.name')">
       <div v-for="(group, index) in [browseItems, resourcesItems]" :key="index" class="nav-group">
         <button
@@ -158,6 +162,8 @@ function isActive(path: string): boolean {
       :anchor="toolsAnchor"
       :items="toolMenuItems"
       :label="t('ui.tools')"
+      :x="toolsPosition.x"
+      :y="toolsPosition.y"
       @select="navigate($event.value)"
     />
   </aside>
@@ -169,26 +175,11 @@ function isActive(path: string): boolean {
   width: var(--sidebar-width);
   height: 100%;
   min-height: 0;
-  padding: 14px 6px;
+  padding: var(--space-3) var(--space-2) var(--space-4);
   border-radius: var(--radius-shell);
   background: var(--glass-sidebar-bg);
   flex-shrink: 0;
   z-index: var(--z-sidebar);
-}
-.sidebar-header {
-  display: flex;
-  justify-content: center;
-  padding-bottom: 14px;
-  flex-shrink: 0;
-}
-.brand-logo {
-  display: grid;
-  place-items: center;
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-icon);
-  background: var(--accent-primary);
-  color: var(--accent-ink);
 }
 .sidebar-nav {
   flex: 1;
@@ -201,16 +192,16 @@ function isActive(path: string): boolean {
   content: '';
   display: block;
   height: 1px;
-  margin: 8px 14px;
+  margin: var(--space-2) var(--space-4);
   background: var(--divider);
 }
 .nav-item {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
   width: 100%;
-  padding: 5px 0;
+  padding: var(--space-1) 0;
   color: var(--text-tertiary);
   border-radius: var(--radius-icon);
 }
@@ -248,7 +239,7 @@ function isActive(path: string): boolean {
   place-items: center;
   min-width: 16px;
   height: 16px;
-  padding: 0 3px;
+  padding: 0 var(--space-1);
   border: 2px solid var(--glass-sidebar-bg);
   border-radius: var(--radius-full);
   background: var(--accent-primary);

@@ -53,6 +53,12 @@ const router = createRouter({
           meta: { title: 'Dependency Completion' },
         },
         {
+          path: 'cleanup',
+          name: 'cleanup',
+          component: () => import('@/views/CleanupView.vue'),
+          meta: { title: 'Resource cleanup' },
+        },
+        {
           path: 'deduplication',
           name: 'deduplication',
           component: () => import('@/views/DeduplicationView.vue'),

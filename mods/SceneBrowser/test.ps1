@@ -3,7 +3,7 @@ $ErrorActionPreference = 'Stop'
 $compiler = Join-Path $env:WINDIR 'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
 $output = Join-Path ([IO.Path]::GetTempPath()) ('VamBrowserRules-' + [guid]::NewGuid() + '.exe')
 try {
-    & $compiler /nologo /target:exe "/out:$output" (Join-Path $PSScriptRoot 'BrowserRules.cs') (Join-Path $PSScriptRoot 'ImportTimeIndex.cs') (Join-Path $PSScriptRoot 'SceneLaunchRequest.cs') (Join-Path $PSScriptRoot 'tests/BrowserRulesTests.cs')
+    & $compiler /nologo /target:exe "/out:$output" (Join-Path $PSScriptRoot 'BrowserRules.cs') (Join-Path $PSScriptRoot 'BrowserText.cs') (Join-Path $PSScriptRoot 'LaunchProgress.cs') (Join-Path $PSScriptRoot 'ImportTimeIndex.cs') (Join-Path $PSScriptRoot 'SceneLaunchRequest.cs') (Join-Path $PSScriptRoot 'tests/BrowserRulesTests.cs')
     if ($LASTEXITCODE -ne 0) { throw 'Test compilation failed' }
     & $output
     if ($LASTEXITCODE -ne 0) { throw 'Browser rules tests failed' }
@@ -26,7 +26,9 @@ try {
     foreach ($name in @('sortedFilesAndDirs','displayedFileButtons','fileContent')) {
         if (-not ($browser.Fields | Where-Object Name -EQ $name)) { throw "Missing field: $name" }
     }
-    Write-Output 'PASS: 15 game binary contract checks'
+    $hide = $browser.Methods | Where-Object Name -EQ 'HideButton'
+    if ($hide.Parameters.Count -ne 1 -or $hide.Parameters[0].ParameterType.FullName -ne 'uFileBrowser.FileButton' -or $hide.ReturnType.FullName -ne 'System.Void') { throw 'HideButton delegate contract changed' }
+    Write-Output 'PASS: browser binary contracts including HideButton delegate'
     $packageSize = $assembly.MainModule.GetType('MVR.FileManagement.VarPackage').Properties | Where-Object Name -EQ 'Size'
     if (-not $packageSize -or -not $packageSize.GetMethod.IsPublic -or $packageSize.PropertyType.FullName -ne 'System.Int64') { throw 'Package size API contract changed' }
     Write-Output 'PASS: public 64-bit package size API contract'
@@ -47,4 +49,8 @@ try {
     if ($framework | Where-Object { $_.Version.Major -ge 4 }) { throw 'CLR 4 framework reference found' }
     if ($plugin.MainModule.GetTypeReferences() | Where-Object FullName -Like '*ConditionalWeakTable*') { throw 'Unsupported ConditionalWeakTable reference found' }
     Write-Output 'PASS: game CLR 2 target and framework references'
+    # The compatibility manifest no longer pins SharpZipLib; the plugin must not use it.
+    if ($plugin.MainModule.AssemblyReferences | Where-Object Name -EQ 'ICSharpCode.SharpZipLib') { throw 'Unexpected SharpZipLib reference found' }
+    if ($plugin.MainModule.GetType('VamLibrary.SceneBrowser.NativeDecompression')) { throw 'Removed native decompression remains' }
+    Write-Output 'PASS: no SharpZipLib reference or native decompression hook'
 } finally { $plugin.Dispose() }

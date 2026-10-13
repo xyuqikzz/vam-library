@@ -2,7 +2,7 @@
   <div class="appearances-view animate-fadeIn b2-page">
     <PageHeader :title="$t('sidebar.appearances')">
       <template #filters>
-        <nav class="preset-type-tabs" :aria-label="t('gameContent.presetType')">
+        <nav class="chip-row preset-type-tabs" :aria-label="t('gameContent.presetType')">
           <UiChip
             v-for="kind in presetKinds"
             :key="kind"
@@ -15,7 +15,7 @@
             {{ t(`gameContent.presetTypes.${kind}`) }}
           </UiChip>
         </nav>
-        <div class="content-tabs">
+        <div class="chip-row content-tabs">
           <UiChip
             :class="{ active: contentTab === 'files' }"
             :aria-pressed="contentTab === 'files'"
@@ -56,15 +56,6 @@
         @update:view-mode="viewMode = $event"
       >
         <template #actions>
-          <UiButton
-            :disabled="isScanning || !vamRootPath"
-            @click="handleScan"
-            variant="primary"
-            size="lg"
-          >
-            <Icon :size="14" name="outline-7" />
-            <span>{{ isScanning ? t('toolbar.scanning') : t('packages.scan') }}</span>
-          </UiButton>
           <div class="sort-dropdown">
             <select v-model="sortBy" class="sort-select">
               <option value="name">{{ t('packages.sortByName') }}</option>
@@ -72,6 +63,14 @@
               <option value="creator">{{ t('packages.sortByCreator') }}</option>
             </select>
           </div>
+          <UiButton
+            :disabled="isScanning || !vamRootPath"
+            @click="handleScan"
+            variant="primary"
+          >
+            <Icon :size="14" name="outline-7" />
+            <span>{{ isScanning ? t('toolbar.scanning') : t('packages.scan') }}</span>
+          </UiButton>
         </template>
         <template #empty-action>
           <UiButton @click="goToSettings" variant="secondary">
@@ -180,9 +179,7 @@ function goToSettings() {
 .appearances-view {
   display: flex;
   flex-direction: column;
-  height: 100%;
   position: relative;
-  overflow: hidden;
 }
 .appearances-view > .game-content {
   flex: 1;
@@ -195,49 +192,6 @@ function goToSettings() {
   height: auto;
 }
 
-.sort-select {
-  height: 30px;
-  padding: 0 var(--space-3);
-  background: var(--bg-base);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
-  color: var(--text-secondary);
-  font-size: var(--text-sm);
-  cursor: pointer;
-  transition: border-color var(--duration-fast) var(--ease);
-}
 
-.sort-select:focus {
-  border-color: var(--accent-primary);
-}
 
-.b2-page {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-height: 0;
-  max-width: none;
-  margin: 0;
-  padding: 0;
-  gap: 0;
-  overflow: hidden;
-}
-.b2-page-body {
-  flex: 1;
-  min-height: 0;
-  min-width: 0;
-  overflow: auto;
-  padding: 20px 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-.b2-page :deep(.page-header) {
-  width: 100%;
-}
-@media (max-width: 800px) {
-  .b2-page-body {
-    padding: 12px;
-  }
-}
 </style>

@@ -14,7 +14,7 @@ class BrowserRulesTests
     {
         long now = SceneLaunchRequest.Now;
         string launch = SceneLaunchRequest.Header + "\nabc-1\n" + now + "\n作者.Scene.1:/Saves/scene/中文 场景.json\n";
-        Check(SceneLaunchRequest.Parse(launch, "abc-1", now).Scene == "作者.Scene.1:/Saves/scene/中文 场景.json", "Launch preserves exact package version and Unicode path");
+        Check(SceneLaunchRequest.Parse(launch, "abc-1", now, now).Scene == "作者.Scene.1:/Saves/scene/中文 场景.json", "Launch preserves exact package version and Unicode path");
         Check(SceneLaunchRequest.ValidScene("Saves/scene/Local.json"), "Local scene accepted");
         Check(SceneLaunchRequest.ValidScene("Author.Scene.With.Dots.2:/Saves/scene/a.json"), "Dotted package names retain exact numeric version");
         foreach (string invalid in new[] { "C:/Saves/scene/a.json", "Saves/scene/../a.json", "Saves/scene//a.json", "Saves\\scene\\a.json", "Saves/scene/a.json\nother", "Author.Scene.latest:/Saves/scene/a.json", "Custom/Atom/Person/Appearance/a.vap", "Saves/scene/a.json.fav" })
@@ -23,23 +23,52 @@ class BrowserRulesTests
         foreach (long timestamp in new[] { now - SceneLaunchRequest.TimeoutMs - 1, now + 5001 })
         {
             bool expiredRejected = false;
-            try { SceneLaunchRequest.Parse(launch.Replace(now.ToString(), timestamp.ToString()), "abc-1", now); }
+            try { SceneLaunchRequest.Parse(launch.Replace(now.ToString(), timestamp.ToString()), "abc-1", now, now); }
             catch (InvalidDataException) { expiredRejected = true; }
             Check(expiredRejected, "Reject stale or future request");
         }
+        // A cold start longer than v1's three minutes remains live with a heartbeat.
+        Check(SceneLaunchRequest.Parse(launch.Replace(now.ToString(), (now - 600000).ToString()), "abc-1", now, now).Created == now - 600000, "Heartbeat extends slow cold start");
+        foreach (long modified in new[] { now - 15001, now + 5001 })
+        {
+            bool rejectedHeartbeat = false;
+            try { SceneLaunchRequest.Parse(launch, "abc-1", now, modified); } catch (InvalidDataException) { rejectedHeartbeat = true; }
+            Check(rejectedHeartbeat, "Reject stopped or future heartbeats");
+        }
+        var progress = new LaunchProgress("same", "same", 0);
+        Check(progress.Observe(false, "same", 1) == null, "Same scene must not succeed before loading starts");
+        Check(progress.Observe(false, "same", 59) == null, "Allow delayed native confirmation");
+        Check(progress.Observe(false, "same", 60) == "load_not_started", "Unanswered prompt produces specific error");
+        progress = new LaunchProgress("same", "same", 0);
+        Check(progress.Observe(true, "same", 1) == null && progress.Observe(false, "same", 2) == "loaded", "Reload succeeds only after loading transition");
+        progress = new LaunchProgress("before", "wanted", 0);
+        Check(progress.Observe(false, "wanted", 1) == "loaded", "Changed scene can complete between polls");
+        progress = new LaunchProgress("before", "wanted", 0);
+        Check(progress.Observe(true, "before", 1) == null && progress.Observe(false, "other", 2) == "load_failed", "Wrong final scene fails");
+        Check(BrowserRules.CompareName("Scene 2", "Scene 10") < 0, "Natural digit ordering");
+        Check(BrowserRules.CompareName("a01", "a1") < 0, "Leading zeros have deterministic ordinal tie break");
+        Check(BrowserRules.CompareName("A2", "a10") < 0, "Case insensitive natural comparison");
+        Check(BrowserRules.CompareName("a999999999999999999999", "a1000000000000000000000") < 0, "No integer overflow in names");
+        Check(BrowserRules.CompareName("A", "a") < 0, "Case-only tie is a total order");
+        Check(BrowserRules.ChildFolder("", "a/b/c") == "a", "Count deep descendants in direct child");
+        Check(BrowserRules.ChildFolder("a", "a/b/c") == "a/b", "Nested direct child count");
+        Check(BrowserRules.ChildFolder("a", "ab/c") == null && BrowserRules.ChildFolder("a", "a") == null, "Counts respect folder boundaries");
+        Check(BrowserText.Mode("作者 A–Z") == "author" && BrowserText.Mode("Creator A–Z") == "author", "Both languages resolve stable sort IDs");
         string launchFile = Path.Combine(Path.GetTempPath(), "abc-" + Guid.NewGuid().ToString("N") + ".request");
         string launchId = Path.GetFileNameWithoutExtension(launchFile);
         string resultFile = Path.ChangeExtension(launchFile, ".result");
         try
         {
             File.WriteAllText(launchFile, launch);
+            SceneLaunchRequest.Accept(launchFile);
+            Check(File.Exists(Path.ChangeExtension(launchFile, ".accepted")), "Acceptance is atomically visible before completion");
             SceneLaunchRequest.Complete(launchFile, launchId, "loaded", "");
             Check(!File.Exists(launchFile), "Completed request consumed exactly once");
             Check(File.ReadAllText(resultFile).StartsWith(SceneLaunchRequest.Header + "\n" + launchId + "\nloaded\n"), "Completion correlated to request ID");
             SceneLaunchRequest.Complete(launchFile, launchId, "error", "should not replay");
             Check(!File.ReadAllText(resultFile).Contains("should not replay"), "Consumed request does not replay");
         }
-        finally { if (File.Exists(launchFile)) File.Delete(launchFile); if (File.Exists(resultFile)) File.Delete(resultFile); }
+        finally { if (File.Exists(launchFile)) File.Delete(launchFile); if (File.Exists(resultFile)) File.Delete(resultFile); File.Delete(Path.ChangeExtension(launchFile, ".accepted")); }
         Check(BrowserRules.Compare("Alice", "z", "1", "Bob", "a", "2") < 0, "Author precedes scene title");
         Check(BrowserRules.Compare("alice", "a", "1", "ALICE", "z", "2") < 0, "Case-insensitive author grouping");
         Check(BrowserRules.Compare(null, "a", "1", "Bob", "z", "2") > 0, "Loose scenes last");
@@ -124,6 +153,26 @@ class BrowserRulesTests
             Directory.Delete(Path.Combine(fixture, ".VAMBoxLibrary-downloads"));
             Directory.Delete(fixture);
         }
+        string cleanup = Path.Combine(Path.GetTempPath(), "LaunchCleanup-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(cleanup);
+        try
+        {
+            foreach (string ext in new[] { ".request", ".result", ".accepted", ".tmp", ".keep" })
+            {
+                string file = Path.Combine(cleanup, "old" + ext); File.WriteAllText(file, ""); File.SetLastWriteTimeUtc(file, DateTime.UtcNow.AddMinutes(-31));
+                File.WriteAllText(Path.Combine(cleanup, "new" + ext), "");
+            }
+            SceneLaunchRequest.Cleanup(cleanup, SceneLaunchRequest.Now);
+            Check(Directory.GetFiles(cleanup).Length == 6 && File.Exists(Path.Combine(cleanup, "old.keep")), "Cleanup removes only stale protocol files");
+            string settings = Path.Combine(cleanup, "settings");
+            File.WriteAllText(settings, "# VAM Library app settings v1\nlanguage\ten-US\n"); BrowserText.Refresh(settings);
+            Check(BrowserText.Get("folders") == "Browse by folder", "Settings select English labels");
+            File.WriteAllText(settings, "broken"); BrowserText.Refresh(settings);
+            Check(BrowserText.Get("folders") == "Browse by folder", "Malformed settings retain last valid language");
+            File.Delete(settings); BrowserText.Refresh(settings);
+            Check(BrowserText.Get("folders") == "按文件夹浏览", "Missing settings restore default language");
+        }
+        finally { foreach (string file in Directory.GetFiles(cleanup)) File.Delete(file); Directory.Delete(cleanup); }
         Console.WriteLine("PASS: " + checks + " browser rules checks");
     }
 }

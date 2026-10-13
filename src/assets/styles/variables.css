@@ -16,6 +16,9 @@
   --bg-control: #26262a;
   --bg-control-hover: #303035;
   --bg-menu: #1f1f22;
+  /* 透明按钮的悬停/按下：用半透明叠加，放在任何底色上都会变亮一级 */
+  --bg-ghost-hover: rgba(255, 255, 255, 0.07);
+  --bg-ghost-active: rgba(255, 255, 255, 0.11);
   --bg-on-image: rgba(10, 10, 11, 0.72);
 
   /* ── Text（四级灰度）──────────────────────────────────────── */
@@ -98,9 +101,20 @@
   --space-12: 48px;
   --space-16: 64px;
 
+  /* ── Layout spacing（语义间距：布局层只用这些，不写 px）──────── */
+  --space-page-x: var(--space-6);   /* 24 页面左右内边距，PageHeader 与内容共用 */
+  --space-page-y: var(--space-5);   /* 20 页头下方到第一块内容 */
+  --space-section: var(--space-6);  /* 24 大区块之间（统计行 / 双栏 / 区块） */
+  --space-stack: var(--space-3);    /* 12 区块标题到内容 */
+  --space-grid: var(--space-4);     /* 16 卡片网格、磁贴之间 */
+  --space-panel: var(--space-5);    /* 20 面板内边距 */
+  --space-item: var(--space-2);     /* 8 列表行之间、同组控件之间 */
+  --focus-room: var(--space-1);     /* 4 滚动容器为选中外环和键盘焦点预留，需配合等量负 margin */
+
   /* ── Border Radius ─────────────────────────────────────────── */
   --radius-none: 0; /* Flat table edges and layout resets retain their existing geometry. */
   --radius-xs: 6px;
+  --radius-checkbox: 4px;   /* 勾选框：明显的方角，避免和圆形单选框混淆 */
   --radius-sm: 10px;
   --radius-md: 14px;
   --radius-lg: 18px;
@@ -108,6 +122,8 @@
   --radius-card: 16px;
   --radius-shell: 20px;
   --radius-full: 9999px;
+  --radius-control: 10px;    /* 按钮、输入框、下拉框、分段控件（40/44 高） */
+  --radius-control-sm: 8px;  /* 32 高的小按钮、筛选片 */
 
   /* ── Shadows（仅浮层）─────────────────────────────────────── */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
@@ -180,11 +196,18 @@
   --toolbar-height: 48px;
   --titlebar-height: 38px;
 
+  /* 资源卡片统一尺寸；整卡比例包含底部 56px 信息条。 */
+  --resource-card-width: 255px; /* minimum; resource-grid distributes remaining space */
+  --resource-card-ratio: 45 / 32;
+  --resource-card-info-h: 56px;
+  --resource-inspector-width: 440px;
+
   /* ── Z-Index Scale ─────────────────────────────────────────── */
   --z-base: 0;
   --z-surface: 10;
   --z-sidebar: 100;
   --z-toolbar: 200;
+  --z-inspector: 250;
   --z-titlebar: 300;
   --z-dropdown: 400;
   --z-modal: 500;
@@ -229,6 +252,8 @@
   --bg-control: var(--bg-hover);
   --bg-control-hover: var(--bg-active);
   --bg-menu: var(--glass-bg-heavy);
+  --bg-ghost-hover: rgba(0, 0, 0, 0.05);
+  --bg-ghost-active: rgba(0, 0, 0, 0.09);
   --bg-on-image: rgba(255, 255, 255, 0.9);
 
   --text-primary: #1d1d1f;

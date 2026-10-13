@@ -3,16 +3,16 @@ import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import UiButton from '@/components/ui/UiButton.vue'
 import UiMenu, { type MenuItem } from '@/components/ui/UiMenu.vue'
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   disabled?: boolean
   launching?: boolean
-  expanded?: boolean
-  panel?: string
   canDelete?: boolean
   deleting?: boolean
   completing?: boolean
   missing?: boolean
-}>()
+  canOpen?: boolean
+  canShare?: boolean
+}>(), { canOpen: true, canShare: true })
 const emit = defineEmits<{
   launch: []
   extract: []
@@ -72,6 +72,7 @@ function choose(item: MenuItem) {
       {{ t('gameContent.launchScene') }}
     </UiButton>
     <UiButton
+      v-if="canOpen !== false"
       class="open-location"
       size="lg"
       icon="folder"
@@ -80,6 +81,7 @@ function choose(item: MenuItem) {
       @click="emit('open')"
     />
     <UiButton
+      v-if="canShare !== false"
       size="lg"
       icon="share"
       icon-only
@@ -104,16 +106,6 @@ function choose(item: MenuItem) {
     >
       {{ t('ui.allDependencies') }}
     </UiButton>
-    <UiButton
-      v-if="expanded"
-      variant="ghost"
-      size="sm"
-      :aria-controls="panel"
-      aria-expanded="true"
-      @click="emit('extract')"
-    >
-      {{ t('gameContent.extractPreset') }}
-    </UiButton>
     <UiMenu
       v-model:open="menuOpen"
       :anchor="anchor"
@@ -128,13 +120,13 @@ function choose(item: MenuItem) {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--space-2);
   min-width: 0;
 }
 .launch-scene {
   flex: 1;
   min-width: 0;
-  padding: 0 8px;
+  padding: 0 var(--space-2);
 }
 .complete-dependencies {
   width: 100%;

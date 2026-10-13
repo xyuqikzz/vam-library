@@ -71,8 +71,8 @@ defineExpose({ success, error, warning, info, showToast, removeToast })
   align-items: center;
   gap: var(--space-3);
   min-height: 52px;
-  padding: 10px 12px 10px 18px;
-  border-radius: var(--radius-full);
+  padding: var(--space-3) var(--space-3) var(--space-3) var(--space-5);
+  border-radius: var(--radius-md);
   background: var(--text-primary);
   color: var(--text-inverse);
   box-shadow: var(--shadow-lg);

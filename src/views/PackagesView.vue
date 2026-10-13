@@ -14,6 +14,7 @@ import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'
 import { useAppStore } from '@/stores/app'
 import { useLocalLibraryStore } from '@/stores/localLibrary'
+import { useFavoritesStore } from '@/stores/favorites'
 import SearchInput from '@/components/common/SearchInput.vue'
 import ResourceDisplay from '@/components/ResourceDisplay.vue'
 import type { PackageDisplayItem } from '@/types/package'
@@ -286,12 +287,19 @@ const searchInput = ref<InstanceType<typeof SearchInput> | null>(null)
 const folderAnchor = ref<HTMLElement | null>(null)
 const sortAnchor = ref<HTMLElement | null>(null)
 const issuesOnly = ref(false)
+const favoritesOnly = ref(false)
+const favorites = useFavoritesStore()
+const favoritePackageCount = computed(() => packages.value.filter(pkg => favorites.countFor(pkg.id) > 0).length)
 const missingCounts = computed(() => { const result: Record<string, number> = {}; for (const item of localLibraryStore.missingDependencies) result[item.package_id] = (result[item.package_id] || 0) + 1; return result })
 const problemIds = computed(() => new Set([...Object.keys(missingCounts.value), ...localLibraryStore.corruptedPackages.map(item => item.package_id)]))
-const displayPackages = computed(() => issuesOnly.value ? sortedPackages.value.filter(item => problemIds.value.has(item.id)) : sortedPackages.value)
+const displayPackages = computed(() => sortedPackages.value.filter(item =>
+  (!issuesOnly.value || problemIds.value.has(item.id)) && (!favoritesOnly.value || favorites.countFor(item.id) > 0)))
+const emptyTitle = computed(() => t(favoritesOnly.value && !favoritePackageCount.value ? 'ui.noFavoritePackages' : packages.value.length ? 'ui.noMatchingPackages' : 'packages.noPackages'))
+const emptyDescription = computed(() => t(favoritesOnly.value && !favoritePackageCount.value ? 'ui.noFavoritePackagesHelp' : packages.value.length ? 'ui.noMatchingPackagesHelp' : 'packages.noPackagesDesc'))
+function clearFilters() { favoritesOnly.value = false; issuesOnly.value = false; selectedType.value = 'all'; selectedFolder.value = ''; packageNameQuery.value = ''; appStore.searchQuery = '' }
 const latestScanTime = computed(() => packages.value.reduce((latest, item) => Math.max(latest, Date.parse(item.scan_time) || 0), 0))
 const packageSubtitle = computed(() => [t('ui.total', { count: packages.value.length }), formatSize(packages.value.reduce((sum, item) => sum + item.size_bytes, 0)), latestScanTime.value ? t('ui.synced', { minutes: Math.max(0, Math.floor((Date.now() - latestScanTime.value) / 60000)) }) : t('ui.notSynced')])
-const viewOptions = computed(() => [{ value: 'large-card', label: t('packages.largeCardView'), icon: 'grid' as const }, { value: 'small-card', label: t('packages.smallCardView'), icon: 'landscape' as const }, { value: 'list', label: t('packages.listView'), icon: 'list' as const }])
+const viewOptions = computed(() => [{ value: 'large-card', label: t('packages.cardView'), icon: 'grid' as const }, { value: 'list', label: t('packages.listView'), icon: 'list' as const }])
 const sortItems = computed<MenuItem[]>(() => [['name', 'packages.sortByName'], ['size', 'packages.sortBySize'], ['creator', 'packages.sortByCreator'], ['created', 'packages.sortByCreatedTime'], ['imported', 'packages.sortByImportTime']].map(([value, label]) => ({ value, label: t(label), checked: sortBy.value === value })))
 function typeCount(type: string) { return type === 'all' ? packages.value.length : packages.value.filter(pkg => pkg.resource_types.includes(type)).length }
 function openFolders(event: MouseEvent) { folderAnchor.value = event.currentTarget as HTMLElement; isFolderPanelOpen.value = !isFolderPanelOpen.value }
@@ -326,7 +334,6 @@ onUnmounted(() => window.removeEventListener('keydown', focusSearch))
         />
         <UiButton
           variant="primary"
-          size="lg"
           icon="refresh"
           :disabled="isScanning || !vamRootPath"
           :loading="isScanning"
@@ -364,6 +371,9 @@ onUnmounted(() => window.removeEventListener('keydown', focusSearch))
           <UiChip :selected="issuesOnly" :count="problemIds.size" @click="issuesOnly = !issuesOnly">
             {{ t('ui.issues') }}
           </UiChip>
+          <UiChip :selected="favoritesOnly" :count="favoritePackageCount" :title="favorites.error ? t('ui.loadFailed', { error: favorites.error }) : undefined" @click="favoritesOnly = !favoritesOnly">
+            {{ t('ui.favorite') }}
+          </UiChip>
         </div>
       </template>
     </PageHeader>
@@ -373,15 +383,16 @@ onUnmounted(() => window.removeEventListener('keydown', focusSearch))
         :view-mode="viewMode"
         :missing-counts="missingCounts"
         :result-count-label="t('packages.packagesCount', { count: displayPackages.length })"
-        :empty-title="t('packages.noPackages')"
-        :empty-description="t('packages.noPackagesDesc')"
+        :empty-title="emptyTitle"
+        :empty-description="emptyDescription"
         hide-controls
         show-quick-delete
         @update:view-mode="viewMode = $event"
         @package-deleted="handlePackageDeleted"
       >
         <template #empty-action>
-          <UiButton variant="primary" size="lg" @click="goToSettings">
+          <UiButton v-if="packages.length" variant="secondary" @click="clearFilters">{{ t('ui.clearFilters') }}</UiButton>
+          <UiButton v-else variant="primary" size="lg" @click="goToSettings">
             {{ t('packages.selectDirectory') }}
           </UiButton>
         </template>
@@ -444,7 +455,7 @@ onUnmounted(() => window.removeEventListener('keydown', focusSearch))
 .packages-content {
   flex: 1;
   min-height: 0;
-  padding: 16px 20px;
+  padding: var(--space-4) var(--space-5);
 }
 .package-name-search {
   width: 280px;
@@ -455,12 +466,12 @@ onUnmounted(() => window.removeEventListener('keydown', focusSearch))
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--space-2);
 }
 .folder-tree {
   min-width: 260px;
   max-width: calc(100vw - 32px);
-  padding: 4px;
+  padding: var(--space-1);
 }
 .folder-tree-row {
   display: flex;
@@ -473,11 +484,11 @@ onUnmounted(() => window.removeEventListener('keydown', focusSearch))
 .folder-tree-item {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   flex: 1;
   min-width: 0;
   min-height: 36px;
-  padding: 4px 8px;
+  padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-sm);
   text-align: left;
   font-size: var(--text-base);
@@ -494,7 +505,7 @@ onUnmounted(() => window.removeEventListener('keydown', focusSearch))
 }
 @media (max-width: 800px) {
   .packages-content {
-    padding: 12px;
+    padding: var(--space-3);
   }
 }
 </style>

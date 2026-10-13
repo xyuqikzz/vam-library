@@ -13,7 +13,7 @@
         >
           {{ isLoading ? $t('common.loading') : $t('common.refresh') }}
         </UiButton>
-        <UiButton type="button" :disabled="!canSave" @click="savePrefs" variant="primary" size="lg">
+        <UiButton type="button" :disabled="!canSave" @click="savePrefs" variant="primary">
           {{ isSaving ? $t('common.loading') : $t('vamPrefs.saveWithBackup') }}
         </UiButton>
       </template>
@@ -47,24 +47,13 @@
 
       <GlassPanel :title="$t('vamPrefs.editor')">
         <div class="editor-actions">
-          <div class="mode-selector">
-            <UiChip
-              :class="['', { active: editorMode === 'visual' }]"
-              type="button"
-              @click="editorMode = 'visual'"
-              :selected="editorMode === 'visual'"
-            >
-              {{ $t('vamPrefs.visualMode') }}
-            </UiChip>
-            <UiChip
-              :class="['', { active: editorMode === 'json' }]"
-              type="button"
-              @click="editorMode = 'json'"
-              :selected="editorMode === 'json'"
-            >
-              {{ $t('vamPrefs.jsonMode') }}
-            </UiChip>
-          </div>
+          <UiSegmented
+            class="mode-selector"
+            :model-value="editorMode"
+            :options="editorModeOptions"
+            :label="$t('vamPrefs.editor')"
+            @update:model-value="editorMode = $event as 'visual' | 'json'"
+          />
           <UiButton
             v-if="editorMode === 'json'"
             type="button"
@@ -122,7 +111,7 @@
 </template>
 
 <script setup lang="ts">
-import UiChip from '@/components/ui/UiChip.vue'
+import UiSegmented from '@/components/ui/UiSegmented.vue'
 import PageHeader from '@/components/layout/PageHeader.vue'
 import UiInput from '@/components/ui/UiInput.vue'
 import UiButton from '@/components/ui/UiButton.vue'
@@ -162,6 +151,10 @@ const jsonError = ref('')
 const isLoading = ref(false)
 const isSaving = ref(false)
 const editorMode = ref<'visual' | 'json'>('visual')
+const editorModeOptions = computed(() => [
+  { value: 'visual', label: t('vamPrefs.visualMode') },
+  { value: 'json', label: t('vamPrefs.jsonMode') },
+])
 
 const canRead = computed(() => Boolean(appStore.vamRootPath))
 const isDirty = computed(() => prefsContent.value !== originalContent.value)
@@ -295,8 +288,6 @@ function stringifyPrefsValue() {
 .vam-prefs-view {
   display: flex;
   flex-direction: column;
-  gap: var(--space-5);
-  max-width: 980px;
 }
 
 .view-title {
@@ -404,11 +395,7 @@ function stringifyPrefsValue() {
 }
 
 .mode-selector {
-  display: flex;
   margin-right: auto;
-  padding: 2px;
-  border-radius: var(--radius-sm);
-  background: var(--bg-base);
 }
 
 .visual-editor-shell {
@@ -428,13 +415,18 @@ function stringifyPrefsValue() {
   font-size: var(--text-sm);
 }
 
+/* 样式要落到 UiInput 内部的 textarea 上，根元素上的 min-height 撑不开编辑区 */
 .prefs-editor {
   width: 100%;
-  min-height: 520px;
-  resize: vertical;
+}
+.prefs-editor :deep(.ui-input-shell) {
+  align-items: stretch;
+}
+.prefs-editor :deep(textarea) {
+  min-height: 480px;
   font-family: var(--font-mono);
+  font-size: var(--text-sm);
   line-height: 1.65;
-  outline: none;
 }
 
 .editor-footer {
@@ -481,33 +473,4 @@ function stringifyPrefsValue() {
   }
 }
 
-.b2-page {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-height: 0;
-  max-width: none;
-  margin: 0;
-  padding: 0;
-  gap: 0;
-  overflow: hidden;
-}
-.b2-page-body {
-  flex: 1;
-  min-height: 0;
-  min-width: 0;
-  overflow: auto;
-  padding: 20px 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-.b2-page :deep(.page-header) {
-  width: 100%;
-}
-@media (max-width: 800px) {
-  .b2-page-body {
-    padding: 12px;
-  }
-}
 </style>

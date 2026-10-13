@@ -13,6 +13,7 @@ const { createApp, h, nextTick, ref } = await import('vue')
 const load = componentLoader({ 'vue-i18n': moduleUrl('export const useI18n = () => ({ t: key => key })') })
 const { default: UiModal } = await import(load('src/components/ui/UiModal.vue'))
 const { default: UiMenu } = await import(load('src/components/ui/UiMenu.vue'))
+const { default: UiInspector } = await import(load('src/components/ui/UiInspector.vue'))
 const { default: Toast } = await import(load('src/components/common/Toast.vue'))
 const { default: PackageCard } = await import(load('src/components/packages/PackageCard.vue'))
 const { useConfirm, resolveConfirmation, confirmation } = await import(load('src/composables/useConfirm.ts'))
@@ -46,6 +47,67 @@ test('menu skips disabled items, selects with Enter and restores focus on Escape
   open.value = true; await nextTick(); await nextTick(); key(document.activeElement, 'Escape'); await nextTick()
   assert.equal(open.value, false); assert.equal(document.activeElement, opener)
   app.unmount()
+})
+
+test('floating inspectors keep the browser interactive, reset item scroll and restore their opener', async t => {
+  const open = ref(false), item = ref('first')
+  const opener = document.querySelector('#opener')
+  const app = createApp({ render: () => h('div', [
+    h('button', { id: 'browser-action' }, 'Browser action'),
+    open.value ? h(UiInspector, { label: 'Resource details', contentKey: item.value, onClose: () => { open.value = false } }, () => h('button', { id: 'inspector-action' }, 'Panel action')) : null,
+  ]) })
+  app.mount('#app'); t.after(() => app.unmount())
+  opener.focus(); open.value = true
+  await nextTick(); await nextTick()
+  assert.equal(document.activeElement.classList.contains('ui-inspector-close'), true)
+  assert.equal(document.querySelector('.ui-inspector').getAttribute('aria-modal'), null)
+  document.querySelector('#browser-action').focus()
+  assert.equal(document.activeElement.id, 'browser-action', 'inspector must not trap focus away from the browser')
+  const body = document.querySelector('.ui-inspector-body')
+  body.scrollTop = 300; item.value = 'second'; await nextTick()
+  assert.equal(body.scrollTop, 0)
+  document.querySelector('#inspector-action').focus()
+  key(document.activeElement, 'Escape'); await nextTick()
+  assert.equal(open.value, false)
+  assert.equal(document.activeElement.id, 'browser-action', 'closing returns to the latest browser control')
+  assert.ok(document.querySelector('#browser-action'))
+})
+
+test('floating inspectors respect busy state and leave Escape to a menu or nested modal', async t => {
+  const busy = ref(true), modal = ref(false), closeEvents = []
+  const app = createApp({ render: () => h(UiInspector, { label: 'Details', closeDisabled: busy.value, onClose: () => closeEvents.push('close') }, () => [
+    h('div', { class: 'ui-menu' }, [h('button', { id: 'menu-action' }, 'Menu action')]),
+    modal.value ? h(UiModal, { title: 'Nested modal', onClose: () => { modal.value = false } }, () => h('button', { id: 'modal-action' }, 'Modal action')) : null,
+  ]) })
+  app.mount('#app'); t.after(() => app.unmount())
+  await nextTick(); await nextTick()
+  key(document.activeElement, 'Escape')
+  assert.deepEqual(closeEvents, [])
+  assert.equal(document.querySelector('.ui-inspector-close').disabled, true)
+  busy.value = false; await nextTick()
+  key(document.querySelector('#menu-action'), 'Escape')
+  assert.deepEqual(closeEvents, [])
+  modal.value = true; await nextTick(); await nextTick()
+  key(document.querySelector('#modal-action'), 'Escape'); await nextTick()
+  assert.equal(modal.value, false)
+  assert.deepEqual(closeEvents, [])
+  key(document.querySelector('.ui-inspector-close'), 'Escape')
+  assert.deepEqual(closeEvents, ['close'])
+})
+
+test('an inspector hidden by a resource-view switch does not handle Escape', async t => {
+  const hidden = ref(false), closeEvents = []
+  const app = createApp({ render: () => h('div', { style: { display: hidden.value ? 'none' : '' } }, [
+    h(UiInspector, { label: 'Preset details', onClose: () => closeEvents.push('close') }),
+  ]) })
+  app.mount('#app'); t.after(() => app.unmount())
+  await nextTick(); await nextTick()
+  hidden.value = true; await nextTick()
+  key(document.body, 'Escape')
+  assert.deepEqual(closeEvents, [])
+  hidden.value = false; await nextTick()
+  key(document.querySelector('.ui-inspector-close'), 'Escape')
+  assert.deepEqual(closeEvents, ['close'])
 })
 
 test('error toasts stay until dismissed even when a duration is provided', async t => {
@@ -95,4 +157,32 @@ test('modal tab order excludes collapsed details and hidden ancestors', async t 
   assert.deepEqual(focusable(root).map(el => el.id), ['visible', 'summary'])
   root.querySelector('details').open = true
   assert.deepEqual(focusable(root).map(el => el.id), ['visible', 'summary', 'collapsed'])
+})
+
+test('card status badges coexist in order and give way to selection in multi-select mode', async t => {
+  const multiSelect = ref(false)
+  const app = createApp({ render: () => h(PackageCard, {
+    item: { id: 'Author.Scene.1', name: 'Scene' }, multiSelect: multiSelect.value,
+    fresh: true, missing: 3, favorite: true, favoriteTitle: 'Contains 2 favorite scenes',
+  }) })
+  app.mount('#app'); t.after(() => app.unmount())
+  assert.deepEqual([...document.querySelector('.package-badges').children].map(el => el.className), ['package-new', 'package-missing', 'package-favorite'])
+  assert.equal(document.querySelector('.package-favorite').title, 'Contains 2 favorite scenes')
+  assert.equal(document.querySelector('.package-badges button'), null)
+  multiSelect.value = true; await nextTick()
+  assert.equal(document.querySelector('.package-badges'), null)
+  assert.ok(document.querySelector('.package-check input'))
+})
+
+test('package cards show recovered version text without inventing v0', async () => {
+  const item = ref({ id: 'Author.Scene.1_2', name: 'Scene', creator: 'Author', version: 0 })
+  const app = createApp({ render: () => h(PackageCard, { item: item.value }) })
+  app.mount('#app')
+  try {
+    assert.match(document.querySelector('#app').textContent, /1_2/)
+    assert.doesNotMatch(document.querySelector('#app').textContent, /v0/)
+    item.value = { ...item.value, id: 'Author.Scene.latest' }
+    await nextTick()
+    assert.match(document.querySelector('#app').textContent, /latest/)
+  } finally { app.unmount() }
 })

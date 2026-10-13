@@ -25,7 +25,7 @@ defineProps<{ title: string; subtitle?: string | string[] }>()
 </template>
 <style scoped>
 .page-header {
-  padding: 20px 24px 14px;
+  padding: var(--space-5) var(--space-page-x) var(--space-4);
   border-bottom: 1px solid var(--border-subtle);
   flex-shrink: 0;
   min-width: 0;
@@ -53,7 +53,7 @@ defineProps<{ title: string; subtitle?: string | string[] }>()
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
-  margin-top: 6px;
+  margin-top: var(--space-1);
   color: var(--text-tertiary);
   font-size: var(--text-base);
   min-width: 0;
@@ -90,7 +90,7 @@ defineProps<{ title: string; subtitle?: string | string[] }>()
 }
 @media (max-width: 800px) {
   .page-header {
-    padding: 16px;
+    padding: var(--space-4);
   }
   .page-actions {
     justify-content: flex-start;

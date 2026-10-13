@@ -178,6 +178,8 @@ pub async fn migrate_on_demand_library(
     db: State<'_, Database>,
     vam_root: String,
 ) -> Result<OnDemandOperationResult, String> {
+    crate::commands::cleanup::ensure_idle(&app_handle)?;
+    let _maintenance = crate::services::resource_files::maintenance_lock()?;
     let root = PathBuf::from(vam_root);
     let addon_dir = root.join("AddonPackages");
     let library_dir = on_demand_library_dir(&root);
@@ -193,6 +195,7 @@ pub async fn migrate_on_demand_library(
     for entry in WalkDir::new(&addon_dir)
         .follow_links(false)
         .into_iter()
+        .filter_entry(|entry| entry.depth() == 0 || !entry.file_type().is_dir() || !matches!(entry.file_name().to_string_lossy().to_ascii_lowercase().as_str(), ".trash" | ".downloads" | ".vamboxlibrary-downloads"))
         .filter_map(|entry| entry.ok())
     {
         let path = entry.path();
@@ -368,6 +371,8 @@ pub async fn restore_on_demand_library(
     db: State<'_, Database>,
     vam_root: String,
 ) -> Result<OnDemandOperationResult, String> {
+    crate::commands::cleanup::ensure_idle(&app_handle)?;
+    let _maintenance = crate::services::resource_files::maintenance_lock()?;
     let root = PathBuf::from(vam_root);
     let addon_dir = root.join("AddonPackages");
     let library_dir = on_demand_library_dir(&root);
@@ -553,6 +558,8 @@ pub async fn apply_on_demand_plan(
     package_ids: Vec<String>,
     include_dependencies: bool,
 ) -> Result<OnDemandOperationResult, String> {
+    crate::commands::cleanup::ensure_idle(&app_handle)?;
+    let _maintenance = crate::services::resource_files::maintenance_lock()?;
     let root = PathBuf::from(vam_root);
     let addon_dir = root.join("AddonPackages");
     let library_dir = on_demand_library_dir(&root);
@@ -1224,14 +1231,18 @@ fn create_symlink_file(source: &Path, target: &Path) -> std::io::Result<()> {
 }
 
 #[tauri::command]
-pub async fn launch_vam_direct(vam_root: String) -> Result<String, String> {
+pub async fn launch_vam_direct(app_handle: tauri::AppHandle, vam_root: String) -> Result<String, String> {
+    let _execution = crate::commands::cleanup::execution_guard(&app_handle)?;
+    let _maintenance = crate::services::resource_files::maintenance_lock()?;
     let root = PathBuf::from(vam_root);
     let launcher = launch_vam_game(&root)?;
     Ok(launcher.to_string_lossy().to_string())
 }
 
 #[tauri::command]
-pub async fn launch_vam_config(vam_root: String) -> Result<String, String> {
+pub async fn launch_vam_config(app_handle: tauri::AppHandle, vam_root: String) -> Result<String, String> {
+    let _execution = crate::commands::cleanup::execution_guard(&app_handle)?;
+    let _maintenance = crate::services::resource_files::maintenance_lock()?;
     let root = PathBuf::from(vam_root);
     let launcher = find_vam_exe(&root).ok_or_else(|| {
         format!(

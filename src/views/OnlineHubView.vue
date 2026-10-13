@@ -7,58 +7,59 @@
             v-model="searchQuery"
             type="text"
             class="hub-search-input"
-            placeholder="搜索关键字或包名 (例如 macgruber.Life.latest)"
+            :placeholder="t('online.searchPlaceholder')"
             @keyup.enter="handleSearch"
             search
           />
           <UiButton :disabled="loading" @click="handleSearch" variant="secondary">
             <Icon v-if="loading" class="spinner" :size="14" name="outline-34" />
             <Icon v-else :size="14" name="outline-35" />
-            <span>搜索</span>
+            <span>{{ t('online.search') }}</span>
           </UiButton>
         </div>
       </template>
       <template #filters>
+        <div class="hub-filters">
         <!-- Pricing Filter -->
         <div class="filter-group">
           <select v-model="selectedPricing" class="hub-select" @change="resetAndSearch">
-            <option value="free">免费资源</option>
-            <option value="all">全部资源</option>
-            <option value="premium">付费资源</option>
+            <option value="free">{{ t('online.filters.free') }}</option>
+            <option value="all">{{ t('online.filters.allPricing') }}</option>
+            <option value="premium">{{ t('online.filters.premium') }}</option>
           </select>
         </div>
 
         <!-- Category Select -->
         <div class="filter-group">
           <select v-model="selectedCategory" class="hub-select" @change="resetAndSearch">
-            <option value="">所有分类</option>
-            <option value="Scenes">场景 (Scenes)</option>
-            <option value="Looks">外观 (Looks)</option>
-            <option value="Clothing">服装 (Clothing)</option>
-            <option value="Hairstyles">发型 (Hairstyles)</option>
-            <option value="Plugins + Scripts">插件 (Plugins)</option>
-            <option value="Morphs">变形 (Morphs)</option>
-            <option value="Assets + Accessories">道具 (Assets)</option>
-            <option value="Toolkits + Templates">工具包 (Toolkits)</option>
-            <option value="Audio">音频 (Audio)</option>
+            <option value="">{{ t('online.filters.allCategories') }}</option>
+            <option value="Scenes">{{ t('online.types.scenes') }}</option>
+            <option value="Looks">{{ t('online.types.looks') }}</option>
+            <option value="Clothing">{{ t('online.types.clothing') }}</option>
+            <option value="Hairstyles">{{ t('online.types.hair') }}</option>
+            <option value="Plugins + Scripts">{{ t('online.types.plugins') }}</option>
+            <option value="Morphs">{{ t('online.types.morphs') }}</option>
+            <option value="Assets + Accessories">{{ t('online.types.assets') }}</option>
+            <option value="Toolkits + Templates">{{ t('online.types.toolkits') }}</option>
+            <option value="Audio">{{ t('online.types.audio') }}</option>
           </select>
         </div>
 
         <!-- Sorting Select -->
         <div class="filter-group">
           <select v-model="selectedSort" class="hub-select" @change="resetAndSearch">
-            <option value="last_update">最近更新</option>
-            <option value="resource_date">提交日期</option>
-            <option value="reaction_score">反应分数</option>
-            <option value="download_count">下载量</option>
-            <option value="rating_weighted">最爱</option>
-            <option value="rating_count">喜欢</option>
-            <option value="title">按标题</option>
-            <option value="username">按用户名</option>
+            <option value="last_update">{{ t('online.sort.lastUpdate') }}</option>
+            <option value="resource_date">{{ t('online.sort.resourceDate') }}</option>
+            <option value="reaction_score">{{ t('online.sort.reactionScore') }}</option>
+            <option value="download_count">{{ t('online.sort.downloads') }}</option>
+            <option value="rating_weighted">{{ t('online.sort.rating') }}</option>
+            <option value="rating_count">{{ t('online.sort.ratingCount') }}</option>
+            <option value="title">{{ t('online.sort.title') }}</option>
+            <option value="username">{{ t('online.sort.creator') }}</option>
           </select>
         </div>
 
-        <!-- Search Bar -->
+        </div>
       </template>
     </PageHeader>
     <div class="b2-page-body">
@@ -71,6 +72,7 @@
       </div>
 
       <!-- Main Content Area -->
+      <div class="hub-workspace">
       <div
         :class="['hub-content-scroll', { 'is-loading': loading && filteredAndSortedResources.length > 0 }]"
         ref="scrollContainer"
@@ -79,7 +81,7 @@
           <!-- Loading Overlay -->
           <div v-if="loading && filteredAndSortedResources.length === 0" class="hub-loading-state">
             <div class="loading-spinner"></div>
-            <p class="text-secondary text-sm">正在加载在线资源...</p>
+            <p class="text-secondary text-sm">{{ t('online.loading') }}</p>
           </div>
 
           <div
@@ -88,12 +90,12 @@
           >
             <div class="hub-inline-loading-card">
               <div class="loading-spinner"></div>
-              <p class="text-secondary text-sm">正在加载本页资源...</p>
+              <p class="text-secondary text-sm">{{ t('online.loadingPage') }}</p>
             </div>
           </div>
 
           <!-- Resources Grid -->
-          <div v-else-if="filteredAndSortedResources.length > 0" class="resources-grid">
+          <div v-else-if="filteredAndSortedResources.length > 0" class="resources-grid resource-grid">
             <PackageCard
               v-for="item in filteredAndSortedResources"
               :key="item.resource_id"
@@ -125,155 +127,147 @@
           <!-- Empty State -->
           <div v-else-if="!loading" class="hub-empty-state animate-fadeIn">
             <Icon :size="48" name="outline-35" />
-            <h3>未找到任何在线包</h3>
-            <p class="text-secondary text-sm">尝试在上方搜索其他关键字，或更改分类选项。</p>
+            <h3>{{ t('online.emptyTitle') }}</h3>
+            <p class="text-secondary text-sm">{{ t('online.emptyDesc') }}</p>
           </div>
         </div>
       </div>
 
       <!-- Keep pagination outside the scroll area so it stays visible without covering cards. -->
+      <!-- 与包管理等页面相同的紧凑分页：左边总数，右边页码 -->
       <div
         v-if="filteredAndSortedResources.length > 0 && totalPages > 1"
-        class="hub-pagination-bar glass-panel"
+        class="hub-pagination-bar"
       >
-        <UiButton
-          :disabled="currentPage <= 1 || loading"
-          @click="changePage(currentPage - 1)"
-          variant="ghost"
-        >
-          <Icon :size="14" name="outline-40" />
-          <span>上一页</span>
-        </UiButton>
-
-        <span class="page-indicator">
-          第 {{ currentPage }} 页 / 共 {{ totalPages }} 页 (找到 {{ totalFound }} 项)
-        </span>
-
-        <UiButton
-          :disabled="currentPage >= totalPages || loading"
-          @click="changePage(currentPage + 1)"
-          variant="ghost"
-        >
-          <span>下一页</span>
-          <Icon :size="14" name="outline-41" />
-        </UiButton>
+        <span class="pagination-info">{{ t('online.foundCount', { found: totalFound }) }}</span>
+        <div class="pagination-controls">
+          <UiButton
+            size="sm"
+            variant="ghost"
+            icon="chevrons-left"
+            icon-only
+            :aria-label="t('ui.firstPage')"
+            :disabled="currentPage <= 1 || loading"
+            @click="changePage(1)"
+          />
+          <UiButton
+            size="sm"
+            variant="ghost"
+            icon="chevron-left"
+            icon-only
+            :aria-label="t('online.previousPage')"
+            :disabled="currentPage <= 1 || loading"
+            @click="changePage(currentPage - 1)"
+          />
+          <span class="page-indicator">{{ currentPage }} / {{ totalPages }}</span>
+          <UiButton
+            size="sm"
+            variant="ghost"
+            icon="chevron-right"
+            icon-only
+            :aria-label="t('online.nextPage')"
+            :disabled="currentPage >= totalPages || loading"
+            @click="changePage(currentPage + 1)"
+          />
+          <UiButton
+            size="sm"
+            variant="ghost"
+            icon="chevrons-right"
+            icon-only
+            :aria-label="t('ui.lastPage')"
+            :disabled="currentPage >= totalPages || loading"
+            @click="changePage(totalPages)"
+          />
+        </div>
       </div>
 
-      <!-- Background dim overlay for detail panel -->
-
-      <!-- Slide-over Detail Panel -->
-      <UiModal v-if="detailPanelOpen" wide :show-close="false" @close="closeDetailPanel">
-        <div class="panel-header">
-          <UiButton
-            @click="closeDetailPanel"
-            variant="ghost"
-            icon-only
-            :aria-label="$t('common.close')"
-          >
-            <Icon :size="18" name="outline-9" />
-          </UiButton>
-          <div class="panel-title-wrap">
-            <span
-              class="panel-category-tag"
-              v-if="detailPackage.category"
-              :class="detailPackage.category === 'Free' ? 'pricing-free' : 'pricing-paid'"
-            >
-              {{ detailPackage.category === 'Free' ? '免费资源' : '付费资源' }}
-            </span>
-            <h3 class="panel-title">{{ detailPackage.title || '包详情' }}</h3>
-          </div>
-        </div>
-
+      <!-- 资源详情：和本地资源详情同一个弹窗，左图右信息 -->
+      <UiDetailModal
+        v-if="detailPanelOpen"
+        class="hub-detail-modal"
+        :label="detailPackage.title || t('online.detailTitle')"
+        :fallback-image="detailPackage.image_url || null"
+        :content-key="detailPackage.resource_id"
+        @close="closeDetailPanel"
+      >
+        <template #placeholder>
+          <img
+            v-if="detailPackage.icon_url"
+            data-resource-preview
+            :src="detailPackage.icon_url"
+            class="panel-icon-img"
+            alt="icon"
+          />
+          <Icon v-else :size="40" name="outline-36" class="panel-img-placeholder" />
+        </template>
         <div class="panel-body">
           <div v-if="detailLoading && !detailPackage.title" class="panel-loading">
             <div class="loading-spinner"></div>
-            <p class="text-secondary text-sm">正在获取该包的详细依赖信息...</p>
+            <p class="text-secondary text-sm">{{ t('online.loadingDetail') }}</p>
           </div>
 
           <div v-else class="panel-scroll-content">
-            <!-- Summary Info Card -->
-            <div class="panel-info-card glass-card">
-              <div class="panel-hero-row">
-                <div class="panel-image-container">
-                  <img
-                    data-resource-preview
-                    v-if="detailPackage.image_url"
-                    :src="detailPackage.image_url"
-                    class="panel-cover-img"
-                    alt="cover"
-                  />
-                  <img
-                    data-resource-preview
-                    v-else-if="detailPackage.icon_url"
-                    :src="detailPackage.icon_url"
-                    class="panel-icon-img"
-                    alt="icon"
-                  />
-                  <div v-else class="panel-img-placeholder">
-                    <Icon :size="40" name="outline-36" />
-                  </div>
+            <!-- Summary -->
+            <div class="panel-hero-row">
+              <div class="panel-meta-info">
+                <div class="panel-version-row">
+                  <span
+                    class="panel-category-tag"
+                    v-if="detailPackage.category"
+                    :class="detailPackage.category === 'Free' ? 'pricing-free' : 'pricing-paid'"
+                  >
+                    {{ detailPackage.category === 'Free' ? t('online.filters.free') : t('online.filters.premium') }}
+                  </span>
+                  <span class="badge-version" v-if="detailPackage.version_string">
+                    {{ formatHubVersion(detailPackage.version_string) }}
+                  </span>
+                  <span
+                    class="card-type-badge panel-type-badge"
+                    v-if="detailPackage.type"
+                    :class="getTypeBadgeClass(detailPackage.type)"
+                  >
+                    {{ translateType(detailPackage.type) }}
+                  </span>
                 </div>
-
-                <div class="panel-meta-info">
-                  <div class="panel-version-row">
-                    <span class="badge-version" v-if="detailPackage.version_string">
-                      v{{ detailPackage.version_string }}
-                    </span>
-                    <span
-                      class="card-type-badge"
-                      v-if="detailPackage.type"
-                      :class="getTypeBadgeClass(detailPackage.type)"
-                      style="position: static; margin-left: var(--space-2); margin-top: 0; display: inline-flex;"
-                    >
-                      {{ translateType(detailPackage.type) }}
-                    </span>
-                  </div>
-                  <div class="panel-creator text-sm text-secondary">
-                    作者:
-                    <span class="creator-name">{{ detailPackage.username }}</span>
-                  </div>
-                  <div class="panel-stat-badges">
-                    <span class="badge-stat">
-                      下载: {{ formatNumber(detailPackage.download_count) }}
-                    </span>
-                    <span class="badge-stat">
-                      浏览: {{ formatNumber(detailPackage.view_count) }}
-                    </span>
-                    <span class="badge-stat rating" v-if="detailPackage.rating_avg">
-                      评分:
-                      {{ parseFloat(detailPackage.rating_avg).toFixed(1) }}
-                      ({{ detailPackage.rating_count || 0 }}人评)
-                    </span>
-                  </div>
+                <h2 class="panel-title">{{ detailPackage.title || t('online.detailTitle') }}</h2>
+                <p v-if="detailPackage.tag_line" class="panel-tagline">
+                  {{ detailPackage.tag_line }}
+                </p>
+                <div class="panel-creator">
+                  {{ t('online.by') }} <span class="creator-name">{{ detailPackage.username }}</span>
+                </div>
+                <div class="panel-stat-badges">
+                  <span class="badge-stat">
+                    {{ t('online.downloads', { count: formatNumber(detailPackage.download_count) }) }}
+                  </span>
+                  <span class="badge-stat">
+                    {{ t('online.views', { count: formatNumber(detailPackage.view_count) }) }}
+                  </span>
+                  <span class="badge-stat rating" v-if="Number(detailPackage.rating_count) > 0 && Number(detailPackage.rating_avg) > 0">
+                    {{ t('online.rating', { score: parseFloat(detailPackage.rating_avg).toFixed(1), count: detailPackage.rating_count }) }}
+                  </span>
                 </div>
               </div>
 
-              <div
-                class="panel-tagline text-sm italic text-secondary"
-                v-if="detailPackage.tag_line"
-              >
-                "{{ detailPackage.tag_line }}"
-              </div>
-
-              <!-- Batch download action button -->
               <div class="panel-actions-row">
                 <UiButton
                   :disabled="detailLoading"
                   @click="openBatchDownloadModal"
                   variant="primary"
                   size="lg"
+                  icon="download"
                 >
-                  <span>一键下载</span>
+                  <span>{{ t('online.downloadAll') }}</span>
                 </UiButton>
               </div>
             </div>
 
             <!-- Description -->
             <div class="panel-section">
-              <h4 class="section-title">详细描述</h4>
+              <h4 class="section-title">{{ t('online.description') }}</h4>
               <div v-if="descLoading" class="desc-loading text-secondary text-sm">
                 <div class="loading-spinner-sm"></div>
-                <span>正在加载描述...</span>
+                <span>{{ t('online.loadingDescription') }}</span>
               </div>
               <div
                 v-else-if="detailPackage.description"
@@ -281,19 +275,18 @@
                 data-resource-preview-content
                 v-html="formatDescription(detailPackage.description)"
               ></div>
-              <div v-else class="text-secondary text-sm italic">无详细描述</div>
+              <div v-else class="text-tertiary text-sm">{{ t('online.noDescription') }}</div>
             </div>
 
             <!-- Files list -->
             <div class="panel-section">
               <h4 class="section-title">
-                <Icon :size="14" name="outline-42" />
-                <span>包含的 .var 包 ({{ detailPackage.hubFiles?.length || 0 }})</span>
+                <span>{{ t('online.files', { count: detailPackage.hubFiles?.length || 0 }) }}</span>
               </h4>
 
               <div v-if="descLoading" class="desc-loading text-secondary text-sm">
                 <div class="loading-spinner-sm"></div>
-                <span>正在加载文件列表...</span>
+                <span>{{ t('online.loadingFiles') }}</span>
               </div>
               <div
                 v-else-if="detailPackage.hubFiles?.length"
@@ -310,10 +303,10 @@
                     </div>
                     <div class="item-meta text-xs text-secondary">
                       <span v-if="file.file_size">
-                        大小: {{ formatDisplaySize(file.file_size) }}
+                        {{ formatDisplaySize(file.file_size) }}
                       </span>
                       <span v-if="file.licenseType" class="license-type">
-                        许可: {{ file.licenseType }}
+                        {{ t('online.license', { name: file.licenseType }) }}
                       </span>
                     </div>
                   </div>
@@ -324,22 +317,22 @@
                       v-if="isFileInstalled(file.filename) || (downloadStates[file.filename] && downloadStates[file.filename].status === 'completed')"
                       class="download-status completed text-success text-xs"
                     >
-                      <span>已下载</span>
+                      <span>{{ t('online.downloaded') }}</span>
                     </div>
 
                     <!-- If no download URL available -->
                     <div v-else-if="!file.urlHosted" class="download-status no-source text-xs">
-                      <span>无下载链接</span>
+                      <span>{{ t('online.noLink') }}</span>
                     </div>
 
                     <!-- If not downloading / completed / error -->
                     <UiButton
                       v-else-if="!downloadStates[file.filename] || downloadStates[file.filename].status === 'idle'"
                       @click="handleDownload(file)"
-                      variant="primary"
-                      size="lg"
+                      variant="secondary"
+                      size="sm"
                     >
-                      <span>下载</span>
+                      <span>{{ t('online.download') }}</span>
                     </UiButton>
 
                     <!-- If downloading -->
@@ -361,33 +354,30 @@
                     <!-- If error -->
                     <UiButton
                       v-else-if="downloadStates[file.filename].status === 'error'"
-                      class="error"
                       :title="downloadStates[file.filename].errorMsg"
                       @click="handleDownload(file)"
-                      variant="primary"
-                      size="lg"
+                      variant="danger"
+                      size="sm"
                     >
-                      <span>重试</span>
+                      <span>{{ t('online.retry') }}</span>
                     </UiButton>
                   </div>
                 </div>
               </div>
-              <div v-else class="text-secondary text-sm italic">无包含的文件包</div>
+              <div v-else class="empty-list-info text-xs text-secondary">{{ t('online.noFiles') }}</div>
             </div>
 
             <!-- Dependencies list -->
             <div class="panel-section">
               <h4 class="section-title">
-                <Icon :size="14" name="outline-43" />
                 <span>
-                  依赖关系分析 ({{ uniqueDependencies.length }}，直接
-                  {{ directDependencies.length }} / 子依赖 {{ subDependencies.length }})
+                  {{ t('online.dependencies', { count: uniqueDependencies.length }) }}
                 </span>
               </h4>
 
               <div v-if="dependenciesLoading" class="desc-loading text-secondary text-sm">
                 <div class="loading-spinner-sm"></div>
-                <span>正在分析包依赖...</span>
+                <span>{{ t('online.loadingDependencies') }}</span>
               </div>
               <div
                 v-else-if="uniqueDependencies.length"
@@ -406,8 +396,8 @@
                       {{ dep.packageName || dep.filename }}
                     </div>
                     <div class="item-meta text-xs text-secondary">
-                      <span v-if="dep.file_size">大小: {{ formatDisplaySize(dep.file_size) }}</span>
-                      <span v-if="dep.username" class="dep-author">作者: {{ dep.username }}</span>
+                      <span v-if="dep.file_size">{{ formatDisplaySize(dep.file_size) }}</span>
+                      <span v-if="dep.username" class="dep-author">{{ dep.username }}</span>
                       <span
                         v-if="dep.dependencyType"
                         class="dep-tier"
@@ -424,7 +414,7 @@
                       v-if="getDependencyInstallStatus(dep) === 'installed'"
                       class="dep-status installed text-success text-xs"
                     >
-                      <span class="badge success">已安装</span>
+                      <span class="badge success">{{ t('online.installed') }}</span>
                     </div>
 
                     <!-- Upgrade Badge (installed but version too low) -->
@@ -435,12 +425,11 @@
                       <template v-if="dep.downloadUrl">
                         <UiButton
                           v-if="!downloadStates[dep.filename || getFilenameFromUrl(dep.downloadUrl)] || downloadStates[dep.filename || getFilenameFromUrl(dep.downloadUrl)].status === 'idle'"
-                          class="upgrade"
                           @click="handleDownloadDependency(dep)"
                           variant="primary"
-                          size="lg"
+                          size="sm"
                         >
-                          <span>升级</span>
+                          <span>{{ t('online.upgrade') }}</span>
                         </UiButton>
 
                         <div
@@ -463,20 +452,19 @@
                           v-else-if="downloadStates[dep.filename || getFilenameFromUrl(dep.downloadUrl)].status === 'completed'"
                           class="dep-status installed text-success text-xs"
                         >
-                          <span class="badge success">已安装</span>
+                          <span class="badge success">{{ t('online.installed') }}</span>
                         </div>
 
                         <UiButton
                           v-else-if="downloadStates[dep.filename || getFilenameFromUrl(dep.downloadUrl)].status === 'error'"
-                          class="error"
                           @click="handleDownloadDependency(dep)"
-                          variant="primary"
-                          size="lg"
+                          variant="danger"
+                          size="sm"
                         >
-                          <span>重试</span>
+                          <span>{{ t('online.retry') }}</span>
                         </UiButton>
                       </template>
-                      <span v-else class="badge upgrade">需升级</span>
+                      <span v-else class="badge upgrade">{{ t('online.needsUpgrade') }}</span>
                     </div>
 
                     <!-- Not Installed / Download Action -->
@@ -485,12 +473,11 @@
                         <!-- Direct download if URL exists and we are not downloading it -->
                         <UiButton
                           v-if="!downloadStates[dep.filename || getFilenameFromUrl(dep.downloadUrl)] || downloadStates[dep.filename || getFilenameFromUrl(dep.downloadUrl)].status === 'idle'"
-                          class="secondary"
                           @click="handleDownloadDependency(dep)"
-                          variant="primary"
-                          size="lg"
+                          variant="secondary"
+                          size="sm"
                         >
-                          <span>下载</span>
+                          <span>{{ t('online.download') }}</span>
                         </UiButton>
 
                         <!-- Downloading state for dependency -->
@@ -515,343 +502,121 @@
                           v-else-if="downloadStates[dep.filename || getFilenameFromUrl(dep.downloadUrl)].status === 'completed'"
                           class="dep-status installed text-success text-xs"
                         >
-                          <span class="badge success">已安装</span>
+                          <span class="badge success">{{ t('online.installed') }}</span>
                         </div>
 
                         <!-- Error state -->
                         <UiButton
                           v-else-if="downloadStates[dep.filename || getFilenameFromUrl(dep.downloadUrl)].status === 'error'"
-                          class="error"
                           @click="handleDownloadDependency(dep)"
-                          variant="primary"
-                          size="lg"
+                          variant="danger"
+                          size="sm"
                         >
-                          <span>重试</span>
+                          <span>{{ t('online.retry') }}</span>
                         </UiButton>
                       </template>
 
                       <!-- No direct download URL -->
-                      <span v-else class="badge warning">未安装</span>
+                      <span v-else class="badge warning">{{ t('online.notInstalled') }}</span>
                     </div>
                   </div>
                 </div>
               </div>
               <div v-else class="empty-list-info text-xs text-secondary">
-                该包无其它包依赖项 (纯净包)
+                {{ t('online.noDependencies') }}
               </div>
             </div>
           </div>
         </div>
-      </UiModal>
+      </UiDetailModal>
+      </div>
 
       <!-- Batch Download Modal -->
-      <UiModal v-if="batchModalOpen" :show-close="false" wide @close="closeBatchModal">
-        <div class="batch-modal-header">
-          <h3 class="batch-modal-title">
-            <Icon style="color: var(--accent-primary);" :size="20" name="outline-37" />
-            <span>{{ $t('download.modal.title') }}</span>
-          </h3>
-          <UiButton
-            @click="closeBatchModal"
-            variant="ghost"
-            icon-only
-            :aria-label="$t('common.close')"
-          >
-            <Icon :size="18" name="outline-9" />
-          </UiButton>
+      <UiModal
+        v-if="batchModalOpen"
+        large
+        :title="$t('download.modal.title')"
+        :close-disabled="false"
+        @close="closeBatchModal"
+      >
+        <div v-if="batchResolving" class="batch-loading" role="status">
+          <span class="spinner-ring" aria-hidden="true" />
+          <p class="batch-loading-title">{{ $t('download.modal.loading') }}</p>
+          <div class="resolve-progress">
+            <div class="resolve-track">
+              <div class="resolve-fill" :style="{ width: resolveProgress.percentage + '%' }" />
+            </div>
+            <span class="resolve-count">{{ resolveProgress.resolved }} / {{ resolveProgress.total }}</span>
+          </div>
+          <p v-if="resolveProgress.currentPackage" class="resolve-current" :title="resolveProgress.currentPackage">
+            {{ $t('download.modal.resolving', { name: resolveProgress.currentPackage }) }}
+          </p>
         </div>
 
-        <div class="batch-modal-body">
-          <div v-if="batchResolving" class="batch-modal-loading">
-            <div class="loading-spinner"></div>
-            <p class="text-secondary text-sm">{{ $t('download.modal.loading') }}</p>
-
-            <!-- Real-time Dependency Analysis Progress Bar -->
-            <div class="resolve-progress-container">
-              <div class="progress-bar-wrapper">
-                <div
-                  class="progress-bar-fill"
-                  :style="{ width: resolveProgress.percentage + '%' }"
-                ></div>
-              </div>
-              <div class="progress-info text-xs">
-                <span
-                  class="text-accent"
-                  style="color: var(--accent-primary); font-weight: var(--font-semibold);"
-                >
-                  {{ resolveProgress.percentage }}%
-                </span>
-                <span class="text-secondary">
-                  ({{ resolveProgress.resolved }} / {{ resolveProgress.total }})
-                </span>
-              </div>
-              <p
-                class="resolve-current-package text-xs text-secondary truncate"
-                v-if="resolveProgress.currentPackage"
-                :title="resolveProgress.currentPackage"
+        <div v-else class="batch-content">
+          <p class="batch-summary">
+            {{ $t('download.modal.summary', { total: checklistItems.length, size: formattedTotalSize }) }}
+          </p>
+          <section v-for="group in batchGroups" :key="group.key" class="batch-group">
+            <div class="batch-group-head">
+              <button
+                type="button"
+                class="batch-group-toggle"
+                :aria-expanded="!collapsedGroups[group.key]"
+                @click="collapsedGroups[group.key] = !collapsedGroups[group.key]"
               >
-                正在解析: {{ resolveProgress.currentPackage }}
-              </p>
+                <Icon class="batch-chevron" :class="{ collapsed: collapsedGroups[group.key] }" name="chevron-down" :size="16" />
+                <span class="batch-group-title">{{ $t(group.label) }}</span>
+                <span class="batch-group-count">{{ group.items.length }}</span>
+              </button>
+              <span v-if="group.hint" class="batch-group-hint">{{ $t(group.hint) }}</span>
+              <UiCheckbox
+                v-if="group.selectable"
+                class="batch-group-check"
+                :model-value="isGroupAllChecked(group.key)"
+                :indeterminate="isGroupSomeChecked(group.key)"
+                :label="$t('download.modal.selectGroup')"
+                @update:model-value="toggleGroupSelection(group.key)"
+              >
+                {{ $t('download.modal.selectGroup') }}
+              </UiCheckbox>
             </div>
-          </div>
-
-          <div v-else class="batch-modal-content">
-            <p class="batch-modal-summary text-sm text-secondary">
-              {{ $t('download.modal.summary', { total: checklistItems.length, size: formattedTotalSize }) }}
-            </p>
-
-            <!-- Group sections -->
-            <div class="groups-wrapper">
-              <!-- Group: To Download -->
-              <div v-if="needDownloadGroup.length" class="group-section">
-                <div
-                  class="group-header"
-                  @click="collapsedGroups.need_download = !collapsedGroups.need_download"
+            <ul v-show="!collapsedGroups[group.key]" class="batch-items">
+              <li v-for="item in group.items" :key="item.id" class="batch-item" :class="{ selectable: group.selectable }">
+                <UiCheckbox
+                  v-if="group.selectable"
+                  v-model="item.checked"
+                  class="batch-item-check"
+                  :label="item.filename"
+                />
+                <span class="batch-item-name" :title="item.filename">{{ item.filename }}</span>
+                <span v-if="group.key === 'upgraded' && (item.installed_version ?? item.queued_version) != null" class="batch-item-version">
+                  v{{ item.installed_version ?? item.queued_version }} → v{{ item.version }}
+                </span>
+                <span class="batch-item-size">{{ formatDisplaySize(item.file_size) }}</span>
+                <UiButton
+                  v-if="group.key === 'no_source'"
+                  size="sm"
+                  variant="ghost"
+                  icon="copy"
+                  @click="copyManualDependency(item)"
                 >
-                  <input
-                    type="checkbox"
-                    :checked="isGroupAllChecked('need_download')"
-                    :indeterminate="isGroupSomeChecked('need_download')"
-                    @click.stop="toggleGroupSelection('need_download')"
-                    class="group-checkbox"
-                  />
-                  <span class="group-dot to-download"></span>
-                  <span class="group-title text-sm font-semibold">
-                    {{ $t('download.modal.groupToDownload', { count: needDownloadGroup.length }) }}
-                  </span>
-                  <span
-                    class="expand-arrow"
-                    :class="{ 'collapsed': collapsedGroups.need_download }"
-                  >
-                    <Icon
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      :size="12"
-                      name="outline-44"
-                    />
-                  </span>
-                </div>
-                <div v-show="!collapsedGroups.need_download" class="group-items">
-                  <label
-                    v-for="item in needDownloadGroup"
-                    :key="item.id"
-                    class="checklist-item-row"
-                  >
-                    <input type="checkbox" v-model="item.checked" class="item-checkbox" />
-                    <span class="item-filename text-sm" :title="item.filename">
-                      {{ item.filename }}
-                    </span>
-                    <span class="item-size text-xs text-secondary">
-                      {{ formatDisplaySize(item.file_size) }}
-                    </span>
-                  </label>
-                </div>
-              </div>
-
-              <!-- Group: Upgraded -->
-              <div v-if="upgradedGroup.length" class="group-section">
-                <div
-                  class="group-header"
-                  @click="collapsedGroups.upgraded = !collapsedGroups.upgraded"
-                >
-                  <input
-                    type="checkbox"
-                    :checked="isGroupAllChecked('upgraded')"
-                    :indeterminate="isGroupSomeChecked('upgraded')"
-                    @click.stop="toggleGroupSelection('upgraded')"
-                    class="group-checkbox"
-                  />
-                  <span class="group-dot upgraded"></span>
-                  <span class="group-title text-sm font-semibold">
-                    {{ $t('download.modal.groupUpgraded', { count: upgradedGroup.length }) }}
-                  </span>
-                  <span class="expand-arrow" :class="{ 'collapsed': collapsedGroups.upgraded }">
-                    <Icon
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      :size="12"
-                      name="outline-44"
-                    />
-                  </span>
-                </div>
-                <div v-show="!collapsedGroups.upgraded" class="group-items">
-                  <label v-for="item in upgradedGroup" :key="item.id" class="checklist-item-row">
-                    <input type="checkbox" v-model="item.checked" class="item-checkbox" />
-                    <span class="item-filename text-sm" :title="item.filename">
-                      {{ item.filename }} (v{{ item.queued_version }} -> v{{ item.version }})
-                    </span>
-                    <span class="item-size text-xs text-secondary">
-                      {{ formatDisplaySize(item.file_size) }}
-                    </span>
-                  </label>
-                </div>
-              </div>
-
-              <!-- Group: Queued/Skip -->
-              <div v-if="queuedGroup.length" class="group-section">
-                <div class="group-header" @click="collapsedGroups.queued = !collapsedGroups.queued">
-                  <input
-                    type="checkbox"
-                    :checked="isGroupAllChecked('queued')"
-                    :indeterminate="isGroupSomeChecked('queued')"
-                    @click.stop="toggleGroupSelection('queued')"
-                    class="group-checkbox"
-                  />
-                  <span class="group-dot queued"></span>
-                  <span class="group-title text-sm font-semibold">
-                    {{ $t('download.modal.groupInQueue', { count: queuedGroup.length }) }}
-                  </span>
-                  <span class="expand-arrow" :class="{ 'collapsed': collapsedGroups.queued }">
-                    <Icon
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      :size="12"
-                      name="outline-44"
-                    />
-                  </span>
-                </div>
-                <div v-show="!collapsedGroups.queued" class="group-items">
-                  <label
-                    v-for="item in queuedGroup"
-                    :key="item.id"
-                    class="checklist-item-row text-disabled"
-                  >
-                    <input type="checkbox" v-model="item.checked" class="item-checkbox" />
-                    <span class="item-filename text-sm" :title="item.filename">
-                      {{ item.filename }}
-                    </span>
-                    <span class="item-size text-xs text-secondary">
-                      {{ formatDisplaySize(item.file_size) }}
-                    </span>
-                  </label>
-                </div>
-              </div>
-
-              <!-- Group: Installed/Skip -->
-              <div v-if="installedGroup.length" class="group-section">
-                <div
-                  class="group-header"
-                  @click="collapsedGroups.installed = !collapsedGroups.installed"
-                >
-                  <input
-                    type="checkbox"
-                    :checked="isGroupAllChecked('installed')"
-                    :indeterminate="isGroupSomeChecked('installed')"
-                    @click.stop="toggleGroupSelection('installed')"
-                    class="group-checkbox"
-                  />
-                  <span class="group-dot installed"></span>
-                  <span class="group-title text-sm font-semibold">
-                    {{ $t('download.modal.groupInstalled', { count: installedGroup.length }) }}
-                  </span>
-                  <span class="expand-arrow" :class="{ 'collapsed': collapsedGroups.installed }">
-                    <Icon
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      :size="12"
-                      name="outline-44"
-                    />
-                  </span>
-                </div>
-                <div v-show="!collapsedGroups.installed" class="group-items">
-                  <label
-                    v-for="item in installedGroup"
-                    :key="item.id"
-                    class="checklist-item-row text-disabled"
-                  >
-                    <input type="checkbox" v-model="item.checked" class="item-checkbox" />
-                    <span class="item-filename text-sm" :title="item.filename">
-                      {{ item.filename }}
-                    </span>
-                    <span class="item-size text-xs text-secondary">
-                      {{ formatDisplaySize(item.file_size) }}
-                    </span>
-                  </label>
-                </div>
-              </div>
-
-              <!-- Group: No Source/Excluded -->
-              <div v-if="noSourceGroup.length" class="group-section">
-                <div
-                  class="group-header"
-                  @click="collapsedGroups.no_source = !collapsedGroups.no_source"
-                >
-                  <input type="checkbox" :checked="false" :disabled="true" class="group-checkbox" />
-                  <span class="group-dot no-source"></span>
-                  <span class="group-title text-sm font-semibold">
-                    {{ $t('download.modal.groupNoSource', { count: noSourceGroup.length }) }}
-                  </span>
-                  <span class="expand-arrow" :class="{ 'collapsed': collapsedGroups.no_source }">
-                    <Icon
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      :size="12"
-                      name="outline-44"
-                    />
-                  </span>
-                </div>
-                <div v-show="!collapsedGroups.no_source" class="group-items">
-                  <label
-                    v-for="item in noSourceGroup"
-                    :key="item.id"
-                    class="checklist-item-row text-disabled no-source-row"
-                  >
-                    <input
-                      type="checkbox"
-                      :checked="false"
-                      :disabled="true"
-                      class="item-checkbox"
-                    />
-                    <span class="item-filename text-sm" :title="item.filename">
-                      {{ item.filename }}
-                    </span>
-                    <span class="item-badge text-xs">
-                      {{ $t('download.modal.actionNoDownloadable') }}
-                    </span>
-                    <UiButton
-                      type="button"
-                      @click.stop.prevent="copyManualDependency(item)"
-                      variant="secondary"
-                    >
-                      {{ $t('download.modal.manualMark') }}
-                    </UiButton>
-                  </label>
-                </div>
-              </div>
-            </div>
-          </div>
+                  {{ $t('download.modal.manualMark') }}
+                </UiButton>
+              </li>
+            </ul>
+          </section>
         </div>
 
-        <div v-if="!batchResolving" class="batch-modal-footer">
-          <div class="footer-stats text-sm">
-            <span>
-              已选择:
-              <strong class="text-accent font-semibold" style="color: var(--accent-primary);">
-                {{ checkedCount }}
-              </strong>
-              个包
-            </span>
-            <span class="divider" style="margin: 0 var(--space-2); opacity: 0.5;">/</span>
-            <span>
-              预计下载大小:
-              <strong class="text-success font-semibold" style="color: var(--color-success);">
-                {{ formattedCheckedSize }}
-              </strong>
-            </span>
-          </div>
-          <div class="footer-actions">
-            <UiButton @click="closeBatchModal" variant="secondary">
-              {{ $t('common.cancel') }}
-            </UiButton>
-            <UiButton
-              :disabled="checkedCount === 0"
-              @click="confirmBatchDownload"
-              variant="secondary"
-            >
-              <span>{{ $t('download.modal.action') }}</span>
-            </UiButton>
-          </div>
-        </div>
+        <template v-if="!batchResolving" #footer>
+          <span class="batch-footer-stats">
+            {{ $t('download.modal.selectedSummary', { count: checkedCount, size: formattedCheckedSize }) }}
+          </span>
+          <UiButton @click="closeBatchModal">{{ $t('common.cancel') }}</UiButton>
+          <UiButton variant="primary" :disabled="checkedCount === 0" @click="confirmBatchDownload">
+            {{ $t('download.modal.action', { count: checkedCount }) }}
+          </UiButton>
+        </template>
       </UiModal>
     </div>
   </div>
@@ -863,11 +628,13 @@ import UiModal from '@/components/ui/UiModal.vue'
 import PageHeader from '@/components/layout/PageHeader.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import UiInput from '@/components/ui/UiInput.vue'
+import UiCheckbox from '@/components/ui/UiCheckbox.vue'
 import Icon from '@/components/ui/Icon.vue'
 import { parseSizeValue as parseSizeStringToBytes } from '@/utils/bytes'
 import { formatDescription } from '@/utils/hubDescription'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import UiDetailModal from '@/components/ui/UiDetailModal.vue'
 import { useI18n } from 'vue-i18n'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
@@ -889,11 +656,12 @@ const { packages: localPackages } = storeToRefs(localLibraryStore)
 
 // Batch download state
 const batchModalOpen = ref(false)
+let returnToDetail = false
 const batchResolving = ref(false)
 const checklistItems = ref<any[]>([])
 const collapsedGroups = ref({
-  need_download: true,
-  upgraded: true,
+  need_download: false,
+  upgraded: false,
   queued: true,
   installed: true,
   no_source: true
@@ -1106,7 +874,7 @@ async function searchOnlineResources() {
       }
     }
   } catch (err: any) {
-    error.value = err.toString() || '网络请求失败，请检查网络连接'
+    error.value = err.toString() || t('online.networkError')
     resources.value = []
   } finally {
     loading.value = false
@@ -1191,11 +959,11 @@ async function openPackageDetailByName(pkgName: string) {
     if (basicDetail && (basicDetail.title || basicDetail.resource_id)) {
       detailPackage.value = { ...detailPackage.value, ...basicDetail }
     } else {
-      detailPackage.value = { title: pkgName, description: '未找到该包的详细信息，请确认包标识符正确。' }
+      detailPackage.value = { title: pkgName, description: t('online.detailNotFound') }
     }
   } catch (err: any) {
     if (currentLoadingPkgName.value !== pkgName) return
-    detailPackage.value = { title: pkgName, description: `加载失败: ${err.toString()}` }
+    detailPackage.value = { title: pkgName, description: t('online.detailFailed', { error: String(err) }) }
     descLoading.value = false
     dependenciesLoading.value = false
     return
@@ -1257,19 +1025,11 @@ const uniqueDependencies = computed(() => {
   })
 })
 
-const directDependencies = computed(() => {
-  return uniqueDependencies.value.filter((dep: any) => dep.dependencyType !== 'sub')
-})
-
-const subDependencies = computed(() => {
-  return uniqueDependencies.value.filter((dep: any) => dep.dependencyType === 'sub')
-})
-
 function formatDependencyType(dep: any): string {
   if (dep.dependencyType === 'sub') {
-    return `子依赖 Tier ${dep.tier || 2}`
+    return t('online.indirectDependency', { level: dep.tier || 2 })
   }
-  return '直接依赖'
+  return t('online.directDependency')
 }
 
 // Check dependency install status: 'installed' (version sufficient), 'upgrade' (installed but version too low), 'not_installed'
@@ -1326,11 +1086,11 @@ function getFilenameFromUrl(url: string): string {
 async function handleDownload(file: any) {
   if (!file || !file.filename) return
   if (!file.urlHosted) {
-    notify.error('该文件没有可用的下载链接')
+    notify.error(t('online.noLinkError'))
     return
   }
   if (!vamRootPath.value) {
-    notify.error('VAM 根目录未配置，请先在设置中配置')
+    notify.error(t('online.noGameFolder'))
     return
   }
 
@@ -1351,13 +1111,13 @@ async function handleDownload(file: any) {
   try {
     const results = await downloadStore.addItems([item])
     if (results && results[0] && typeof results[0] === 'object' && results[0].Skipped) {
-      notify.info(`跳过添加: ${results[0].Skipped}`)
+      notify.info(t('online.skipped', { reason: results[0].Skipped }))
     } else {
       notify.success(t('download.toast.added', { count: 1 }))
     }
   } catch (error: any) {
     console.error('Failed to add single download:', error)
-    notify.error('添加下载失败: ' + error.toString())
+    notify.error(t('download.toast.addFailed', { error: String(error) }))
   }
 }
 
@@ -1365,11 +1125,11 @@ async function handleDownload(file: any) {
 async function handleDownloadDependency(dep: any) {
   if (!dep) return
   if (!dep.downloadUrl) {
-    notify.error('该依赖没有可用的下载链接')
+    notify.error(t('online.noLinkError'))
     return
   }
   if (!vamRootPath.value) {
-    notify.error('VAM 根目录未配置，请先在设置中配置')
+    notify.error(t('online.noGameFolder'))
     return
   }
 
@@ -1391,13 +1151,13 @@ async function handleDownloadDependency(dep: any) {
   try {
     const results = await downloadStore.addItems([item])
     if (results && results[0] && typeof results[0] === 'object' && results[0].Skipped) {
-      notify.info(`跳过添加: ${results[0].Skipped}`)
+      notify.info(t('online.skipped', { reason: results[0].Skipped }))
     } else {
       notify.success(t('download.toast.added', { count: 1 }))
     }
   } catch (error: any) {
     console.error('Failed to add dependency download:', error)
-    notify.error('添加下载失败: ' + error.toString())
+    notify.error(t('download.toast.addFailed', { error: String(error) }))
   }
 }
 
@@ -1412,21 +1172,24 @@ function getPackageIdentifier(): string {
 // Open batch download modal and resolve dependencies recursively
 async function openBatchDownloadModal() {
   if (!vamRootPath.value) {
-    notify.error('VAM 根目录未配置，请先在设置中配置')
+    notify.error(t('online.noGameFolder'))
     return
   }
 
   if (!detailPackage.value.hubFiles || detailPackage.value.hubFiles.length === 0) {
-    notify.warning('此资源没有可供下载的文件包 (可能是外部链接或付费资源)')
+    notify.warning(t('online.noDownloadableFiles'))
     return
   }
 
+  // 不叠两层弹窗：先收起详情，取消时再回到详情
+  returnToDetail = detailPanelOpen.value
+  detailPanelOpen.value = false
   batchModalOpen.value = true
   batchResolving.value = true
   checklistItems.value = []
   collapsedGroups.value = {
-    need_download: true,
-    upgraded: true,
+    need_download: false,
+    upgraded: false,
     queued: true,
     installed: true,
     no_source: true
@@ -1495,7 +1258,7 @@ async function openBatchDownloadModal() {
           creator: parsed.creator,
           name: parsed.name,
           version: parsed.version,
-          file_size: file.file_size ? (isNaN(Number(file.file_size)) ? file.file_size : formatBytes(Number(file.file_size))) : '未知',
+          file_size: file.file_size ? (isNaN(Number(file.file_size)) ? file.file_size : formatBytes(Number(file.file_size))) : '',
           download_url: file.urlHosted || null,
           status,
           installed_version: installedVer,
@@ -1522,9 +1285,11 @@ async function openBatchDownloadModal() {
     console.error('Failed to resolve dependencies:', err)
     const errMsg = err.toString()
     if (errMsg !== 'CANCELLED') {
-      notify.error('依赖解析失败: ' + errMsg)
+      notify.error(t('download.modal.resolveFailed', { error: errMsg }))
     }
     batchModalOpen.value = false
+    if (returnToDetail) detailPanelOpen.value = true
+    returnToDetail = false
   } finally {
     batchResolving.value = false
   }
@@ -1538,6 +1303,8 @@ function closeBatchModal() {
     })
   }
   batchModalOpen.value = false
+  if (returnToDetail) detailPanelOpen.value = true
+  returnToDetail = false
 }
 
 async function copyManualDependency(item: any) {
@@ -1549,6 +1316,15 @@ async function copyManualDependency(item: any) {
     notify.error(String(err))
   }
 }
+
+// 分组按"会下载的在前、只做说明的在后"排列；只有前两组可以勾选，其余仅展示。
+const batchGroups = computed(() => [
+  { key: 'need_download', label: 'download.modal.groupToDownload', hint: '', selectable: true, items: needDownloadGroup.value },
+  { key: 'upgraded', label: 'download.modal.groupUpgraded', hint: 'download.modal.groupUpgradedHint', selectable: true, items: upgradedGroup.value },
+  { key: 'no_source', label: 'download.modal.groupNoSource', hint: 'download.modal.groupNoSourceHint', selectable: false, items: noSourceGroup.value },
+  { key: 'queued', label: 'download.modal.groupInQueue', hint: 'download.modal.groupInQueueHint', selectable: false, items: queuedGroup.value },
+  { key: 'installed', label: 'download.modal.groupInstalled', hint: 'download.modal.groupInstalledHint', selectable: false, items: installedGroup.value },
+].filter((group) => group.items.length > 0) as { key: keyof typeof collapsedGroups.value; label: string; hint: string; selectable: boolean; items: any[] }[])
 
 // Group computed segments
 const needDownloadGroup = computed(() => {
@@ -1648,15 +1424,16 @@ async function confirmBatchDownload() {
       notify.success(t('download.toast.added', { count: addedCount }))
     }
     if (skippedCount > 0) {
-      notify.info(`跳过了 ${skippedCount} 个已存在或已安装的任务`)
+      notify.info(t('download.toast.skipped', { count: skippedCount }))
     }
 
     batchModalOpen.value = false
     detailPanelOpen.value = false
+    returnToDetail = false
     router.push('/download')
   } catch (err: any) {
     console.error('Failed to batch download:', err)
-    notify.error('添加下载任务失败: ' + err.toString())
+    notify.error(t('download.toast.addFailed', { error: String(err) }))
   }
 }
 
@@ -1694,11 +1471,11 @@ function formatBytes(bytes: number): string {
 
 // 统一显示大小，兼容字节数和已格式化文本
 function formatDisplaySize(size: string | number | null | undefined): string {
-  if (size === null || size === undefined || size === '') return '未知'
+  if (size === null || size === undefined || size === '') return t('online.unknownSize')
   if (typeof size === 'number') return formatBytes(size)
 
   const text = String(size).trim()
-  if (!text) return '未知'
+  if (!text) return t('online.unknownSize')
   if (/^\d+(\.\d+)?$/.test(text)) return formatBytes(Number(text))
   return text
 }
@@ -1750,17 +1527,23 @@ function getTypeBadgeClass(type: string): string {
   return 'type-default'
 }
 
+// Hub 的版本号有时是数字（5），有时是日期（2026-10-09）；只有纯数字版本才加 v 前缀。
+function formatHubVersion(value: unknown): string {
+  const text = String(value ?? '').trim().replace(/^v/i, '')
+  return /^\d+(\.\d+)*$/.test(text) ? `v${text}` : text
+}
+
 function translateType(type: string): string {
-  const t = (type || '').toLowerCase()
-  if (t.includes('scene')) return '场景'
-  if (t.includes('look')) return '外观'
-  if (t.includes('cloth')) return '服装'
-  if (t.includes('hair')) return '发型'
-  if (t.includes('plugin') || t.includes('script')) return '插件'
-  if (t.includes('morph')) return '变形'
-  if (t.includes('asset') || t.includes('accessor')) return '道具'
-  if (t.includes('toolkit') || t.includes('template')) return '工具包'
-  if (t.includes('audio')) return '音频'
+  const key = (type || '').toLowerCase()
+  if (key.includes('scene')) return t('online.types.scenesShort')
+  if (key.includes('look')) return t('online.types.looksShort')
+  if (key.includes('cloth')) return t('online.types.clothingShort')
+  if (key.includes('hair')) return t('online.types.hairShort')
+  if (key.includes('plugin') || key.includes('script')) return t('online.types.pluginsShort')
+  if (key.includes('morph')) return t('online.types.morphsShort')
+  if (key.includes('asset') || key.includes('accessor')) return t('online.types.assetsShort')
+  if (key.includes('toolkit') || key.includes('template')) return t('online.types.toolkitsShort')
+  if (key.includes('audio')) return t('online.types.audioShort')
   return type
 }
 function hubCardType(type: string) { const key = getTypeBadgeClass(type); const types: Record<string, string> = { 'type-scenes': 'scene', 'type-looks': 'appearance', 'type-clothing': 'clothing', 'type-hair': 'hair', 'type-plugins': 'plugin', 'type-morphs': 'morph', 'type-assets': 'asset' }; return types[key] || 'other' }
@@ -1768,13 +1551,10 @@ function hubCardType(type: string) { const key = getTypeBadgeClass(type); const 
 
 <style scoped>
 .online-hub-view {
-  height: 100%;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
   position: relative;
-  overflow: hidden;
 }
 
 .header-title-group {
@@ -1792,8 +1572,9 @@ function hubCardType(type: string) { const key = getTypeBadgeClass(type); const 
 
 .hub-filters {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--space-item);
 }
 
 @media (max-width: 600px) {
@@ -1803,23 +1584,7 @@ function hubCardType(type: string) { const key = getTypeBadgeClass(type); const 
   }
 }
 
-.hub-select {
-  height: 38px;
-  padding: 0 var(--space-3);
-  background: var(--bg-base);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  color: var(--text-primary);
-  font-size: var(--text-sm);
-  cursor: pointer;
-  outline: none;
-  min-width: 140px;
-  transition: border-color var(--duration-fast) var(--ease);
-}
 
-.hub-select:focus {
-  border-color: var(--accent-primary);
-}
 
 .hub-search-bar {
   display: flex;
@@ -1874,7 +1639,7 @@ function hubCardType(type: string) { const key = getTypeBadgeClass(type); const 
   min-height: 0;
   display: flex;
   flex-direction: column;
-  padding-right: 4px;
+  padding-right: var(--space-1);
 }
 
 .hub-results-section {
@@ -1897,7 +1662,7 @@ function hubCardType(type: string) { const key = getTypeBadgeClass(type); const 
   align-items: center;
   justify-content: center;
   padding: var(--space-6);
-  background: var(--border-subtle);
+  background: color-mix(in srgb, var(--bg-surface) 55%, transparent);
   /* backdrop-filter removed */
 }
 
@@ -1939,7 +1704,16 @@ function hubCardType(type: string) { const key = getTypeBadgeClass(type); const 
 .loading-spinner {
   width: 32px;
   height: 32px;
-  border: none;
+  border: 3px solid var(--bg-active);
+  border-top-color: var(--accent-primary);
+  border-radius: var(--radius-full);
+  animation: rotate 0.8s linear infinite;
+}
+
+.loading-spinner-sm {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--bg-active);
   border-top-color: var(--accent-primary);
   border-radius: var(--radius-full);
   animation: rotate 0.8s linear infinite;
@@ -1959,11 +1733,8 @@ function hubCardType(type: string) { const key = getTypeBadgeClass(type); const 
 
 /* ── Grid View ── */
 .resources-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: var(--space-4);
-  padding: 2px;
-  margin-bottom: var(--space-4);
+  padding: var(--focus-room);
+  margin-bottom: var(--space-grid);
 }
 
 .resource-grid-card {
@@ -2015,7 +1786,7 @@ function hubCardType(type: string) { const key = getTypeBadgeClass(type); const 
   position: absolute;
   top: var(--space-2);
   left: var(--space-2);
-  padding: 2px 8px;
+  padding: 2px var(--space-2);
   border-radius: var(--radius-sm);
   /* backdrop-filter removed */
   font-size: var(--text-xs);
@@ -2090,7 +1861,7 @@ function hubCardType(type: string) { const key = getTypeBadgeClass(type); const 
   position: absolute;
   top: var(--space-2);
   right: var(--space-2);
-  padding: 2px 8px;
+  padding: 2px var(--space-2);
   border-radius: var(--radius-sm);
   /* backdrop-filter removed */
   font-size: var(--text-xs);
@@ -2116,7 +1887,7 @@ function hubCardType(type: string) { const key = getTypeBadgeClass(type); const 
   padding: var(--space-3) var(--space-4);
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-2);
   flex: 1;
   min-width: 0;
 }
@@ -2159,7 +1930,7 @@ function hubCardType(type: string) { const key = getTypeBadgeClass(type); const 
 .card-stat {
   display: flex;
   align-items: center;
-  gap: 3px;
+  gap: var(--space-1);
   font-size: var(--text-xs);
   color: var(--text-secondary);
 }
@@ -2182,50 +1953,45 @@ function hubCardType(type: string) { const key = getTypeBadgeClass(type); const 
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-3) var(--space-5);
-  background: var(--glass-bg);
-  border: none;
-  border-radius: var(--radius-md);
+  gap: var(--space-2);
+  padding: var(--space-1);
   flex-shrink: 0;
 }
 
+.pagination-info {
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+}
+
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
 .page-indicator {
+  min-width: 56px;
+  text-align: center;
   font-size: var(--text-sm);
   color: var(--text-secondary);
-  font-weight: var(--font-medium);
+  font-variant-numeric: tabular-nums;
 }
 
 /* ── Panel Overlay ── */
 
 /* ── Slide-over Detail Panel ── */
 
-.panel-header {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-3);
-  padding: var(--space-5);
-  border-bottom: 1px solid var(--border-default);
-  flex-shrink: 0;
-}
-
-.panel-title-wrap {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
 .panel-category-tag {
-  align-self: flex-start;
-  padding: 1px 6px;
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 var(--space-2);
   background: var(--accent-muted);
   color: var(--accent-primary);
   border: none;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-full);
   font-size: var(--text-xs);
   font-weight: var(--font-bold);
-  text-transform: uppercase;
 }
 
 .panel-category-tag.pricing-free {
@@ -2241,16 +2007,18 @@ function hubCardType(type: string) { const key = getTypeBadgeClass(type); const 
 }
 
 .panel-title {
-  margin: 0;
-  font-size: var(--text-lg);
-  font-weight: var(--font-bold);
-  color: var(--text-primary);
-  line-height: 1.3;
+  font-size: var(--text-3xl);
+  font-weight: var(--font-heavy);
+  overflow-wrap: anywhere;
 }
 
-.panel-body {
+.hub-workspace {
+  position: relative;
   flex: 1;
-  overflow: hidden;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-section);
 }
 
 .panel-loading {
@@ -2263,12 +2031,9 @@ function hubCardType(type: string) { const key = getTypeBadgeClass(type); const 
 }
 
 .panel-scroll-content {
-  height: 100%;
-  overflow-y: auto;
-  padding: var(--space-5);
   display: flex;
   flex-direction: column;
-  gap: var(--space-5);
+  gap: var(--space-section);
 }
 
 .panel-scroll-content::-webkit-scrollbar {
@@ -2282,41 +2047,16 @@ function hubCardType(type: string) { const key = getTypeBadgeClass(type); const 
   border-radius: var(--radius-full);
 }
 
-/* ── Panel Info Card ── */
-.panel-info-card {
-  padding: var(--space-4) var(--space-5);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
+/* ── Panel summary ── */
 .panel-hero-row {
   display: flex;
-  gap: var(--space-4);
-}
-
-.panel-image-container {
-  width: 90px;
-  height: 90px;
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  background: var(--bg-base);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  border: none;
-}
-
-.panel-cover-img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
+  flex-direction: column;
+  gap: var(--space-stack);
 }
 
 .panel-icon-img {
-  width: 50px;
-  height: 50px;
+  width: 64px;
+  height: 64px;
   object-fit: contain;
 }
 
@@ -2327,24 +2067,45 @@ function hubCardType(type: string) { const key = getTypeBadgeClass(type); const 
 
 .panel-meta-info {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
+  gap: var(--space-2);
+}
+
+.panel-version-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 6px;
-  justify-content: center;
+}
+
+.panel-type-badge {
+  position: static;
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-full);
+  text-shadow: none;
 }
 
 .badge-version {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
   font-size: var(--text-xs);
   font-weight: var(--font-bold);
-  color: var(--accent-primary);
-  background: var(--accent-muted);
-  padding: 2px 8px;
+  color: var(--text-primary);
+  background: var(--bg-control);
+  padding: 0 var(--space-2);
   border-radius: var(--radius-full);
 }
 
 .panel-creator {
-  font-weight: var(--font-medium);
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
 }
 
 .panel-creator .creator-name {
@@ -2359,11 +2120,14 @@ function hubCardType(type: string) { const key = getTypeBadgeClass(type); const 
 }
 
 .badge-stat {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
   font-size: var(--text-xs);
-  padding: 2px 6px;
-  background: var(--bg-hover);
+  padding: 0 var(--space-2);
+  background: var(--bg-control);
   color: var(--text-secondary);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-full);
 }
 
 .badge-stat.rating {
@@ -2372,8 +2136,9 @@ function hubCardType(type: string) { const key = getTypeBadgeClass(type); const 
 }
 
 .panel-tagline {
-  border-left: 2px solid var(--border-strong);
-  padding-left: var(--space-3);
+  color: var(--text-secondary);
+  font-size: var(--text-base);
+  line-height: 1.5;
 }
 
 /* ── Panel Section ── */
@@ -2401,7 +2166,7 @@ function hubCardType(type: string) { const key = getTypeBadgeClass(type); const 
   line-height: 1.6;
   max-height: 180px;
   overflow-y: auto;
-  padding-right: 6px;
+  padding-right: var(--space-2);
 }
 
 .desc-content::-webkit-scrollbar {
@@ -2467,12 +2232,9 @@ function hubCardType(type: string) { const key = getTypeBadgeClass(type); const 
   opacity: 0.5;
 }
 
-.dep-tier.direct {
-  color: var(--color-info);
-}
-
+.dep-tier.direct,
 .dep-tier.sub {
-  color: var(--color-warning);
+  color: var(--text-tertiary);
 }
 
 .download-progress-container {
@@ -2489,7 +2251,7 @@ function hubCardType(type: string) { const key = getTypeBadgeClass(type); const 
 .progress-bar-wrapper {
   flex: 1;
   height: 4px;
-  background: var(--border-default);
+  background: var(--bg-active);
   border-radius: var(--radius-full);
   overflow: hidden;
 }
@@ -2510,7 +2272,7 @@ function hubCardType(type: string) { const key = getTypeBadgeClass(type); const 
 .dep-status {
   display: flex;
   align-items: center;
-  gap: 3px;
+  gap: var(--space-1);
   font-weight: var(--font-bold);
 }
 
@@ -2520,9 +2282,11 @@ function hubCardType(type: string) { const key = getTypeBadgeClass(type); const 
 }
 
 .badge {
-  display: inline-block;
-  padding: 2px 6px;
-  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-full);
   font-size: var(--text-xs);
   font-weight: var(--font-bold);
 }
@@ -2549,10 +2313,10 @@ function hubCardType(type: string) { const key = getTypeBadgeClass(type); const 
   width: 100%;
   padding: var(--space-4);
   text-align: center;
-  background: var(--bg-subtle);
+  background: var(--bg-input);
   border: none;
   border-radius: var(--radius-md);
-  font-style: italic;
+  color: var(--text-tertiary);
 }
 
 /* Animations */
@@ -2576,9 +2340,11 @@ function hubCardType(type: string) { const key = getTypeBadgeClass(type); const 
 
 /* ── Batch Download Button & Row ── */
 .panel-actions-row {
-  margin-top: var(--space-4);
+  flex-shrink: 0;
   display: flex;
-  justify-content: stretch;
+}
+.panel-actions-row > .ui-button {
+  flex: 1;
 }
 
 /* ── Batch Download Modal Backdrop & Container ── */
@@ -2594,219 +2360,6 @@ function hubCardType(type: string) { const key = getTypeBadgeClass(type); const 
   }
 }
 
-.batch-modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-4) var(--space-5);
-  border-bottom: 1px solid var(--border-subtle);
-  flex-shrink: 0;
-}
-
-.batch-modal-title {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  margin: 0;
-  font-size: var(--text-md);
-  font-weight: var(--font-bold);
-  color: var(--text-primary);
-}
-
-.batch-modal-body {
-  flex: 1;
-  overflow-y: auto;
-  padding: var(--space-5);
-}
-
-.batch-modal-loading {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-6) 0;
-  gap: var(--space-4);
-}
-
-.batch-modal-content {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-}
-
-.batch-modal-summary {
-  margin: 0;
-  line-height: 1.5;
-}
-
-.groups-wrapper {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-}
-
-.group-section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.group-header {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  cursor: pointer;
-  user-select: none;
-  padding: var(--space-1) 0;
-}
-
-.group-checkbox {
-  width: 14px;
-  height: 14px;
-  cursor: pointer;
-  accent-color: var(--accent-primary);
-}
-
-.group-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: var(--radius-full);
-}
-
-.group-dot.to-download {
-  background: var(--color-info);
-  box-shadow: none;
-}
-
-.group-dot.upgraded {
-  background: var(--color-success);
-  box-shadow: none;
-}
-
-.group-dot.queued {
-  background: var(--accent-primary);
-}
-
-.group-dot.installed {
-  background: var(--text-tertiary);
-}
-
-.group-dot.no-source {
-  background: var(--color-error);
-}
-
-.group-title {
-  color: var(--text-primary);
-}
-
-.group-items {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding-left: 22px;
-}
-
-.checklist-item-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
-  background: var(--bg-subtle);
-  border: none;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.checklist-item-row:hover:not(.text-disabled) {
-  background: var(--bg-subtle);
-  border-color: var(--accent-muted);
-}
-
-.checklist-item-row.text-disabled {
-  opacity: 0.6;
-  cursor: default;
-}
-
-.item-checkbox {
-  width: 12px;
-  height: 12px;
-  cursor: pointer;
-  accent-color: var(--accent-primary);
-}
-
-.checklist-item-row.text-disabled .item-checkbox {
-  cursor: not-allowed;
-}
-
-.item-filename {
-  flex: 1;
-  color: var(--text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.checklist-item-row.text-disabled .item-filename {
-  color: var(--text-secondary);
-}
-
-.item-size {
-  font-variant-numeric: tabular-nums;
-  flex-shrink: 0;
-}
-
-.item-badge {
-  font-size: var(--text-xs);
-  padding: 1px 6px;
-  background: var(--color-error-bg);
-  color: var(--color-error);
-  border: none;
-  border-radius: var(--radius-sm);
-  font-weight: var(--font-bold);
-}
-
-/* ── Batch Download Modal Footer ── */
-.batch-modal-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-4) var(--space-5);
-  border-top: 1px solid var(--border-subtle);
-  background: var(--border-subtle);
-  flex-shrink: 0;
-}
-
-.footer-stats {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  color: var(--text-secondary);
-}
-
-.footer-stats .divider {
-  color: var(--text-tertiary);
-  opacity: 0.5;
-}
-
-.footer-actions {
-  display: flex;
-  gap: var(--space-2);
-}
-
-/* ── Expand/Collapse Chevron and Loaders ── */
-.expand-arrow {
-  margin-left: auto;
-  color: var(--text-secondary);
-  display: flex;
-  align-items: center;
-  transition: transform var(--transition-normal);
-}
-
-.expand-arrow.collapsed {
-  transform: rotate(-90deg);
-}
-
 .desc-loading {
   display: flex;
   align-items: center;
@@ -2815,93 +2368,220 @@ function hubCardType(type: string) { const key = getTypeBadgeClass(type); const 
   color: var(--text-secondary);
 }
 
-.loading-spinner-sm {
-  width: 14px;
-  height: 14px;
-  border: none;
-  border-top-color: var(--accent-primary);
-  border-radius: var(--radius-full);
-  animation: rotate 0.8s linear infinite;
-}
-
-/* Resolve Dependency Progress */
-.resolve-progress-container {
+/* ── 一键下载弹窗 ── */
+.batch-loading {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-2);
-  width: 80%;
-  max-width: 320px;
-  margin-top: var(--space-2);
+  gap: var(--space-3);
+  padding: var(--space-8) 0 var(--space-4);
+  text-align: center;
 }
 
-.resolve-progress-container .progress-bar-wrapper {
-  width: 100%;
-  height: 6px;
-  background: var(--border-default);
+.batch-loading-title {
+  color: var(--text-secondary);
+  font-size: var(--text-base);
+}
+
+.resolve-progress {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: min(360px, 100%);
+}
+
+.resolve-track {
+  flex: 1;
+  height: 4px;
   border-radius: var(--radius-full);
+  background: var(--bg-active);
   overflow: hidden;
-  box-shadow: none;
 }
 
-.resolve-progress-container .progress-bar-fill {
+.resolve-fill {
   height: 100%;
-  background: var(--accent-gradient);
   border-radius: var(--radius-full);
+  background: var(--accent-primary);
   transition: width 0.3s ease-out;
 }
 
-.progress-info {
-  display: flex;
-  gap: var(--space-2);
+.resolve-count {
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
   font-variant-numeric: tabular-nums;
 }
 
-.resolve-current-package {
+.resolve-current {
   max-width: 100%;
-  font-style: italic;
-  opacity: 0.85;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
 }
 
-.b2-page {
+.batch-content {
   display: flex;
   flex-direction: column;
-  height: 100%;
-  min-height: 0;
-  max-width: none;
-  margin: 0;
-  padding: 0;
-  gap: 0;
-  overflow: hidden;
+  gap: var(--space-4);
 }
-.b2-page-body {
-  flex: 1;
-  min-height: 0;
+
+.batch-summary {
+  color: var(--text-secondary);
+  font-size: var(--text-description);
+}
+
+.batch-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.batch-group-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 36px;
+}
+
+.batch-group-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 32px;
+  margin-left: calc(-1 * var(--space-2));
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-control-sm);
+  color: var(--text-primary);
+}
+
+.batch-group-toggle:hover {
+  background: var(--bg-hover);
+}
+
+.batch-chevron {
+  color: var(--text-tertiary);
+  transition: transform var(--duration-fast) var(--ease);
+}
+
+.batch-chevron.collapsed {
+  transform: rotate(-90deg);
+}
+
+.batch-group-title {
+  font-size: var(--text-base);
+  font-weight: var(--font-bold);
+}
+
+.batch-group-count {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--bg-control);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  font-weight: var(--font-bold);
+}
+
+.batch-group-hint {
   min-width: 0;
-  overflow: auto;
-  padding: 20px 24px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+}
+
+.batch-group-check {
+  margin-left: auto;
+  flex-shrink: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+.batch-items {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  border-radius: var(--radius-md);
+  background: var(--bg-input);
 }
-.b2-page :deep(.page-header) {
-  width: 100%;
+
+.batch-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 40px;
+  padding: var(--space-1) var(--space-4);
 }
-@media (max-width: 800px) {
-  .b2-page-body {
-    padding: 12px;
-  }
+
+.batch-item + .batch-item {
+  border-top: 1px solid var(--border-subtle);
 }
-.resources-grid {
-  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
-  gap: 14px;
+
+.batch-item.selectable:hover {
+  background: var(--bg-hover);
 }
+
+.batch-item:first-child {
+  border-top-left-radius: var(--radius-md);
+  border-top-right-radius: var(--radius-md);
+}
+
+.batch-item:last-child {
+  border-bottom-left-radius: var(--radius-md);
+  border-bottom-right-radius: var(--radius-md);
+}
+
+.batch-item-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-sm);
+}
+
+.batch-item:not(.selectable) .batch-item-name {
+  color: var(--text-secondary);
+}
+
+.batch-item-version {
+  flex-shrink: 0;
+  color: var(--color-success);
+  font-size: var(--text-xs);
+  font-weight: var(--font-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+.batch-item-size {
+  flex-shrink: 0;
+  min-width: 64px;
+  text-align: right;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.batch-footer-stats {
+  margin-right: auto;
+  align-self: center;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 和左上角类型标签同一基线：同样 8px 偏移、22px 高 */
 .hub-pricing {
   position: absolute;
   z-index: 2;
-  top: 10px;
-  right: 10px;
-  padding: 3px 8px;
+  top: var(--space-2);
+  right: var(--space-2);
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 var(--space-2);
   border-radius: var(--radius-full);
   background: var(--bg-on-image);
   color: var(--text-primary);
@@ -2912,6 +2592,6 @@ function hubCardType(type: string) { const key = getTypeBadgeClass(type); const 
 .resources-grid :deep(.package-meta span:last-child) {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
 }
 </style>

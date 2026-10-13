@@ -4,47 +4,47 @@
       <template #actions>
         <UiButton :disabled="loading" @click="loadPackages" variant="secondary">
           <Icon :size="14" name="outline-7" />
-          <span>{{ loading ? '加载中' : '刷新' }}</span>
+          <span>{{ loading ? $t('statsView.loading') : $t('common.refresh') }}</span>
         </UiButton>
       </template>
       <template #filters>
-        <div class="statistics-tabs">
+        <div class="chip-row statistics-tabs">
           <UiChip
             :class="['', { active: activeTab === 'overview' }]"
             @click="activeTab = 'overview'"
             :selected="activeTab === 'overview'"
           >
-            总览概况
+            {{ $t('statsView.tabs.overview') }}
           </UiChip>
           <UiChip
             :class="['', { active: activeTab === 'analysis' }]"
             @click="activeTab = 'analysis'"
             :selected="activeTab === 'analysis'"
           >
-            资源分析
+            {{ $t('statsView.tabs.analysis') }}
           </UiChip>
         </div>
       </template>
     </PageHeader>
     <div class="b2-page-body">
-      <div v-if="loading" class="loading-panel glass-panel">正在加载统计数据...</div>
+      <div v-if="loading" class="loading-panel glass-panel">{{ $t('statsView.loadingPanel') }}</div>
 
       <div v-else-if="packages.length === 0" class="empty-panel glass-panel">
-        <h2>暂无统计数据</h2>
-        <p>请先选择 VAM 目录并完成扫描，数据统计会在这里显示。</p>
+        <h2>{{ $t('statsView.empty.title') }}</h2>
+        <p>{{ $t('statsView.empty.description') }}</p>
       </div>
 
       <template v-else>
         <div v-if="activeTab === 'overview'" class="statistics-content">
           <section class="stats-card glass-panel">
-            <h2 class="section-title">概况</h2>
+            <h2 class="section-title">{{ $t('statsView.summary.title') }}</h2>
             <div class="summary-grid">
               <div class="summary-item">
                 <div class="summary-icon icon-green">
                   <Icon :size="18" name="outline-47" />
                 </div>
                 <div>
-                  <span class="summary-label">总资源包数</span>
+                  <span class="summary-label">{{ $t('statsView.summary.totalPackages') }}</span>
                   <strong class="summary-value">{{ formatNumber(totalPackages) }}</strong>
                 </div>
               </div>
@@ -53,7 +53,7 @@
                   <Icon :size="18" name="outline-48" />
                 </div>
                 <div>
-                  <span class="summary-label">总文件大小</span>
+                  <span class="summary-label">{{ $t('statsView.summary.totalSize') }}</span>
                   <strong class="summary-value highlight">{{ formatSize(totalSizeBytes) }}</strong>
                 </div>
               </div>
@@ -62,7 +62,7 @@
                   <Icon :size="18" name="outline-49" />
                 </div>
                 <div>
-                  <span class="summary-label">平均包大小</span>
+                  <span class="summary-label">{{ $t('statsView.summary.averageSize') }}</span>
                   <strong class="summary-value">{{ formatSize(averageSizeBytes) }}</strong>
                 </div>
               </div>
@@ -70,13 +70,13 @@
           </section>
 
           <section class="stats-card glass-panel">
-            <h2 class="section-title">存储空间分布</h2>
+            <h2 class="section-title">{{ $t('statsView.storage.title') }}</h2>
             <div class="directory-table">
               <div class="directory-head">
-                <span>目录名称</span>
-                <span>文件数</span>
-                <span>大小</span>
-                <span>占比</span>
+                <span>{{ $t('statsView.storage.folder') }}</span>
+                <span>{{ $t('statsView.columns.packages') }}</span>
+                <span>{{ $t('statsView.columns.size') }}</span>
+                <span>{{ $t('statsView.columns.share') }}</span>
               </div>
               <div class="directory-row root-row">
                 <span class="directory-name">
@@ -100,12 +100,12 @@
           </section>
 
           <section class="stats-card glass-panel">
-            <h2 class="section-title">资源库健康度</h2>
+            <h2 class="section-title">{{ $t('statsView.health.title') }}</h2>
             <div class="health-layout">
               <div class="health-ring" :style="healthRingStyle">
                 <div class="health-ring-inner">
                   <strong>{{ totalHealthIssues }}</strong>
-                  <span>个异常</span>
+                  <span>{{ $t('statsView.health.caption') }}</span>
                   <small>{{ formatPercent(healthIssueRate) }}</small>
                 </div>
               </div>
@@ -113,7 +113,7 @@
                 <div v-for="item in healthItems" :key="item.label" class="health-item">
                   <div class="bar-label">
                     <span>{{ item.label }}</span>
-                    <strong>{{ item.count }} 个</strong>
+                    <strong>{{ $t('statsView.health.itemCount', { count: item.count }) }}</strong>
                   </div>
                   <div class="track">
                     <div
@@ -128,12 +128,12 @@
           </section>
 
           <section class="stats-card glass-panel">
-            <h2 class="section-title">类别分布</h2>
+            <h2 class="section-title">{{ $t('statsView.category.title') }}</h2>
             <div class="category-layout">
               <div class="donut" :style="{ background: categoryDonutGradient }">
                 <div class="donut-inner">
                   <strong>{{ totalPackages }}</strong>
-                  <span>总计</span>
+                  <span>{{ $t('statsView.category.total') }}</span>
                 </div>
               </div>
               <div class="category-grid">
@@ -158,17 +158,17 @@
 
         <div v-else class="statistics-content">
           <section class="stats-card glass-panel">
-            <h2 class="section-title analysis-title">作者 TOP 20</h2>
+            <h2 class="section-title analysis-title">{{ $t('statsView.creators.title') }}</h2>
             <p class="section-description">
-              按资源包数量排序，条形长度相对榜首；占比基于全部资源包。
+              {{ $t('statsView.creators.description') }}
             </p>
             <div class="rank-list">
               <div class="rank-row chart-head" aria-hidden="true">
                 <span>#</span>
-                <span>作者</span>
-                <span>数量对比</span>
-                <span>包数</span>
-                <span>占比</span>
+                <span>{{ $t('statsView.creators.creator') }}</span>
+                <span>{{ $t('statsView.creators.compare') }}</span>
+                <span>{{ $t('statsView.columns.packages') }}</span>
+                <span>{{ $t('statsView.columns.share') }}</span>
               </div>
               <div v-for="(item, index) in authorTopRows" :key="item.creator" class="rank-row">
                 <span class="rank-index">{{ index + 1 }}</span>
@@ -186,13 +186,13 @@
           </section>
 
           <section class="stats-card glass-panel">
-            <h2 class="section-title">文件大小分布</h2>
+            <h2 class="section-title">{{ $t('statsView.sizes.title') }}</h2>
             <div class="size-list">
               <div class="size-row chart-head" aria-hidden="true">
-                <span>大小区间</span>
-                <span>资源包占比</span>
-                <span>包数</span>
-                <span>占比</span>
+                <span>{{ $t('statsView.sizes.range') }}</span>
+                <span>{{ $t('statsView.sizes.distribution') }}</span>
+                <span>{{ $t('statsView.columns.packages') }}</span>
+                <span>{{ $t('statsView.columns.share') }}</span>
               </div>
               <div v-for="item in sizeDistributionRows" :key="item.label" class="size-row">
                 <span class="size-label">{{ item.label }}</span>
@@ -217,6 +217,7 @@ import Icon from '@/components/ui/Icon.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import { computed, onMounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
+import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { useLocalLibraryStore } from '@/stores/localLibrary'
 import type { PackageDisplayItem } from '@/types/package'
@@ -229,10 +230,11 @@ interface DirectoryRow {
 
 interface CategoryDefinition {
   type: string
-  label: string
+  labelKey: string
   color: string
 }
 
+const { t } = useI18n()
 const appStore = useAppStore()
 const localLibraryStore = useLocalLibraryStore()
 const { vamRootPath } = storeToRefs(appStore)
@@ -241,15 +243,17 @@ const { packages, loading } = storeToRefs(localLibraryStore)
 const activeTab = ref<'overview' | 'analysis'>('overview')
 
 const categoryDefinitions: CategoryDefinition[] = [
-  { type: 'scene', label: '场景', color: 'var(--color-scene)' },
-  { type: 'plugin', label: '插件', color: 'var(--color-plugin)' },
-  { type: 'asset', label: '资产', color: 'var(--color-asset)' },
-  { type: 'appearance', label: '外观', color: 'var(--color-appearance)' },
-  { type: 'clothing', label: '服装', color: 'var(--color-clothing)' },
-  { type: 'hair', label: '发型', color: 'var(--color-hair)' },
-  { type: 'morph', label: '变形', color: 'var(--color-morph)' },
-  { type: 'other', label: '其他', color: 'var(--text-secondary)' },
-  { type: 'unknown', label: 'Unknown', color: 'var(--text-secondary)' },
+  { type: 'scene', labelKey: 'resourceType.scene', color: 'var(--color-scene)' },
+  { type: 'plugin', labelKey: 'resourceType.plugin', color: 'var(--color-plugin)' },
+  { type: 'asset', labelKey: 'resourceType.asset', color: 'var(--color-asset)' },
+  { type: 'appearance', labelKey: 'resourceType.appearance', color: 'var(--color-appearance)' },
+  { type: 'clothing', labelKey: 'resourceType.clothing', color: 'var(--color-clothing)' },
+  { type: 'hair', labelKey: 'resourceType.hair', color: 'var(--color-hair)' },
+  { type: 'morph', labelKey: 'resourceType.morph', color: 'var(--color-morph)' },
+  { type: 'texture', labelKey: 'resourceType.texture', color: 'var(--color-texture)' },
+  { type: 'sound', labelKey: 'resourceType.sound', color: 'var(--text-tertiary)' },
+  { type: 'other', labelKey: 'packages.filterOther', color: 'var(--text-secondary)' },
+  { type: 'unknown', labelKey: 'statsView.category.uncategorized', color: 'var(--text-secondary)' },
 ]
 
 const totalPackages = computed(() => packages.value.length)
@@ -283,6 +287,7 @@ const categoryRows = computed(() => {
       const count = counts.get(item.type) || 0
       return {
         ...item,
+        label: t(item.labelKey),
         count,
         percent: totalPackages.value > 0 ? count / totalPackages.value * 100 : 0,
       }
@@ -313,19 +318,19 @@ const healthRingStyle = computed(() => ({
 }))
 const healthItems = computed(() => [
   {
-    label: '文件名格式错误',
+    label: t('statsView.health.fileName'),
     count: fileNameIssueCount.value,
     percent: healthPercent(fileNameIssueCount.value),
     className: 'warning',
   },
   {
-    label: '类型未识别',
+    label: t('statsView.health.unknownType'),
     count: unknownTypeCount.value,
     percent: healthPercent(unknownTypeCount.value),
     className: 'info',
   },
   {
-    label: '内容索引为空',
+    label: t('statsView.health.emptyContent'),
     count: emptyContentCount.value,
     percent: healthPercent(emptyContentCount.value),
     className: 'danger',
@@ -335,7 +340,7 @@ const healthItems = computed(() => [
 const authorTopRows = computed(() => {
   const map = new Map<string, number>()
   for (const pkg of packages.value) {
-    const creator = pkg.creator || 'Unknown'
+    const creator = pkg.creator || t('statsView.creators.unknown')
     map.set(creator, (map.get(creator) || 0) + 1)
   }
 
@@ -397,7 +402,7 @@ function topLevelDirectory(pkg: PackageDisplayItem): string {
     return segments.length > 1 ? segments[0] : 'AddonPackages'
   }
 
-  return '未归档'
+  return t('statsView.storage.otherLocation')
 }
 
 function primaryType(pkg: PackageDisplayItem): string {
@@ -443,7 +448,6 @@ function formatPercent(value: number): string {
 .statistics-view {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
   min-height: 0;
 }
 
@@ -614,7 +618,7 @@ function formatPercent(value: number): string {
   place-items: center;
   width: 126px;
   height: 126px;
-  border-radius: var(--radius-xl) %;
+  border-radius: var(--radius-full);
   background: conic-gradient(
     var(--color-error) 0 var(--health-angle),
     var(--accent-muted) var(--health-angle) 360deg
@@ -629,7 +633,7 @@ function formatPercent(value: number): string {
   justify-content: center;
   width: 98px;
   height: 98px;
-  border-radius: var(--radius-xl) %;
+  border-radius: var(--radius-full);
   background: var(--bg-surface);
   color: var(--text-primary);
 }
@@ -736,7 +740,7 @@ function formatPercent(value: number): string {
 .type-dot {
   width: 9px;
   height: 9px;
-  border-radius: var(--radius-xl) %;
+  border-radius: var(--radius-full);
   flex-shrink: 0;
 }
 
@@ -900,33 +904,4 @@ function formatPercent(value: number): string {
   }
 }
 
-.b2-page {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-height: 0;
-  max-width: none;
-  margin: 0;
-  padding: 0;
-  gap: 0;
-  overflow: hidden;
-}
-.b2-page-body {
-  flex: 1;
-  min-height: 0;
-  min-width: 0;
-  overflow: auto;
-  padding: 20px 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-.b2-page :deep(.page-header) {
-  width: 100%;
-}
-@media (max-width: 800px) {
-  .b2-page-body {
-    padding: 12px;
-  }
-}
 </style>

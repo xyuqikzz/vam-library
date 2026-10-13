@@ -3,6 +3,7 @@ import { onScopeDispose, ref, watch } from 'vue'
 import i18n from '../i18n'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
+import { invalidateResourceCache } from '@/utils/resourceCache'
 import { createEventListeners } from '@/utils/eventListeners'
 
 export interface ScanProgress {
@@ -135,6 +136,7 @@ export const useAppStore = defineStore('app', () => {
         vam_root_path: vamRootPath.value,
         auto_scan: autoScan.value,
         theme: theme.value,
+        language: locale.value,
         blur_previews: blurPreviews.value,
         managed_enabled: managedEnabled.value,
         managed_library_path: managedLibraryPath.value,
@@ -206,6 +208,7 @@ export const useAppStore = defineStore('app', () => {
       
       // Apply theme to document element
       applyTheme(theme.value)
+      await invoke('set_app_language', { language: locale.value })
     } catch (e) {
       console.error('Failed to load settings:', e)
     }
@@ -285,6 +288,7 @@ export const useAppStore = defineStore('app', () => {
   function setLocale(localeKey: string) {
     locale.value = localeKey
     localStorage.setItem('vamlibrary-locale', localeKey)
+    void invoke('set_app_language', { language: localeKey }).catch(error => console.warn('Could not sync game plugin language:', error))
     try {
       const globalLocale = i18n.global.locale
       if (typeof globalLocale === 'object' && globalLocale && 'value' in globalLocale) {
@@ -338,6 +342,7 @@ export const useAppStore = defineStore('app', () => {
 
   async function clearThumbnailCache() {
     await invoke('clear_thumbnail_cache')
+    invalidateResourceCache()
   }
 
   return {

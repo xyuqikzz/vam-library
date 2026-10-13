@@ -25,6 +25,7 @@ pub fn run() {
             inner: std::sync::Mutex::new(None),
         })
         .manage(commands::deduplication::DedupState::default())
+        .manage(commands::cleanup::CleanupState::default())
         .manage(commands::migration::MigrationState::default())
         .manage(commands::ingestion::IngestionState::default())
         .setup(|app| {
@@ -44,6 +45,7 @@ pub fn run() {
 
             // Store database as managed state
             app.manage(database);
+            commands::cleanup::startup_maintenance(app.handle().clone());
             services::scene_browser_index::schedule_sync(app.handle());
 
             // Initialize background downloader manager
@@ -60,6 +62,19 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            commands::cleanup::list_cleanup_marks,
+            commands::cleanup::update_cleanup_marks,
+            commands::cleanup::preview_resource_cleanup,
+            commands::cleanup::cancel_resource_cleanup,
+            commands::cleanup::execute_resource_cleanup,
+            commands::cleanup::list_resource_cleanup_batches,
+            commands::cleanup::restore_resource_cleanup_batch,
+            commands::cleanup::delete_resource_cleanup_batch,
+            commands::cleanup::extend_resource_cleanup_batch,
+            commands::cleanup::get_cleanup_policy,
+            commands::cleanup::save_cleanup_policy,
+            commands::cleanup::get_cleanup_index_status,
+            commands::cleanup::get_cleanup_health,
             commands::game_content::list_game_contents,
             commands::game_content::get_game_content_detail,
             commands::game_content::list_package_scene_contents,
@@ -68,6 +83,7 @@ pub fn run() {
             commands::game_content::get_game_content_image,
             commands::game_content::copy_game_presets,
             commands::game_content::set_game_scene_favorite,
+            commands::game_content::list_favorite_package_ids,
             commands::game_content::rename_game_preset,
             commands::game_content::set_game_scene_name,
             commands::game_mods::get_scene_browser_mod_status,
@@ -89,7 +105,9 @@ pub fn run() {
             commands::packages::set_package_tags,
             commands::packages::get_scene_preview,
             commands::packages::get_package_thumbnail,
+            commands::packages::get_package_thumbnails,
             commands::packages::list_package_images,
+            commands::packages::list_package_contents,
             commands::packages::get_package_image,
             commands::packages::clear_thumbnail_cache,
             commands::dependency::get_dependency_graph,
@@ -97,6 +115,7 @@ pub fn run() {
             commands::dependency::get_reverse_dependencies,
             commands::dependency::find_missing_dependencies,
             commands::deduplication::scan_for_duplicates,
+            commands::deduplication::cancel_dedup_scan,
             commands::deduplication::get_duplicate_groups,
             commands::deduplication::execute_cleanup,
             commands::deduplication::list_cleanup_trash,
@@ -120,6 +139,7 @@ pub fn run() {
             commands::on_demand::launch_vam_config,
             commands::settings::get_settings,
             commands::settings::save_settings,
+            commands::settings::set_app_language,
             commands::settings::save_vam_instances,
             commands::settings::save_hub_auth_cookie,
             commands::settings::get_install_context,

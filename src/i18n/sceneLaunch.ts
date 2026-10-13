@@ -1,0 +1,41 @@
+export const sceneLaunchZh = {
+  opening: '正在打开游戏…',
+  sending: '正在把场景发给游戏…',
+  loading: '游戏已打开，正在加载场景…',
+  stillLoading: '游戏还在加载，可以到游戏窗口查看。',
+  details: '详情',
+  errors: {
+    invalid_request: '启动请求已失效，请重新点击「启动场景」。',
+    scene_unavailable: '游戏里找不到这个场景。请确认资源包已放进游戏目录，依赖也齐全。',
+    package_disabled: '这个资源包在游戏里被禁用了，请先启用它和它的依赖。',
+    load_not_started: '游戏没有开始加载，可能在等你确认游戏里的提示。',
+    load_failed: '游戏没能加载这个场景，请查看游戏日志里的错误。',
+    internal: '没能启动这个场景，请查看详情后重试。',
+    game_exited: '游戏已退出，场景没有加载完成，请查看游戏启动日志。',
+    accept_timeout: '游戏暂时没有接收场景，请查看游戏窗口，并确认插件已更新。',
+    invalid_response: '没能读取游戏返回的结果，请更新插件后重试。',
+    busy: '已有场景正在启动，请等待完成。',
+    launch_unavailable: '游戏上次启动时，场景联动不可用。请在设置中查看插件状态。',
+  },
+}
+
+export const sceneLaunchEn = {
+  opening: 'Opening the game…',
+  sending: 'Sending the scene to the game…',
+  loading: 'The game is open and loading the scene…',
+  stillLoading: 'The game is still loading. Check the game window for progress.',
+  details: 'Details',
+  errors: {
+    invalid_request: 'This launch request has expired. Click Open scene again.',
+    scene_unavailable: 'The game cannot find this scene. Make sure its package and dependencies are in the game folder.',
+    package_disabled: 'This package is disabled in the game. Enable it and its dependencies first.',
+    load_not_started: 'The game has not started loading. It may be waiting for you to respond to a prompt.',
+    load_failed: 'The game could not load this scene. Check the game log for errors.',
+    internal: 'Could not open this scene. Check the details and try again.',
+    game_exited: 'The game closed before the scene finished loading. Check the game startup log.',
+    accept_timeout: 'The game has not accepted the scene. Check its window and make sure the plugin is up to date.',
+    invalid_response: 'Could not read the game’s response. Update the plugin and try again.',
+    busy: 'Another scene is opening. Wait for it to finish.',
+    launch_unavailable: 'Scene launch was unavailable when the game last started. Check the plugin status in Settings.',
+  },
+}

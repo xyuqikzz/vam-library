@@ -1,61 +1,61 @@
 <template>
   <div class="dependency-completion-view animate-fadeIn b2-page">
-    <PageHeader :title="$t('sidebar.dependencyCompletion')">
+    <PageHeader :title="t('sidebar.dependencyCompletion')">
       <template #actions>
         <span v-if="lastRefreshedText" class="toolbar-hint">{{ lastRefreshedText }}</span>
         <UiButton
+          variant="secondary"
+          icon="refresh"
+          :loading="localLibraryStore.loading"
+          :loading-text="t('depCompletion.checking')"
           :disabled="busy || !appStore.vamRootPath"
           @click="refreshLibrary"
-          variant="secondary"
         >
-          <Icon :size="14" name="outline-7" />
-          <span>{{ localLibraryStore.loading ? '加载中...' : '重新读取' }}</span>
+          {{ t('depCompletion.recheck') }}
         </UiButton>
         <UiButton
-          class="primary"
+          variant="primary"
+          icon="download"
           :disabled="!dependencyGroups.length || busy"
           @click="openPreview"
-          variant="primary"
-          size="lg"
         >
-          <Icon :size="14" name="outline-19" />
-          <span>生成补全方案</span>
+          {{ t('depCompletion.findDownloads') }}
         </UiButton>
       </template>
     </PageHeader>
     <div class="b2-page-body">
       <section v-if="!localLibraryStore.loading" class="stats-row">
         <StatCard
-          title="缺失依赖条目"
+          :title="t('depCompletion.stats.missing')"
           :value="missingEntryCount"
-          subtitle="未满足的依赖记录总数"
+          :subtitle="t('depCompletion.stats.missingHint')"
           icon="M12 8v4m0 4h.01M10.29 3.86l-7.43 12.88A2 2 0 0 0 4.58 19h14.84a2 2 0 0 0 1.72-3.02L13.71 3.86a2 2 0 0 0-3.42 0z"
           trend="neutral"
-          color="var(--color-warning)"
+          color="var(--color-error)"
         />
         <StatCard
-          title="去重后包数"
+          :title="t('depCompletion.stats.packages')"
           :value="dependencyGroups.length"
-          subtitle="按 creator + package 去重"
+          :subtitle="t('depCompletion.stats.packagesHint')"
           icon="M4 7h16M4 12h10M4 17h7"
           trend="neutral"
           color="var(--accent-primary)"
         />
         <StatCard
-          title="受影响资源包"
+          :title="t('depCompletion.stats.affected')"
           :value="affectedPackageCount"
-          subtitle="这些包引用了缺失依赖"
+          :subtitle="t('depCompletion.stats.affectedHint')"
           icon="M12 3l8 4v10l-8 4-8-4V7l8-4z"
           trend="neutral"
           color="var(--color-info)"
         />
         <StatCard
-          title="版本过低"
+          :title="t('depCompletion.stats.outdated')"
           :value="lowerVersionCount"
-          subtitle="本地已装但版本不够"
+          :subtitle="t('depCompletion.stats.outdatedHint')"
           icon="M12 19V5m0 0 4 4m-4-4-4 4"
           trend="neutral"
-          color="var(--color-success)"
+          color="var(--color-warning)"
         />
       </section>
 
@@ -70,28 +70,28 @@
       <div class="content-panel glass-panel">
         <div class="panel-header">
           <div>
-            <h2 class="panel-title">去重后的缺失依赖</h2>
-            <p class="panel-desc">每条记录代表一个包名，右侧显示它被多少个资源包引用。</p>
+            <h2 class="panel-title">{{ t('depCompletion.listTitle') }}</h2>
+            <p class="panel-desc">{{ t('depCompletion.listDesc') }}</p>
           </div>
           <span class="panel-count">{{ dependencyGroups.length }}</span>
         </div>
 
-        <div v-if="dependencyGroups.length > 0" class="group-list">
-          <div v-for="group in dependencyGroups" :key="group.key" class="group-row">
-            <div class="group-main">
-              <div class="group-title-row">
-                <h3 class="group-title" :title="group.fullId">{{ group.fullId }}</h3>
-                <span class="group-tag" :class="group.statusClass">{{ group.statusLabel }}</span>
+        <div v-if="dependencyGroups.length > 0" class="row-list">
+          <div v-for="group in dependencyGroups" :key="group.key" class="dep-row">
+            <div class="row-main">
+              <div class="row-title">
+                <h3 class="row-name" :title="group.fullId">{{ group.fullId }}</h3>
+                <span class="status-tag" :class="group.statusClass">{{ group.statusLabel }}</span>
               </div>
-              <div class="group-meta">
-                <span>要求版本：{{ group.requiredVersionLabel }}</span>
-                <span>缺失记录：{{ group.occurrenceCount }} 条</span>
-                <span>受影响包：{{ group.dependentPackageCount }} 个</span>
+              <div class="row-meta">
+                <span>{{ t('depCompletion.meta.required', { version: group.requiredVersionLabel }) }}</span>
+                <span>{{ t('depCompletion.meta.references', { count: group.occurrenceCount }) }}</span>
+                <span>{{ t('depCompletion.meta.usedBy', { count: group.dependentPackageCount }) }}</span>
                 <span v-if="group.installedVersion !== null">
-                  本地版本：v{{ group.installedVersion }}
+                  {{ t('depCompletion.meta.installed', { version: group.installedVersion }) }}
                 </span>
               </div>
-              <div class="group-sources" v-if="group.dependentPackages.length > 0">
+              <div v-if="group.dependentPackages.length > 0" class="row-sources">
                 <span
                   v-for="pkg in group.dependentPackages.slice(0, 4)"
                   :key="pkg"
@@ -100,146 +100,136 @@
                 >
                   {{ pkg }}
                 </span>
-                <span v-if="group.dependentPackages.length > 4" class="source-more">
-                  还有 {{ group.dependentPackages.length - 4 }} 个
+                <span v-if="group.dependentPackages.length > 4" class="source-pill more">
+                  {{ t('depCompletion.more', { count: group.dependentPackages.length - 4 }) }}
                 </span>
               </div>
             </div>
 
-            <div class="group-actions">
-              <UiButton @click="copyIdentifier(group)" variant="ghost">
-                <Icon :size="14" name="outline-20" />
-                <span>复制标识</span>
-              </UiButton>
-            </div>
+            <UiButton variant="ghost" size="sm" icon="copy" @click="copyIdentifier(group)">
+              {{ t('depCompletion.copyName') }}
+            </UiButton>
           </div>
         </div>
 
         <EmptyState
           v-else
           icon="M4 7h16M4 12h16M4 17h10"
-          title="暂无缺失依赖"
+          :title="t('depCompletion.emptyTitle')"
           :description="emptyDescription"
+          :hide-action="Boolean(appStore.vamRootPath)"
         >
           <template v-if="!appStore.vamRootPath" #action>
-            <UiButton class="primary" @click="goSettings" variant="primary" size="lg">
-              去设置目录
+            <UiButton variant="primary" size="lg" @click="goSettings">
+              {{ t('depCompletion.chooseDirectory') }}
             </UiButton>
           </template>
         </EmptyState>
       </div>
 
-      <Teleport to="body">
-        <UiModal v-if="previewOpen" :show-close="false" wide @close="closePreview">
-          <div class="preview-header">
-            <div>
-              <h3 class="preview-title">补全依赖弹窗</h3>
-              <p class="preview-desc">
-                已按包名去重，并按当前策略从 VaM Hub
-                查询可下载版本。没有来源的包会保留在列表里，但不会进入下载队列。
-              </p>
-            </div>
-            <UiButton
-              class="preview-close"
-              @click="closePreview"
-              variant="ghost"
-              icon-only
-              :aria-label="$t('common.close')"
-            >
-              <Icon :size="16" name="outline-9" />
-            </UiButton>
+      <UiModal
+        v-if="previewOpen"
+        large
+        :title="t('depCompletion.modal.title')"
+        :description="t('depCompletion.modal.description')"
+        @close="closePreview"
+      >
+        <div class="preview-body">
+          <div class="mode-bar">
+            <UiSegmented
+              :model-value="resolutionMode"
+              :options="modeOptions"
+              :label="t('depCompletion.modal.modeLabel')"
+              @update:model-value="setResolutionMode"
+            />
+            <span class="mode-hint">{{ t('depCompletion.modal.modeHint') }}</span>
           </div>
 
-          <div class="preview-body">
-            <div class="mode-bar">
-              <UiButton
-                :class="['', { active: resolutionMode === 'required' }]"
-                @click="resolutionMode = 'required'"
-                variant="secondary"
-              >
-                按要求版本
-              </UiButton>
-              <UiButton
-                :class="['', { active: resolutionMode === 'latest' }]"
-                @click="resolutionMode = 'latest'"
-                variant="secondary"
-              >
-                直接下载最新
-              </UiButton>
-              <span class="mode-hint">当前会排除 Hub 找不到的包。</span>
-            </div>
+          <div class="preview-summary">
+            <span class="summary-chip">
+              {{ t('depCompletion.modal.available', { count: downloadCandidates.length }) }}
+            </span>
+            <span class="summary-chip" :class="{ warn: missingSourceCount > 0 }">
+              {{ t('depCompletion.modal.notFound', { count: missingSourceCount }) }}
+            </span>
+            <span class="summary-chip" :class="{ warn: versionMismatchCount > 0 }">
+              {{ t('depCompletion.modal.mismatch', { count: versionMismatchCount }) }}
+            </span>
+            <span v-if="lookupFailedCount > 0" class="summary-chip warn">
+              {{ t('depCompletion.modal.failed', { count: lookupFailedCount }) }}
+            </span>
+            <span class="summary-chip">
+              {{ t('depCompletion.modal.total', { count: previewGroups.length }) }}
+            </span>
+          </div>
 
-            <div class="preview-summary">
-              <div class="summary-chip">可下载 {{ downloadCandidates.length }} 组</div>
-              <div class="summary-chip warn">无来源 {{ missingSourceCount }} 组</div>
-              <div class="summary-chip warn">版本不符 {{ versionMismatchCount }} 组</div>
-              <div class="summary-chip">总计 {{ previewGroups.length }} 组</div>
-            </div>
+          <div v-if="previewLoading" class="preview-loading" role="status">
+            <span class="spinner-ring" aria-hidden="true" />
+            <p>
+              {{
+                t('depCompletion.modal.resolving', {
+                  current: resolvingProgress.current,
+                  total: resolvingProgress.total,
+                })
+              }}
+            </p>
+          </div>
 
-            <div v-if="previewLoading" class="preview-loading">
-              <div class="loader"></div>
-              <p>
-                正在查询 Hub 资源... {{ resolvingProgress.current }} / {{ resolvingProgress.total }}
-              </p>
-            </div>
-
-            <div v-else class="preview-list">
-              <div v-for="group in previewGroupsView" :key="group.key" class="preview-row">
-                <div class="preview-main">
-                  <div class="preview-row-title">
-                    <h4 class="preview-name">{{ group.fullId }}</h4>
-                    <span class="preview-badge" :class="group.previewStatusClass">
-                      {{ group.previewStatusLabel }}
-                    </span>
-                  </div>
-                  <div class="preview-meta">
-                    <span>要求版本：{{ group.requiredVersionLabel }}</span>
-                    <span>
-                      可用版本：{{ group.selectedFile ? `v${group.selectedFile.version}` : '无' }}
-                    </span>
-                    <span>缺失记录：{{ group.occurrenceCount }} 条</span>
-                  </div>
-                  <div class="preview-file" v-if="group.selectedFile">
-                    {{ group.selectedFile.filename }} ·
-                    {{ formatSize(group.selectedFile.sizeBytes) }}
-                  </div>
-                  <div class="preview-file muted" v-else>
-                    {{ group.previewReason }}
-                  </div>
+          <div v-else class="row-list preview-list">
+            <div v-for="group in previewGroupsView" :key="group.key" class="dep-row">
+              <div class="row-main">
+                <div class="row-title">
+                  <h4 class="row-name" :title="group.fullId">{{ group.fullId }}</h4>
+                  <span class="status-tag" :class="group.previewStatusClass">
+                    {{ group.previewStatusLabel }}
+                  </span>
                 </div>
-
-                <div class="preview-side">
-                  <UiButton @click="copyIdentifier(group)" variant="ghost">
-                    <Icon :size="14" name="outline-20" />
-                    <span>复制标识</span>
-                  </UiButton>
-                  <span v-if="group.selectedFile" class="download-ready">可加入队列</span>
-                  <span v-else class="download-empty">不会下载</span>
+                <div class="row-meta">
+                  <span>{{ t('depCompletion.meta.required', { version: group.requiredVersionLabel }) }}</span>
+                  <span>
+                    {{
+                      t('depCompletion.meta.available', {
+                        version: group.selectedFile
+                          ? `v${group.selectedFile.version}`
+                          : t('depCompletion.none'),
+                      })
+                    }}
+                  </span>
+                  <span>{{ t('depCompletion.meta.references', { count: group.occurrenceCount }) }}</span>
+                </div>
+                <div v-if="group.selectedFile" class="preview-file">
+                  {{ group.selectedFile.filename }} · {{ formatSize(group.selectedFile.sizeBytes) }}
+                </div>
+                <div v-else class="preview-file muted" :title="group.lookupError ?? undefined">
+                  {{ group.previewReason }}
                 </div>
               </div>
-            </div>
-          </div>
 
-          <div class="preview-footer">
-            <div class="footer-stats">
-              <span>将加入：{{ downloadCandidates.length }} 组</span>
-              <span v-if="missingSourceCount > 0">已排除：{{ missingSourceCount }} 组无来源包</span>
-            </div>
-            <div class="footer-actions">
-              <UiButton @click="closePreview" variant="secondary">取消</UiButton>
-              <UiButton
-                class="primary"
-                :disabled="!downloadCandidates.length || previewLoading"
-                @click="downloadCandidatesToQueue"
-                variant="primary"
-                size="lg"
-              >
-                {{ resolutionMode === 'latest' ? '下载最新版本' : '下载要求版本' }}
+              <UiButton variant="ghost" size="sm" icon="copy" @click="copyIdentifier(group)">
+                {{ t('depCompletion.copyName') }}
               </UiButton>
             </div>
           </div>
-        </UiModal>
-      </Teleport>
+        </div>
+
+        <template #footer>
+          <span class="preview-footer-summary">
+            <template v-if="!previewLoading">{{ footerSummary }}</template>
+          </span>
+          <UiButton @click="closePreview">{{ t('common.cancel') }}</UiButton>
+          <UiButton
+            variant="primary"
+            :disabled="!downloadCandidates.length || previewLoading"
+            @click="downloadCandidatesToQueue"
+          >
+            {{
+              resolutionMode === 'latest'
+                ? t('depCompletion.modal.downloadLatest')
+                : t('depCompletion.modal.downloadRequired')
+            }}
+          </UiButton>
+        </template>
+      </UiModal>
     </div>
   </div>
 </template>
@@ -247,12 +237,13 @@
 <script setup lang="ts">
 import UiModal from '@/components/ui/UiModal.vue'
 import PageHeader from '@/components/layout/PageHeader.vue'
-import Icon from '@/components/ui/Icon.vue'
 import UiButton from '@/components/ui/UiButton.vue'
+import UiSegmented from '@/components/ui/UiSegmented.vue'
 import { parseHubFiles, parsePackageId as parseDependencyId, selectHubFile as selectCandidate, type HubFile, type HubFileCandidate } from '@/utils/hubFiles'
 import { formatSize } from '@/utils/bytes'
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { invoke } from '@tauri-apps/api/core'
 import { useAppStore } from '@/stores/app'
 import { useDownloadStore } from '@/stores/download'
@@ -299,12 +290,20 @@ interface PreviewGroup extends DependencyGroup {
   hubTitle: string
   hubUsername: string
   hubFiles: HubFileCandidate[]
-  previewStatusLabel: string
-  previewStatusClass: string
-  previewReason: string
+  /** 查询 VaM Hub 失败时的原始错误（网络等），null 表示查询成功或尚未查询 */
+  lookupError: string | null
   selectedFile: HubFileCandidate | null
 }
 
+interface PreviewStatus {
+  previewStatusLabel: string
+  previewStatusClass: 'ok' | 'warn' | 'danger'
+  previewReason: string
+}
+
+type ResolutionMode = 'required' | 'latest'
+
+const { t, locale } = useI18n()
 const router = useRouter()
 const appStore = useAppStore()
 const downloadStore = useDownloadStore()
@@ -314,9 +313,14 @@ const notify = useNotification()
 const previewOpen = ref(false)
 const previewLoading = ref(false)
 const previewGroups = ref<PreviewGroup[]>([])
-const resolutionMode = ref<'required' | 'latest'>('required')
+const resolutionMode = ref<ResolutionMode>('required')
 const resolvingProgress = ref({ current: 0, total: 0 })
 const lastRefreshedAt = ref<Date | null>(null)
+
+const modeOptions = computed(() => [
+  { value: 'required', label: t('depCompletion.modal.modeRequired') },
+  { value: 'latest', label: t('depCompletion.modal.modeLatest') },
+])
 
 const busy = computed(() => localLibraryStore.loading || previewLoading.value)
 
@@ -348,12 +352,12 @@ const dependencyGroups = computed<DependencyGroup[]>(() => {
         name: parsed.name,
         fullId: `${parsed.creator}.${parsed.name}`,
         requiredVersion: typeof requiredVersion === 'number' ? requiredVersion : null,
-        requiredVersionLabel: typeof requiredVersion === 'number' ? `v${requiredVersion}` : '最新',
+        requiredVersionLabel: typeof requiredVersion === 'number' ? `v${requiredVersion}` : t('depCompletion.latestVersion'),
         dependentPackages: item.dependent_package ? [item.dependent_package] : [],
         dependentPackageCount: item.dependent_package ? 1 : 0,
         occurrenceCount: 1,
         installedVersion: item.installed_version,
-        statusLabel: item.status === 'lower_version' ? '版本过低' : '缺失',
+        statusLabel: item.status === 'lower_version' ? t('depCompletion.status.outdated') : t('depCompletion.status.missing'),
         statusClass: item.status === 'lower_version' ? 'warn' : 'danger',
       })
       continue
@@ -380,7 +384,7 @@ const dependencyGroups = computed<DependencyGroup[]>(() => {
     }
 
     if (item.status === 'lower_version') {
-      existing.statusLabel = '版本过低'
+      existing.statusLabel = t('depCompletion.status.outdated')
       existing.statusClass = 'warn'
     }
   }
@@ -395,40 +399,10 @@ const dependencyGroups = computed<DependencyGroup[]>(() => {
 const previewGroupsView = computed(() => {
   return previewGroups.value.map((group) => {
     const selectedFile = selectHubFile(group)
-    let previewStatusLabel = '可下载'
-    let previewStatusClass = 'ok'
-    let previewReason = ''
-
-    if (group.hubFiles.length === 0) {
-      previewStatusLabel = '无来源'
-      previewStatusClass = 'danger'
-      previewReason = 'Hub 没有可下载的包'
-    } else if (!selectedFile) {
-      previewStatusLabel = resolutionMode.value === 'latest' ? '无可用版本' : '无对应版本'
-      previewStatusClass = 'warn'
-      previewReason = resolutionMode.value === 'latest'
-        ? 'Hub 有包，但无法解析成可下载版本'
-        : 'Hub 有包，但没有精确匹配当前要求版本的文件'
-    } else if (resolutionMode.value === 'latest') {
-      previewStatusLabel = '最新版本'
-      previewStatusClass = 'ok'
-      previewReason = '将下载 Hub 中最高版本'
-    } else {
-      previewStatusLabel = selectedFile && group.requiredVersion !== null && selectedFile.version > group.requiredVersion
-        ? '更高版本'
-        : '要求版本'
-      previewStatusClass = 'ok'
-      previewReason = selectedFile && group.requiredVersion !== null && selectedFile.version > group.requiredVersion
-        ? '将下载满足最低要求的更高版本'
-        : '将下载当前要求的版本'
-    }
-
     return {
       ...group,
       selectedFile,
-      previewStatusLabel,
-      previewStatusClass,
-      previewReason,
+      ...describePreview(group, selectedFile),
     }
   })
 })
@@ -437,23 +411,36 @@ const downloadCandidates = computed(() => (
   previewGroupsView.value.filter(group => Boolean(group.selectedFile))
 ))
 
+const lookupFailedCount = computed(() => (
+  previewGroupsView.value.filter(group => group.lookupError !== null).length
+))
+
 const missingSourceCount = computed(() => (
-  previewGroupsView.value.filter(group => group.hubFiles.length === 0).length
+  previewGroupsView.value.filter(group => group.lookupError === null && group.hubFiles.length === 0).length
 ))
 
 const versionMismatchCount = computed(() => (
   previewGroupsView.value.filter(group => group.hubFiles.length > 0 && !group.selectedFile).length
 ))
 
+const footerSummary = computed(() => {
+  const count = downloadCandidates.value.length
+  const skipped = previewGroupsView.value.length - count
+  return skipped > 0
+    ? t('depCompletion.modal.summarySkipped', { count, skipped })
+    : t('depCompletion.modal.summary', { count })
+})
+
 const lastRefreshedText = computed(() => {
   if (!lastRefreshedAt.value) return ''
-  return `上次刷新：${lastRefreshedAt.value.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`
+  const time = lastRefreshedAt.value.toLocaleTimeString(locale.value, { hour: '2-digit', minute: '2-digit' })
+  return t('depCompletion.lastChecked', { time })
 })
 
 const emptyDescription = computed(() => (
   appStore.vamRootPath
-    ? '当前没有需要补全的缺失依赖。'
-    : '请先设置 VAM 目录并完成扫描。'
+    ? t('depCompletion.emptyReady')
+    : t('depCompletion.emptyNoRoot')
 ))
 
 onMounted(async () => {
@@ -463,7 +450,7 @@ onMounted(async () => {
 
 async function refreshLibrary() {
   if (!appStore.vamRootPath) {
-    notify.warning('请先在设置里选择 VAM 目录')
+    notify.warning(t('depCompletion.toast.needDirectory'))
     router.push('/settings')
     return
   }
@@ -471,15 +458,15 @@ async function refreshLibrary() {
   try {
     await localLibraryStore.refreshAll('refreshing')
     lastRefreshedAt.value = new Date()
-    notify.success('已刷新依赖统计')
+    notify.success(t('depCompletion.toast.refreshed'))
   } catch (error) {
-    notify.error(`刷新失败：${String(error)}`)
+    notify.error(t('depCompletion.toast.refreshFailed', { error: String(error) }))
   }
 }
 
 async function openPreview() {
   if (!dependencyGroups.value.length) {
-    notify.warning('当前没有可补全的依赖')
+    notify.warning(t('depCompletion.toast.nothingToComplete'))
     return
   }
 
@@ -492,9 +479,7 @@ async function openPreview() {
     hubTitle: '',
     hubUsername: '',
     hubFiles: [],
-    previewStatusLabel: '查询中',
-    previewStatusClass: 'pending',
-    previewReason: '正在查询 Hub...',
+    lookupError: null,
     selectedFile: null,
   }))
 
@@ -514,17 +499,13 @@ async function openPreview() {
             hubTitle: detail.title || '',
             hubUsername: detail.username || '',
             hubFiles: files,
-            previewStatusLabel: files.length > 0 ? '已找到' : '无来源',
-            previewStatusClass: files.length > 0 ? 'ok' : 'danger',
-            previewReason: files.length > 0 ? '已从 Hub 读取可下载文件' : 'Hub 没有可下载文件',
+            lookupError: null,
           }
         } catch (error) {
           return {
             ...group,
             hubFiles: [],
-            previewStatusLabel: '查询失败',
-            previewStatusClass: 'danger',
-            previewReason: String(error),
+            lookupError: String(error),
           }
         } finally {
           resolvingProgress.value.current += 1
@@ -541,6 +522,10 @@ async function openPreview() {
 
 function closePreview() {
   previewOpen.value = false
+}
+
+function setResolutionMode(value: string) {
+  if (value === 'required' || value === 'latest') resolutionMode.value = value
 }
 
 async function downloadCandidatesToQueue() {
@@ -561,7 +546,7 @@ async function downloadCandidatesToQueue() {
     .filter((item): item is DownloadQueueItem => Boolean(item && item.url))
 
   if (!items.length) {
-    notify.warning('没有可加入下载队列的依赖')
+    notify.warning(t('depCompletion.toast.nothingToDownload'))
     return
   }
 
@@ -582,16 +567,16 @@ async function downloadCandidatesToQueue() {
     }
 
     if (addedCount > 0) {
-      notify.success(`已加入 ${addedCount} 个下载任务`)
+      notify.success(t('depCompletion.toast.added', { count: addedCount }))
     }
     if (skippedCount > 0) {
-      notify.info(`已跳过 ${skippedCount} 个本地已存在的任务`)
+      notify.info(t('depCompletion.toast.skippedExisting', { count: skippedCount }))
     }
 
     previewOpen.value = false
     router.push('/download')
   } catch (error) {
-    notify.error(`加入下载队列失败：${String(error)}`)
+    notify.error(t('depCompletion.toast.addFailed', { error: String(error) }))
   }
 }
 
@@ -599,14 +584,49 @@ async function copyIdentifier(group: DependencyGroup | PreviewGroup) {
   const text = getCopyIdentifier(group)
   try {
     await navigator.clipboard.writeText(text)
-    notify.success(`已复制 ${text}`)
+    notify.success(t('depCompletion.toast.copied', { name: text }))
   } catch (error) {
-    notify.error(`复制失败：${String(error)}`)
+    notify.error(t('depCompletion.toast.copyFailed', { error: String(error) }))
   }
 }
 
 function goSettings() {
   router.push('/settings')
+}
+
+function describePreview(group: PreviewGroup, selectedFile: HubFileCandidate | null): PreviewStatus {
+  if (group.lookupError !== null) {
+    return {
+      previewStatusLabel: t('depCompletion.status.failed'),
+      previewStatusClass: 'danger',
+      previewReason: t('depCompletion.reason.failed'),
+    }
+  }
+  if (group.hubFiles.length === 0) {
+    return {
+      previewStatusLabel: t('depCompletion.status.notFound'),
+      previewStatusClass: 'danger',
+      previewReason: t('depCompletion.reason.notFound'),
+    }
+  }
+  // Hub 上有文件却选不出来：只会出现在“按需要的版本”下，Hub 上的版本都比需要的旧
+  if (!selectedFile) {
+    return {
+      previewStatusLabel: t('depCompletion.status.noMatch'),
+      previewStatusClass: 'warn',
+      previewReason: t('depCompletion.reason.noMatch'),
+    }
+  }
+  // 可以下载的行显示文件名和大小，不显示原因
+  if (resolutionMode.value === 'latest') {
+    return { previewStatusLabel: t('depCompletion.status.latest'), previewStatusClass: 'ok', previewReason: '' }
+  }
+  const isNewer = group.requiredVersion !== null && selectedFile.version > group.requiredVersion
+  return {
+    previewStatusLabel: isNewer ? t('depCompletion.status.newer') : t('depCompletion.status.required'),
+    previewStatusClass: 'ok',
+    previewReason: '',
+  }
 }
 
 function selectHubFile(group: PreviewGroup): HubFileCandidate | null {
@@ -633,9 +653,6 @@ function parseRequiredVersion(requiredVersion: string) {
   return Number.isFinite(version) ? version : 'latest'
 }
 
-
-
-
 function chunkArray<T>(list: T[], size: number) {
   const chunks: T[][] = []
   for (let index = 0; index < list.length; index += size) {
@@ -649,22 +666,15 @@ function chunkArray<T>(list: T[], size: number) {
 .dependency-completion-view {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
   min-height: 100%;
 }
 
-.content-panel {
-  border-radius: var(--radius-lg);
+.toolbar-hint {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
 }
 
-.toolbar-right,
-.footer-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-}
-
+/* 统计卡片 */
 .stats-row {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -678,7 +688,7 @@ function chunkArray<T>(list: T[], size: number) {
 .skeleton-line {
   height: 10px;
   border-radius: var(--radius-full);
-  background: var(--border-default);
+  background: var(--bg-active);
 }
 
 .skeleton-line.short {
@@ -696,31 +706,13 @@ function chunkArray<T>(list: T[], size: number) {
   width: 70%;
 }
 
-.toolbar-left {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  min-width: 0;
-}
-
-.toolbar-label {
-  font-size: var(--text-sm);
-  font-weight: var(--font-semibold);
-  color: var(--text-primary);
-}
-
-.toolbar-count,
-.toolbar-hint,
-.panel-count {
-  font-size: var(--text-xs);
-  color: var(--text-tertiary);
-}
-
+/* 列表面板 */
 .content-panel {
   display: flex;
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
+  border-radius: var(--radius-lg);
 }
 
 .panel-header {
@@ -744,13 +736,53 @@ function chunkArray<T>(list: T[], size: number) {
   color: var(--text-tertiary);
 }
 
-.panel-count {
-  padding: 2px 8px;
+/* 标签 / 计数片：统一胶囊尺寸 */
+.panel-count,
+.status-tag,
+.summary-chip,
+.source-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  min-height: 22px;
+  padding: 0 var(--space-2);
   border-radius: var(--radius-full);
-  background: var(--bg-hover);
+  font-size: var(--text-xs);
+  font-weight: var(--font-bold);
+  line-height: 1.2;
+  white-space: nowrap;
 }
 
-.group-list {
+.panel-count,
+.summary-chip {
+  background: var(--bg-control);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.summary-chip.warn {
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+}
+
+.status-tag.ok {
+  background: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+.status-tag.warn {
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+}
+
+.status-tag.danger {
+  background: var(--color-error-bg);
+  color: var(--color-error);
+}
+
+/* 依赖行：左侧名称与信息，右侧操作，垂直居中 */
+.row-list {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
@@ -758,32 +790,28 @@ function chunkArray<T>(list: T[], size: number) {
   overflow-y: auto;
 }
 
-.group-row {
+.dep-row {
   display: flex;
-  align-items: stretch;
-  justify-content: space-between;
+  align-items: center;
   gap: var(--space-4);
   padding: var(--space-4);
   border-radius: var(--radius-md);
   background: var(--bg-subtle);
-  border: none;
 }
 
-.group-main {
+.row-main {
   flex: 1;
   min-width: 0;
 }
 
-.group-title-row,
-.preview-row-title {
+.row-title {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
+  gap: var(--space-2);
+  min-width: 0;
 }
 
-.group-title,
-.preview-name {
+.row-name {
   min-width: 0;
   font-size: var(--text-sm);
   font-weight: var(--font-semibold);
@@ -793,44 +821,7 @@ function chunkArray<T>(list: T[], size: number) {
   white-space: nowrap;
 }
 
-.group-tag,
-.preview-badge {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 2px 8px;
-  border-radius: var(--radius-full);
-  font-size: var(--text-xs);
-  font-weight: var(--font-semibold);
-}
-
-.group-tag.ok,
-.preview-badge.ok {
-  background: var(--color-success-bg);
-  color: var(--color-success);
-}
-
-.group-tag.warn,
-.preview-badge.warn {
-  background: var(--color-warning-bg);
-  color: var(--color-warning);
-}
-
-.group-tag.danger,
-.preview-badge.danger {
-  background: var(--color-error-bg);
-  color: var(--color-error);
-}
-
-.group-tag.pending,
-.preview-badge.pending {
-  background: var(--color-info-bg);
-  color: var(--color-info);
-}
-
-.group-meta,
-.preview-meta {
+.row-meta {
   display: flex;
   align-items: center;
   gap: var(--space-3);
@@ -840,87 +831,39 @@ function chunkArray<T>(list: T[], size: number) {
   color: var(--text-secondary);
 }
 
-.group-sources {
+.row-sources {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
   margin-top: var(--space-3);
 }
 
-.source-pill,
-.source-more {
-  display: inline-flex;
-  align-items: center;
-  max-width: 100%;
-  padding: 2px 8px;
-  border-radius: var(--radius-full);
-  background: var(--bg-hover);
-  color: var(--text-secondary);
-  font-size: var(--text-xs);
-}
-
 .source-pill {
+  flex-shrink: 1;
+  max-width: 100%;
+  background: var(--bg-control);
+  color: var(--text-secondary);
+  font-weight: var(--font-medium);
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.group-actions,
-.preview-side {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: var(--space-2);
+.source-pill.more {
   flex-shrink: 0;
+  color: var(--text-tertiary);
 }
 
-.preview-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-3);
-  padding: var(--space-5);
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.preview-title {
-  font-size: var(--text-lg);
-  font-weight: var(--font-semibold);
-  color: var(--text-primary);
-}
-
-.preview-desc {
-  margin-top: 4px;
-  max-width: 760px;
-  font-size: var(--text-sm);
-  color: var(--text-secondary);
-  line-height: 1.6;
-}
-
-.preview-close {
-  width: 32px;
-  height: 32px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-full);
-  color: var(--text-secondary);
-  background: var(--bg-hover);
-}
-
+/* 补全对话框 */
 .preview-body {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  padding: var(--space-5);
-  overflow: hidden;
 }
 
 .mode-bar {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-3);
   flex-wrap: wrap;
 }
 
@@ -936,22 +879,6 @@ function chunkArray<T>(list: T[], size: number) {
   flex-wrap: wrap;
 }
 
-.summary-chip {
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 10px;
-  border-radius: var(--radius-full);
-  background: var(--color-success-bg);
-  color: var(--color-success);
-  font-size: var(--text-xs);
-  font-weight: var(--font-semibold);
-}
-
-.summary-chip.warn {
-  background: var(--color-warning-bg);
-  color: var(--color-warning);
-}
-
 .preview-loading {
   display: flex;
   flex-direction: column;
@@ -959,41 +886,15 @@ function chunkArray<T>(list: T[], size: number) {
   justify-content: center;
   gap: var(--space-4);
   min-height: 280px;
-}
-
-.loader {
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-xl) %;
-  border: none;
-  border-top-color: transparent;
-  animation: spin 0.9s linear infinite;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
 }
 
 .preview-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  overflow-y: auto;
-  min-height: 320px;
-  max-height: 56vh;
-  padding-right: 2px;
-}
-
-.preview-row {
-  display: flex;
-  align-items: stretch;
-  justify-content: space-between;
-  gap: var(--space-4);
-  padding: var(--space-4);
-  border-radius: var(--radius-md);
-  background: var(--bg-subtle);
-  border: none;
-}
-
-.preview-main {
-  flex: 1;
-  min-width: 0;
+  min-height: 240px;
+  max-height: 50vh;
+  padding: 0 2px 0 0;
 }
 
 .preview-file {
@@ -1007,102 +908,23 @@ function chunkArray<T>(list: T[], size: number) {
   color: var(--text-tertiary);
 }
 
-.download-ready {
-  color: var(--color-success);
-  font-size: var(--text-xs);
-  font-weight: var(--font-semibold);
-}
-
-.download-empty {
-  color: var(--color-warning);
-  font-size: var(--text-xs);
-  font-weight: var(--font-semibold);
-}
-
-.preview-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-4);
-  padding: var(--space-4) var(--space-5);
-  border-top: 1px solid var(--border-subtle);
-}
-
-.footer-stats {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  flex-wrap: wrap;
-  font-size: var(--text-xs);
+.preview-footer-summary {
+  margin-right: auto;
+  align-self: center;
   color: var(--text-secondary);
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
 }
 
 @media (max-width: 1200px) {
   .stats-row {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-
-  .group-row,
-  .preview-row {
-    flex-direction: column;
-  }
-
-  .group-actions,
-  .preview-side {
-    align-items: flex-start;
-  }
 }
 
 @media (max-width: 720px) {
-  .preview-header,
-  .preview-footer {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
   .stats-row {
     grid-template-columns: 1fr;
-  }
-
-  .toolbar-right,
-  .footer-actions {
-    width: 100%;
-  }
-}
-
-.b2-page {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-height: 0;
-  max-width: none;
-  margin: 0;
-  padding: 0;
-  gap: 0;
-  overflow: hidden;
-}
-.b2-page-body {
-  flex: 1;
-  min-height: 0;
-  min-width: 0;
-  overflow: auto;
-  padding: 20px 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-.b2-page :deep(.page-header) {
-  width: 100%;
-}
-@media (max-width: 800px) {
-  .b2-page-body {
-    padding: 12px;
   }
 }
 </style>
