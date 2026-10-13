@@ -2,8 +2,7 @@
    VAM Library Design System — B2「画廊」Base Styles
    ============================================================ */
 
-/* 规范只要求 Manrope 本地打包；等宽字体保留现有加载方式与系统回退。 */
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap');
+/* Manrope is bundled locally; monospace uses the installed font fallback stack. */
 
 /* ── Reset ───────────────────────────────────────────────────── */
 *,
@@ -469,6 +468,9 @@ input[type='radio']:disabled {
 
 /* Bootstrap errors share the theme even when Vue cannot mount. */
 .startup-fatal {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-toast);
   display: flex;
   align-items: center;
   justify-content: center;

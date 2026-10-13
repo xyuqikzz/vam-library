@@ -10,6 +10,13 @@ export default defineConfig(async () => ({
   base: "./",
   plugins: [vue()],
 
+  // Vue I18n 9 defaults to new Function; JIT interprets messages under the
+  // desktop CSP without allowing dynamic JavaScript evaluation.
+  define: {
+    __INTLIFY_JIT_COMPILATION__: true,
+    __INTLIFY_DROP_MESSAGE_COMPILER__: false,
+  },
+
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "src"),
